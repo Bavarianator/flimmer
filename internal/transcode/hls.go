@@ -71,8 +71,8 @@ func Playlist(segs []Segment) string {
 type Job struct {
 	Input      string
 	Segments   []Segment
-	AudioIndex int    // -1 = kein Ton
-	AudioCodec string // copy, aac, eac3
+	AudioIndex int      // -1 = kein Ton
+	AudioCodec string   // copy, aac, eac3
 	VideoCodec string   // copy, h264
 	InputArgs  []string // vor -i, z. B. Hardware-Decoding (hwaccel.Accel.Input)
 	Encoder    []string // Video-Encoder (hwaccel.Accel.Encode); leer = libx264
@@ -88,6 +88,8 @@ type session struct {
 	job      Job
 	dir      string
 	first    int
+	head     int // höchstes geschriebenes Segment
+	cleaned  int // Segmente darunter sind schon gelöscht
 	cmd      *exec.Cmd
 	done     chan struct{}
 	lastUsed time.Time
@@ -125,7 +127,7 @@ func (m *Manager) Segment(ctx context.Context, job Job, n int) (string, error) {
 		if s != nil {
 			s.lastUsed = time.Now()
 			produced := s.produced()
-			if n < s.first || n > produced+restart {
+			if n < s.cleaned || n > produced+restart {
 				s.stop()
 				s = nil
 			} else {
@@ -166,7 +168,7 @@ func (m *Manager) start(job Job, first int) (*session, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &session{job: job, dir: dir, first: first, done: make(chan struct{}), lastUsed: time.Now()}
+	s := &session{job: job, dir: dir, first: first, head: first - 1, cleaned: first, done: make(chan struct{}), lastUsed: time.Now()}
 	s.cmd = exec.Command("ffmpeg", args(job, first, dir)...)
 	s.cmd.Stderr = &tailWriter{}
 	if err := s.cmd.Start(); err != nil {
@@ -263,21 +265,21 @@ func (s *session) ready(n int) bool {
 	return s.exited() && s.cmd.ProcessState.Success()
 }
 
+// produced liefert das höchste bereits geschriebene Segment.
 func (s *session) produced() int {
-	n := s.first - 1
 	for {
-		if _, err := os.Stat(s.segPath(n + 1)); err != nil {
-			return n
+		if _, err := os.Stat(s.segPath(s.head + 1)); err != nil {
+			return s.head
 		}
-		n++
+		s.head++
 	}
 }
 
 // throttle hält ffmpeg an, wenn es zu weit vorauseilt (spart CPU und Plattenplatz),
 // und räumt bereits abgespielte Segmente weg.
 func (s *session) throttle(requested, produced int) {
-	for i := s.first; i < requested-2; i++ {
-		os.Remove(s.segPath(i))
+	for ; s.cleaned < requested-2; s.cleaned++ {
+		os.Remove(s.segPath(s.cleaned))
 	}
 	if s.exited() {
 		return

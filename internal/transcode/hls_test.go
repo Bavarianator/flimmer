@@ -47,12 +47,13 @@ func TestPlaylist(t *testing.T) {
 	}
 }
 
-// Regression: nach einem Sprung muss ffmpeg trotzdem alle Grenzen kennen,
-// sonst wird der Rest der Datei ein einziges Riesensegment.
-func TestArgsAfterSeekKeepAllBoundaries(t *testing.T) {
-	job := Job{Input: "x.mkv", Segments: Segments(nil, 60), AudioIndex: 1, AudioCodec: "copy", VideoCodec: "copy"}
+// Regression: nach einem Sprung sind segment_times relativ zum Startsegment,
+// sonst entstehen falsche Grenzen (Riesensegmente bzw. Segmente ohne Ton).
+func TestArgsAfterSeek(t *testing.T) {
+	job := Job{Input: "x.mkv", Segments: Segments(nil, 60), AudioIndex: 1, AudioCodec: "copy", VideoCodec: "h264"}
 	a := strings.Join(args(job, 5, "/tmp/x"), " ")
-	for _, want := range []string{"-ss 30.000000", "-segment_start_number 5", "-segment_times 6.000000,12.000000,"} {
+	for _, want := range []string{"-ss 30.200000 -noaccurate_seek", "-copyts -i x.mkv", "-segment_start_number 5",
+		"-segment_times 6.000000,12.000000,18.000000,24.000000", "-force_key_frames 36.000000,42.000000"} {
 		if !strings.Contains(a, want) {
 			t.Fatalf("fehlt %q in %s", want, a)
 		}
