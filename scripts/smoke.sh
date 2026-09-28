@@ -19,6 +19,11 @@ pid=$!
 for _ in $(seq 60); do kill -0 $pid 2>/dev/null && curl -sf "$base/" >/dev/null && break; sleep 1; done
 kill -0 $pid 2>/dev/null && curl -sf "$base/" >/dev/null || { cat "$work/server.log"; echo "FEHLER: Server startet nicht"; exit 1; }
 
+# Seit der Anmeldung braucht die API eine Sitzung: Admin per Einrichtung anlegen, Cookie für alle Aufrufe.
+curl() { command curl -b "$work/jar" -c "$work/jar" "$@"; }
+curl -sf -X POST -d "{\"name\":\"Smoke\",\"password\":\"smoke123\",\"dirs\":[\"$work/media\"]}" "$base/api/setup" >/dev/null ||
+  { cat "$work/server.log"; echo "FEHLER: Einrichtung fehlgeschlagen"; exit 1; }
+
 fail=0
 ok()   { echo "  ok   $*"; }
 bad()  { echo "  FAIL $*"; fail=1; }
