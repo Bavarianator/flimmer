@@ -23,6 +23,7 @@
       <option value="es">Español</option><option value="it">Italiano</option><option value="nl">Nederlands</option>
       <option value="pl">Polski</option><option value="tr">Türkçe</option>
     </select>
+    <p class="hint" id="ffearly" hidden>Im Hintergrund wird schon das Wiedergabe-Programm ffmpeg geladen (ca. 100 MB) – das spart nachher Zeit.</p>
     <div class="actions"><span></span><button class="primary" data-next>Weiter</button></div>
   </section>
 
@@ -194,6 +195,10 @@ api('GET', '/api/setup').then(function (r) {
   $('language').value = r.language || 'de';
   dirs = r.dirs.slice();
   dirs.forEach(count);
+  // ffmpeg fehlt und lässt sich laden: gleich starten, während die Person tippt.
+  if (!r.ffmpeg.ok && r.ffmpeg.canDownload && !r.ffmpeg.download.running) {
+    api('POST', '/api/setup/ffmpeg').then(function () { $('ffearly').hidden = false }).catch(function () {});
+  }
   renderChosen();
   browse('');
   show(0);
