@@ -49,11 +49,22 @@ if ! remote "test -x ~/$DIR/ffmpeg && test -x ~/$DIR/ffprobe"; then
   scp -q -i "$KEY" -o IdentitiesOnly=yes "$CACHE/ffmpeg" "$CACHE/ffprobe" "$NAS:$DIR/"
 fi
 
+# VAAPI ohne root: Fehlt dem System libva bzw. ein Intel-Treiber, holt apt-get download (als Benutzer) die
+# Ubuntu/Debian-Pakete und entpackt sie nach ~/flimmer/va. i965-va-driver-shaders enthält die Encoder-Shader
+# (ohne sie bricht h264_vaapi auf Braswell/Broadwell mit einer Assertion ab), iHD deckt neuere Intel-GPUs ab.
+[ -n "${NO_VA:-}" ] || remote 'test -e /dev/dri/renderD128 && command -v apt-get >/dev/null &&
+  ! ls /usr/lib/x86_64-linux-gnu/dri/*_drv_video.so 2>/dev/null | grep -qE "iHD|i965" && [ ! -d ~/'$DIR'/va/root ] || exit 0
+  mkdir -p ~/'$DIR'/va/deb && cd ~/'$DIR'/va/deb &&
+  for p in libva2 libva-drm2 i965-va-driver-shaders intel-media-va-driver-non-free; do apt-get download -q "$p" >/dev/null 2>&1 || echo "VA: $p nicht verfügbar"; done
+  for d in *.deb; do dpkg-deb -x "$d" ../root; done'
+
 remote "mkdir -p ~/$DIR/data"
 scp -q -i "$KEY" -o IdentitiesOnly=yes "$work/flimmer" "$NAS:$DIR/flimmer.new"
 # ffmpeg liegt neben der Binary → der Server findet es ohne PATH-Änderung.
 # Jeder SSH-Login bekommt die aktuellen Gruppen (z. B. render/video für VAAPI) – ein Neustart übernimmt sie.
 remote "$stop; cd ~/$DIR && mv flimmer.new flimmer && chmod +x flimmer ffmpeg ffprobe
+  va=\$HOME/$DIR/va/root/usr/lib/x86_64-linux-gnu
+  [ -d \$va ] && export LD_LIBRARY_PATH=\$va LIBVA_DRIVERS_PATH=\$va/dri
   nohup setsid ./flimmer -addr :$PORT -data ~/$DIR/data -media '$MEDIA' >> flimmer.log 2>&1 < /dev/null &
   echo \$! > flimmer.pid"
 
