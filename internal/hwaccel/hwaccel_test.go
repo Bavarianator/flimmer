@@ -2,6 +2,7 @@ package hwaccel
 
 import (
 	"context"
+	"fmt"
 	"errors"
 	"os"
 	"path/filepath"
@@ -95,4 +96,19 @@ func TestEcht(t *testing.T) {
 	}
 	a := Detect(context.Background())
 	t.Logf("%s, %.2fx Echtzeit (1080p)\nInput:  %v\nEncode: %v", a.Name, a.Speed, a.Input, a.Encode)
+}
+
+// 3-s-Clip, 1 s GPU-Initialisierung, danach 2× Echtzeit: ffmpegs speed= fällt auf 1,2×, gemeint sind 2×.
+func TestSteadySpeed(t *testing.T) {
+	var b strings.Builder
+	for _, wall := range []float64{1.25, 1.5, 2.0, 2.5} {
+		media := (wall - 1) * 2
+		fmt.Fprintf(&b, "frame=1\nout_time_us=%d\nspeed=%.3fx\nprogress=continue\n", int(media*1e6), media/wall)
+	}
+	if got := steadySpeed([]byte(b.String())); got < 1.95 || got > 2.05 {
+		t.Errorf("steadySpeed = %.2f, will 2", got)
+	}
+	if got := steadySpeed([]byte("speed=0.8x\n")); got != 0.8 {
+		t.Errorf("Rückfall auf speed= : %.2f", got)
+	}
 }

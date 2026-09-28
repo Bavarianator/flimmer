@@ -108,7 +108,7 @@ func Detect(ctx context.Context) Accel {
 func measure(ctx context.Context, a Accel, clip string) (float64, bool) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	args := append([]string{"-hide_banner", "-loglevel", "error", "-nostats", "-progress", "pipe:1"}, a.Input...)
+	args := append([]string{"-hide_banner", "-loglevel", "error", "-nostats", "-progress", "pipe:1", "-stats_period", "0.25"}, a.Input...)
 	args = append(args, "-i", clip)
 	args = append(args, a.Encode...)
 	args = append(args, "-an", "-f", "null", "-")
@@ -117,10 +117,40 @@ func measure(ctx context.Context, a Accel, clip string) (float64, bool) {
 	if err != nil {
 		return 0, false
 	}
-	if s := lastSpeed(out); s > 0 {
+	if s := steadySpeed(out); s > 0 {
 		return s, true
 	}
 	return clipSeconds / time.Since(start).Seconds(), true
+}
+
+// steadySpeed liefert den Echtzeit-Faktor ohne Anlaufkosten (GPU-Initialisierung, Prozessstart), die ffmpegs
+// eigenes speed= (Medienzeit / Wanduhr seit Start) bei kurzen Clips stark drücken: Aus jeder Progress-Meldung
+// folgt die Wanduhr als out_time/speed; die Steigung zwischen erster und letzter Meldung ist der Dauerbetrieb.
+// Zu wenige Meldungen → letztes speed=.
+func steadySpeed(out []byte) float64 {
+	type point struct{ media, wall float64 }
+	var pts []point
+	var media float64
+	sc := bufio.NewScanner(bytes.NewReader(out))
+	for sc.Scan() {
+		k, v, _ := strings.Cut(sc.Text(), "=")
+		switch k {
+		case "out_time_us":
+			media, _ = strconv.ParseFloat(v, 64)
+			media /= 1e6
+		case "speed":
+			if sp, err := strconv.ParseFloat(strings.TrimSpace(strings.TrimSuffix(v, "x")), 64); err == nil && sp > 0 && media > 0 {
+				pts = append(pts, point{media, media / sp})
+			}
+		}
+	}
+	if len(pts) >= 2 {
+		first, last := pts[0], pts[len(pts)-1]
+		if dw := last.wall - first.wall; dw > 0.2 {
+			return (last.media - first.media) / dw
+		}
+	}
+	return lastSpeed(out)
 }
 
 // lastSpeed liest den letzten „speed=1.23x“-Wert aus ffmpegs -progress-Ausgabe.
