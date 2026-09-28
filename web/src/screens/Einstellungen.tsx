@@ -16,6 +16,7 @@ import { Seite } from '../components/Seite'
 import { Fehler } from '../components/Zustand'
 import { loadProbe } from '../probe'
 import { setVorlieben, vorlieben } from '../player/vorlieben'
+import '../player/spuren' // Texte player.* (Nachtmodus, Methoden) für „Dieses Gerät“ und die Diagnose
 import '../player/screens.css'
 
 ergaenze(

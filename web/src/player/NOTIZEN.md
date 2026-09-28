@@ -18,3 +18,8 @@
 - **Nächste Folge:** `play` liefert keine nächste Folge. Der Player bestimmt sie clientseitig aus der Bibliothek.
 - **Party-Mitglieder:** `members` sind nur Namen. Für „Gastgeber“ und die Avatar-Farbe fehlen ID und Farbe pro Mitglied.
 - **Nächtliche Sicherung:** Die Einstellungen können sie nicht ein- oder ausschalten. `db.Maintenance` meldet nur den Stand.
+
+## Offen bei ui-player
+
+- Es gibt noch keine Sichtprüfung im Browser: Playwright war gesperrt, danach war die Maschine knapp. `tsc` und `vite build` sind grün.
+- Setup.tsx bleibt ein Platzhalter, der auf die Server-Seite `/setup` umleitet. `internal/setup/pages.css` hat die neuen Tokens bekommen und nutzt kein `gap` mehr.
