@@ -120,3 +120,24 @@ Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\b1}Fett{\b0} und normal
 		t.Fatalf("ass: %q", b.String())
 	}
 }
+
+func TestWriteASS(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg fehlt")
+	}
+	ass := filepath.Join(t.TempDir(), "a.ass")
+	os.WriteFile(ass, []byte("[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\n"+
+		"Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"+
+		"Style: Schild,Arial,20,&H0000FFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,8,10,10,10,1\n\n[Events]\n"+
+		"Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"+
+		"Dialogue: 0,0:00:01.00,0:00:02.00,Schild,,0,0,0,,{\\pos(100,50)}Stra\xdfe\n"), 0o644) // Windows-1252
+	var b bytes.Buffer
+	if err := WriteASS(context.Background(), "", External{Path: ass, Format: "ass"}, &b); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Straße", "Style: Schild", `{\pos(100,50)}`} {
+		if !strings.Contains(b.String(), want) {
+			t.Fatalf("fehlt %q in %q", want, b.String())
+		}
+	}
+}

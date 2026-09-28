@@ -200,6 +200,35 @@ func WriteVTT(ctx context.Context, ffmpeg string, x External, w io.Writer) error
 	return nil
 }
 
+// WriteASS schreibt eine externe .ass/.ssa-Datei roh (mit Stilen) nach w, für Clients mit eigenem SSA-Renderer
+// (Media3, libass). Ist sie nicht UTF-8, rekodiert ffmpeg sie als ASS nach UTF-8 – Stile und Positionen bleiben.
+func WriteASS(ctx context.Context, ffmpeg string, x External, w io.Writer) error {
+	if x.Format != "ass" {
+		return errors.New("keine ASS-Datei")
+	}
+	data, err := os.ReadFile(x.Path)
+	if err != nil {
+		return err
+	}
+	enc := charset(data)
+	if enc == "" {
+		_, err := w.Write(data)
+		return err
+	}
+	if ffmpeg == "" {
+		ffmpeg = "ffmpeg"
+	}
+	cmd := exec.CommandContext(ctx, ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-sub_charenc", enc,
+		"-f", "ass", "-i", "pipe:0", "-map", "0:s:0", "-c:s", "ass", "-f", "ass", "pipe:1")
+	cmd.Stdin = bytes.NewReader(data)
+	var stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = w, &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("ASS umkodieren: %w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	return nil
+}
+
 // charset liefert "" für UTF-8 (auch mit BOM) und UTF-16 mit BOM (erkennt ffmpeg selbst), sonst CP1252.
 // ponytail: alles, was kein UTF-8 ist, gilt als Westeuropäisch; osteuropäische/kyrillische Altdateien bräuchten Erkennung
 func charset(b []byte) string {
