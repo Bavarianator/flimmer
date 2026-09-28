@@ -28,17 +28,19 @@ var (
 
 const label = "io.flimmer.server"
 
-// Install trägt bin mit -data dataDir (und weiteren args) als Autostart ein und startet ihn sofort.
+// Install trägt bin mit -data dataDir (leer = Standardordner) und weiteren args als Autostart ein und startet ihn sofort.
 // Der Rückgabetext sagt dem Nutzer auf Deutsch, was passiert ist.
 func Install(bin, dataDir string, args ...string) (string, error) {
 	bin, err := filepath.Abs(bin)
 	if err != nil {
 		return "", err
 	}
-	if dataDir, err = filepath.Abs(dataDir); err != nil {
-		return "", err
+	if dataDir != "" { // leer = Standardordner des Servers; Abs("") wäre sonst das aktuelle Verzeichnis
+		if dataDir, err = filepath.Abs(dataDir); err != nil {
+			return "", err
+		}
+		args = append([]string{"-data", dataDir}, args...)
 	}
-	args = append([]string{"-data", dataDir}, args...)
 	path, err := unitPath()
 	if err != nil {
 		return "", err
@@ -48,7 +50,11 @@ func Install(bin, dataDir string, args ...string) (string, error) {
 	case "linux":
 		content = systemdUnit(bin, args)
 	case "darwin":
-		content = launchdPlist(bin, args, filepath.Join(dataDir, "flimmer.log"))
+		logDir := dataDir
+		if logDir == "" {
+			logDir = filepath.Join(filepath.Dir(path), "..", "Logs")
+		}
+		content = launchdPlist(bin, args, filepath.Join(logDir, "flimmer.log"))
 	case "windows":
 		content = startupScript(bin, args)
 	}

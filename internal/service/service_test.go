@@ -144,3 +144,14 @@ func TestSystemdVerify(t *testing.T) {
 		t.Errorf("%v: %s", err, out)
 	}
 }
+
+func TestInstallOhneDataDir(t *testing.T) {
+	home, _ := fake(t, "linux")
+	if _, err := Install("/usr/local/bin/flimmer", ""); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(home, ".config/systemd/user/flimmer.service"))
+	if strings.Contains(string(b), "-data") {
+		t.Errorf("leeres dataDir darf kein -data erzeugen:\n%s", b)
+	}
+}
