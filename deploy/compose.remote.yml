@@ -1,10 +1,10 @@
-# Flimmer mit Docker Compose (aus dem geklonten Repo):
-#   MEDIA_DIR=/pfad/zu/filmen docker compose -f deploy/compose.yml up -d --build   → http://<server-ip>:8096
-# Ohne Klonen: siehe deploy/install.sh oder compose.remote.yml.
+# Flimmer mit Docker Compose direkt von GitHub (ohne Klonen), baut das Image aus dem Quellcode:
+#   curl -fsSL https://raw.githubusercontent.com/Bavarianator/flimmer/main/deploy/compose.remote.yml \
+#     | MEDIA_DIR=/pfad/zu/filmen docker compose -f - up -d --build
 services:
   flimmer:
     build:
-      context: ..
+      context: https://github.com/Bavarianator/flimmer.git#main
       dockerfile: deploy/Dockerfile
     image: flimmer:local
     container_name: flimmer

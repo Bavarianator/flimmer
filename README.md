@@ -13,7 +13,23 @@ Weitere Ziele:
 
 ## Installation (am einfachsten: Docker)
 
-Es gibt noch keine fertigen Releases oder Images. Docker baut Flimmer deshalb selbst aus dem Quellcode, das dauert beim ersten Mal ein paar Minuten. Du brauchst nur [Docker](https://docs.docker.com/get-docker/) und Git, sonst nichts (ffmpeg steckt schon im Image).
+Es gibt noch keine fertigen Releases oder Images. Docker baut Flimmer deshalb selbst aus dem Quellcode, das dauert beim ersten Mal ein paar Minuten. Du brauchst nur [Docker](https://docs.docker.com/get-docker/) (ffmpeg steckt schon im Image). `/pfad/zu/filmen` ersetzt du durch deinen Medienordner.
+
+**Ein Befehl (Docker):**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Bavarianator/flimmer/main/deploy/install.sh | sh -s -- /pfad/zu/filmen
+```
+
+**Ein Befehl (Docker Compose):**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Bavarianator/flimmer/main/deploy/compose.remote.yml | MEDIA_DIR=/pfad/zu/filmen docker compose -f - up -d --build
+```
+
+Beides noch einmal ausführen = aktualisieren, die Daten bleiben im Volume `flimmer-data`.
+
+**Von Hand** (wenn du den Code geklont hast):
 
 ```sh
 git clone https://github.com/Bavarianator/flimmer.git
@@ -25,18 +41,15 @@ docker run -d --name flimmer --restart unless-stopped -p 8096:8096 \
   flimmer
 ```
 
+Oder mit Compose aus dem Klon: `MEDIA_DIR=/pfad/zu/filmen docker compose -f deploy/compose.yml up -d --build`. Statt der Variablen kannst du `MEDIA_DIR`, `FLIMMER_PORT` und `TZ` auch in eine `.env`-Datei neben der Compose-Datei schreiben.
+
 Dann im Browser `http://localhost:8096` öffnen (oder `http://<server-ip>:8096` von einem anderen Gerät). Dort Medienordner wählen, fertig. Der Ordner heißt im Container `/media`.
-
-**Mit Docker Compose** (statt `docker build` und `docker run`): in [`deploy/compose.yml`](deploy/compose.yml) den Pfad `/pfad/zu/filmen` anpassen, dann:
-
-```sh
-docker compose -f deploy/compose.yml up -d --build
-```
 
 Nützliche Befehle:
 
 | Aufgabe | Befehl |
 |---|---|
+| Status (mit Compose auch „healthy“) | `docker ps --filter name=flimmer` |
 | Logs ansehen | `docker logs -f flimmer` |
 | Stoppen / starten | `docker stop flimmer` / `docker start flimmer` |
 | Aktualisieren | `git pull`, dann `docker build …` wie oben, `docker rm -f flimmer` und `docker run …` erneut (die Daten bleiben im Volume `flimmer-data`) |
