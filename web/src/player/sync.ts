@@ -39,7 +39,7 @@ export function correct(drift: number, target: number, rate = 1): Fix {
   return { kind: 'seek', to: Math.max(0, target) }
 }
 
-// Selbsttest: `npx tsx web/src/player/sync.ts` (oder im Browser-Konsolenimport) – wirft bei Fehlern.
+// Selbsttest: node --experimental-strip-types -e "import('./src/player/sync.ts').then(m => m.selfCheck())" – wirft bei Fehlern.
 export function selfCheck() {
   const ok = (c: boolean, m: string) => {
     if (!c) throw new Error('sync: ' + m)

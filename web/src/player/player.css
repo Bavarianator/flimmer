@@ -1,0 +1,142 @@
+/* Player-Overlay nach docs/ui-rework/screens/10–13. Chromium 53: Flexbox mit margin, kein Grid/gap/
+   aspect-ratio/backdrop-filter; animiert werden nur opacity und transform. Der Player ist immer dunkel. */
+.pl { position: fixed; left: 0; top: 0; right: 0; bottom: 0; background: #000; color: #ece7dd; overflow: hidden; font: var(--t-text); }
+.pl video { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: #000; }
+.pl-leise { color: #a8a195; }
+
+/* Oben und unten: Verläufe statt Blur; blenden gemeinsam ein und aus. */
+.pl-oben, .pl-unten { position: absolute; left: 0; right: 0; padding-left: var(--rand); padding-right: var(--rand); opacity: 0; pointer-events: none;
+  -webkit-transition: opacity var(--dauer-langsam) var(--kurve-raus); transition: opacity var(--dauer-langsam) var(--kurve-raus); }
+.pl-sichtbar .pl-oben, .pl-sichtbar .pl-unten { opacity: 1; pointer-events: auto;
+  -webkit-transition-timing-function: var(--kurve-standard); transition-timing-function: var(--kurve-standard); }
+.pl-oben { top: 0; -webkit-align-items: flex-start; align-items: flex-start; padding-top: var(--abstand-6); padding-bottom: 96px; background: linear-gradient(rgba(0,0,0,.75), rgba(0,0,0,0)); }
+.pl-unten { bottom: 0; padding-top: 120px; padding-bottom: var(--abstand-6); background: linear-gradient(rgba(0,0,0,0), rgba(0,0,0,.85)); }
+html.tv .pl-oben { padding-top: var(--tv-rand-oben); }
+html.tv .pl-unten { padding-bottom: var(--tv-rand-oben); }
+html.hd .pl-oben { padding-top: var(--abstand-4); }
+html.hd .pl-unten { padding-bottom: var(--abstand-4); }
+/* Gemeinsam-Leiste liegt rechts über dem Video; Overlay und Leiste teilen sich die Breite. */
+.pl-mit-leiste .pl-oben, .pl-mit-leiste .pl-unten { right: 408px; }
+html.tv .pl-mit-leiste .pl-oben, html.tv .pl-mit-leiste .pl-unten { right: 604px; }
+html.hd .pl-mit-leiste .pl-oben, html.hd .pl-mit-leiste .pl-unten { right: 0; }
+
+/* Titel in schmalen fetten Versalien, darunter Methode mit Ampel und dezente Hinweise. */
+.pl-titel { margin-left: var(--abstand-3); padding-top: 2px; }
+.pl-titel-text { font-family: var(--schrift-display); font-weight: 800; text-transform: uppercase; font-size: 32px; line-height: 34px; }
+html.tv .pl-titel-text { font-size: 48px; line-height: 52px; }
+html.hd .pl-titel-text { font-size: 24px; line-height: 26px; }
+.pl-unter { margin-top: var(--abstand-1); font: var(--t-karte); }
+.pl-methode { margin-top: var(--abstand-1); font: var(--t-klein); color: #a8a195; }
+.pl-hinweis { margin-top: var(--abstand-1); font: var(--t-klein); color: #979083; }
+.pl-link { margin-left: var(--abstand-3); text-decoration: underline; color: #ece7dd; font: inherit; }
+
+/* Knöpfe: .fl-btn aus komponenten.css, über dem Video halbtransparent; Play groß. */
+.pl-glas { background: rgba(236,231,221,.14); color: #ece7dd; box-shadow: none; }
+.pl-glas.primaer, .pl-gross.ist-fokus { background: #ece7dd; color: #11100e; }
+.pl-glas.ist-fokus { box-shadow: 0 0 0 2px #11100e, 0 0 0 5px #ece7dd; }
+html.tv .pl-glas.ist-fokus { box-shadow: 0 0 0 3px #11100e, 0 0 0 7px #ece7dd; }
+html.dt .pl-glas:hover { background: rgba(236,231,221,.24); }
+html.dt .pl-glas.primaer:hover { background: #fff; }
+.pl-gross { width: 64px; height: 64px; line-height: 64px; }
+html.tv .pl-gross { width: 96px; height: 96px; line-height: 96px; }
+html.hd .fl-btn.pl-glas { height: 44px; line-height: 44px; font-size: 15px; }
+html.hd .fl-btn.rund.pl-glas { width: 44px; }
+html.hd .pl-gross { width: 56px; height: 56px; line-height: 56px; }
+.pl-oben .fl-btn { margin: 0; }
+.pl-knoepfe { margin-top: var(--abstand-5); -webkit-justify-content: center; justify-content: center; -webkit-flex-wrap: wrap; flex-wrap: wrap; }
+.pl-knoepfe .rund + .fl-btn:not(.rund) { margin-left: var(--abstand-7); }
+html.hd .pl-knoepfe .rund + .fl-btn:not(.rund) { margin-left: var(--abstand-3); }
+
+/* Zeitleiste: Füllung per scaleX, Kopf per translateX – nichts animiert Breiten. */
+.pl-bahn { position: relative; height: 28px; margin-bottom: var(--abstand-2); cursor: pointer; }
+.pl-bahn-grund, .pl-bahn-puffer, .pl-bahn-voll { position: absolute; left: 0; right: 0; top: 12px; height: 3px; -webkit-transform-origin: 0 0; transform-origin: 0 0; }
+.pl-bahn-grund { background: rgba(236,231,221,.25); }
+.pl-bahn-puffer { background: rgba(236,231,221,.45); }
+.pl-bahn-voll { background: #ece7dd; }
+.pl-bahn-kopf-schiene { position: absolute; left: 0; right: 0; top: 0; height: 28px; pointer-events: none; }
+.pl-bahn-kopf { position: absolute; left: -1px; top: 4px; width: 3px; height: 20px; background: #ece7dd; }
+html.tv .pl-bahn { height: 36px; }
+html.tv .pl-bahn-grund, html.tv .pl-bahn-puffer, html.tv .pl-bahn-voll { top: 16px; height: 4px; }
+html.tv .pl-bahn-kopf { top: 4px; width: 4px; height: 28px; left: -2px; }
+.pl-zeit { font-family: var(--schrift-mono); font-weight: 500; font-size: 15px; }
+html.tv .pl-zeit { font-size: 26px; }
+html.hd .pl-zeit { font-size: 13px; }
+
+/* Laden */
+.pl-laedt { position: absolute; left: 50%; top: 50%; -webkit-transform: translate(-50%, -50%); transform: translate(-50%, -50%);
+  padding: var(--abstand-3) var(--abstand-5); background: rgba(17,16,14,.92); border-radius: var(--radius-s); font: var(--t-klein);
+  -webkit-animation: pl-puls 1.6s ease-in-out infinite; animation: pl-puls 1.6s ease-in-out infinite; }
+@-webkit-keyframes pl-puls { 50% { opacity: .5; } }
+@keyframes pl-puls { 50% { opacity: .5; } }
+
+/* Panels über dem Video (.fl-panel): nur Lage und Einblenden. */
+.fl-panel { -webkit-animation: pl-rein var(--dauer-langsam) var(--kurve-standard); animation: pl-rein var(--dauer-langsam) var(--kurve-standard); }
+@-webkit-keyframes pl-rein { from { opacity: 0; -webkit-transform: translateY(16px); } }
+@keyframes pl-rein { from { opacity: 0; transform: translateY(16px); } }
+.pl-menue { position: absolute; right: var(--rand); bottom: 200px; max-height: 62%; overflow-y: auto; -webkit-align-items: flex-start; align-items: flex-start; }
+html.tv .pl-menue { bottom: 260px; }
+html.hd .pl-menue { left: 0; right: 0; bottom: 0; max-height: 78%; display: block; }
+html.hd .pl-menue .spalte { width: auto; margin: 0 0 var(--abstand-5); }
+.pl-menue .eintrag { width: 100%; text-align: left; }
+html.dt .pl-menue .eintrag:hover { background: rgba(236,231,221,.1); }
+html.dt .pl-menue .eintrag.ist-fokus:hover { background: #ece7dd; }
+.pl-menue .fl-schalter { margin-left: var(--abstand-3); -webkit-flex: 0 0 auto; flex: 0 0 auto; }
+.pl-menue .ist-fokus .fl-schalter { box-shadow: inset 0 0 0 1px #11100e; }
+.pl-menue .ist-fokus .fl-schalter.an { background: #11100e; }
+.pl-menue .ist-fokus .fl-schalter.an i { background: #ece7dd; }
+
+/* Warum umgewandelt? */
+.pl-blatt { position: absolute; left: 50%; top: 50%; width: 720px; max-width: 92%; padding: var(--abstand-6); -webkit-transform: translate(-50%, -50%); transform: translate(-50%, -50%); -webkit-animation: none; animation: none; }
+html.tv .pl-blatt { width: 1040px; padding: 48px; }
+.pl-blatt h2 { font: var(--t-reihe); margin-bottom: var(--abstand-4); }
+.pl-blatt ul { margin: 0 0 var(--abstand-4); padding-left: 1.1em; }
+.pl-blatt li { margin-bottom: var(--abstand-2); }
+.pl-blatt .pl-zeit { margin-bottom: var(--abstand-5); }
+
+/* Nächste Folge (.fl-naechste): Lage und Zähler per scaleX */
+.pl-naechste { position: absolute; right: var(--rand); bottom: var(--abstand-6); max-width: 92%; -webkit-align-items: flex-start; align-items: flex-start; }
+html.tv .pl-naechste { bottom: var(--tv-rand-oben); }
+html.hd .pl-naechste { left: var(--abstand-4); right: var(--abstand-4); width: auto; bottom: var(--abstand-4); }
+html.hd .pl-naechste .vorschau { display: none; }
+.pl-naechste .vorschau { background-color: #24221e; }
+.pl-naechste .zaehler i { width: 100%; -webkit-transform-origin: 0 0; transform-origin: 0 0; -webkit-transition: -webkit-transform 1s linear; transition: transform 1s linear; }
+
+/* Fehler */
+.pl-fehler { position: absolute; left: 0; right: 0; top: 0; bottom: 0; padding: 22vh var(--rand) 0; background: #11100e; color: #ece7dd; }
+.pl-fehler > * { margin-bottom: var(--abstand-4); max-width: 960px; }
+.pl-fehler > .icon { width: 48px; height: 48px; color: var(--ampel-rot); }
+.pl-fehler h2 { font: var(--t-titel); text-transform: uppercase; }
+
+/* Text-Untertitel: ruhig, gut lesbar, auf dem TV groß. */
+.pl video::cue { font-family: var(--schrift-sans); font-size: 28px; line-height: 1.3; color: #fff; background: rgba(0,0,0,.6); }
+html.tv .pl video::cue { font-size: 44px; }
+html.hd .pl video::cue { font-size: 18px; }
+
+/* Gemeinsam schauen (.fl-gemeinsam, screens/13): Lage rechts über dem Video, Reaktionen steigen übers Bild. */
+.party { position: absolute; right: var(--rand); top: var(--abstand-6); bottom: var(--abstand-6); }
+html.tv .party { top: var(--tv-rand-oben); bottom: var(--tv-rand-oben); }
+html.hd .party { left: 0; right: 0; top: auto; bottom: 0; width: auto; height: 44%; padding: var(--abstand-4); }
+.party .person .mini { -webkit-flex: 0 0 auto; flex: 0 0 auto; }
+.party .person .eine-zeile { -webkit-flex: 1; flex: 1; min-width: 0; }
+.party .chat { overflow-y: auto; min-height: 0; }
+.party-info { color: #979083; }
+.party-link { font-size: 13px; color: #979083; word-break: break-all; margin-bottom: 12px; }
+html.tv .party-link { font-size: 24px; }
+.party .reaktionen button { display: inline-block; width: 40px; height: 40px; line-height: 40px; margin-right: 6px; text-align: center; border-radius: var(--radius-s); box-shadow: inset 0 0 0 1px #34312b; font-size: 20px; }
+html.dt .party .reaktionen button:hover, .party .reaktionen button:focus { background: rgba(236,231,221,.12); }
+html.tv .party .reaktionen button { width: 64px; height: 64px; line-height: 64px; font-size: 32px; }
+html.hd .party .reaktionen button { width: 44px; height: 44px; line-height: 44px; }
+.party-form .eingabe { border: 0; background: none; color: #ece7dd; margin-right: var(--abstand-2); min-width: 0; font-family: inherit; }
+.party-form .eingabe:focus { box-shadow: inset 0 0 0 1px #ece7dd, 0 0 0 3px #ece7dd; }
+.party-form .fl-btn { margin: 0; height: 44px; line-height: 44px; }
+.party-flug { position: fixed; left: 0; right: 0; bottom: 0; height: 70%; pointer-events: none; overflow: hidden; }
+.party-emoji { position: absolute; bottom: 0; font-size: 48px; opacity: 0;
+  -webkit-animation: party-steigt 3s var(--kurve-standard) forwards; animation: party-steigt 3s var(--kurve-standard) forwards; }
+html.tv .party-emoji { font-size: 64px; }
+@-webkit-keyframes party-steigt { 10% { opacity: 1; } 80% { opacity: 1; } to { opacity: 0; -webkit-transform: translateY(-420px); } }
+@keyframes party-steigt { 10% { opacity: 1; } 80% { opacity: 1; } to { opacity: 0; transform: translateY(-420px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .pl-laedt, .fl-panel { -webkit-animation: none; animation: none; }
+  .party-emoji { -webkit-animation: none; animation: none; opacity: 1; }
+}
