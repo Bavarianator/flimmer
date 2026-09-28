@@ -30,4 +30,4 @@ Vorlage für die Code-Agenten „ui-fundament“ und „ui-player“. Jede Datei
 | 16 | TV-Kopplung | [TV](16-kopplung-tv.html) | [Desktop](16-kopplung-desktop.html) | [Handy](16-kopplung-handy.html) |
 | 17 | Kinderprofil | [TV](17-kinderprofil-tv.html) | [Desktop](17-kinderprofil-desktop.html) | [Handy](17-kinderprofil-handy.html) |
 
-PNG-Renderings folgen, sobald wieder Headless-Browser laufen dürfen.
+Zu jeder HTML-Datei liegt ein PNG-Rendering daneben (Chromium, ganze Seite).

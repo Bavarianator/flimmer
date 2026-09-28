@@ -8,7 +8,8 @@ Stand: 2026-09-28. Session: ui-design (vorher flimmer-ui-rework). Status: **Rich
 |---|---|
 | Designsystem „Flimmer“ (Version 5, Richtung Mischung) | https://claude.ai/artifact/4u41G18sE1BuLkX1eUAk2p |
 | Tokens als Datei (Kopie aus dem Artefakt) | [tokens.json](tokens.json) |
-| Screens: 17 Screens in TV, Desktop und Handy | [screens/](screens/README.md) |
+| Screens: 17 Screens in TV, Desktop und Handy (HTML + PNG) | [screens/](screens/README.md) |
+| Kontrollbilder der Mischung | [richtungen/mischung-cover.png](richtungen/mischung-cover.png), [richtungen/mischung-start-tv.png](richtungen/mischung-start-tv.png) |
 | Die zwei Richtungen zur Wahl | [richtungen/](richtungen/README.md) |
 | Bestandsaufnahme | [bestand.md](bestand.md) |
 
@@ -49,3 +50,10 @@ Das Artefakt ist privat. Andere sehen es erst nach einer Freigabe über das Teil
   - Die Plakat-Schrift kommt als statische woff2-Instanz, weil Chromium 53 keine variablen Achsen kann.
   - Animationen nur mit `transform` und `opacity`.
 - **Funktionsgleichheit**: Ampel, Fortschritt, Ton-/Untertitelmenü mit Nachtmodus (`night`, `subtitleMode`, `subtitleIndex`, `forced`/`sdh`, `notes[]`), Kopplungscode mit QR, PIN und Kinderprofil, Gemeinsam-schauen-Leiste mit Chat, Suche mit Filtern, Einstellungen mit Diagnose, Sicherung, Fernzugriff und Einladungen.
+
+## Entscheidungen des Dirigenten (2026-09-28)
+
+- Die TV-Navigation liegt oben als Textnavigation.
+- Der TV bleibt immer im Kino-Thema, das Papier-Thema gibt es nur auf Desktop und Handy.
+- `/setup` und `/settings` stellt ui-player auf die Tokens um.
+- Das Artefakt bleibt privat.

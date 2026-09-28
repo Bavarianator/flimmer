@@ -1,0 +1,129 @@
+[
+ {
+  "id": "2d62ced3a409",
+  "title": "Episode 1",
+  "series": "Dark",
+  "light": "green",
+  "method": "direct-play"
+ },
+ {
+  "id": "0fc0fc1d2e4c",
+  "title": "Episode 2",
+  "series": "Dark",
+  "light": "green",
+  "method": "direct-play"
+ },
+ {
+  "id": "449e7ee2a60d",
+  "title": "Episode 3",
+  "series": "Dark",
+  "light": "green",
+  "method": "direct-play"
+ },
+ {
+  "id": "963b1612b604",
+  "title": "Episode 4",
+  "series": "Dark",
+  "light": "green",
+  "method": "direct-play"
+ },
+ {
+  "id": "c2092eb9d81b",
+  "title": "Episode 1",
+  "series": "Dark",
+  "light": "green",
+  "method": "direct-play"
+ },
+ {
+  "id": "45d272054abb",
+  "title": "Episode 2",
+  "series": "Dark",
+  "light": "green",
+  "method": "direct-play"
+ },
+ {
+  "id": "871a3f62edfb",
+  "title": "Das Boot",
+  "light": "green",
+  "method": "direct-play"
+ },
+ {
+  "id": "91d5eb4252f6",
+  "title": "Das Leben der Anderen",
+  "light": "green",
+  "method": "direct-play"
+ },
+ {
+  "id": "a8c0cb6e2274",
+  "title": "Der Himmel über Berlin",
+  "light": "green",
+  "method": "direct-play"
+ },
+ {
+  "id": "a1657cc580b9",
+  "title": "Die Blechtrommel",
+  "light": "green",
+  "method": "direct-play"
+ },
+ {
+  "id": "69a29ae36337",
+  "title": "Direkt",
+  "light": "green",
+  "method": "direct-play"
+ },
+ {
+  "id": "5cfff3f26b8f",
+  "title": "Good Bye, Lenin!",
+  "light": "green",
+  "method": "direct-play"
+ },
+ {
+  "id": "a92cbc523663",
+  "title": "HDR",
+  "light": "red",
+  "method": "transcode"
+ },
+ {
+  "id": "cfc9e4542a9d",
+  "title": "Lola rennt",
+  "light": "green",
+  "method": "direct-play"
+ },
+ {
+  "id": "4244e9de9a96",
+  "title": "Metropolis",
+  "light": "green",
+  "method": "direct-play"
+ },
+ {
+  "id": "f1d443eb16cc",
+  "title": "Nosferatu",
+  "light": "green",
+  "method": "direct-play"
+ },
+ {
+  "id": "8425a433997e",
+  "title": "Remux",
+  "light": "green",
+  "method": "direct-stream"
+ },
+ {
+  "id": "186d1cc86e58",
+  "title": "Episode 1",
+  "series": "Testserie",
+  "light": "green",
+  "method": "direct-play"
+ },
+ {
+  "id": "7aa0601fa41a",
+  "title": "Tonwandel",
+  "light": "yellow",
+  "method": "transcode-audio"
+ },
+ {
+  "id": "2c0d4af7edb9",
+  "title": "Umwandeln",
+  "light": "yellow",
+  "method": "transcode"
+ }
+]

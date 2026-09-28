@@ -26,7 +26,7 @@ Unter [`bestand/`](bestand/), Dateiname `<Nr>-<Screen>-<Größe>.png`:
 | 60–61 | Einstellungen (`/settings`), ganze Seite |
 | 70–74 | Start lädt, Detail lädt, leere Bibliothek, Server nicht erreichbar, unbekannter Titel |
 
-**Lücke:** Der TV-Durchlauf ist vollständig. Desktop fehlen 13 und 70–74, Handy alles außer Setup. Der Lauf wurde auf Bitte des Dirigenten angehalten (Maschine ausgelastet, APK-Build hatte Vorrang). Die Zustände sehen auf allen Größen gleich aus: ein Satz Text, kein Button. Der Rest wird nachgereicht, sobald Playwright wieder laufen darf.
+Alle drei Größen sind vollständig. Die Desktop- und Handy-Aufnahmen stammen aus einem zweiten Lauf nach der Pause, die der Dirigent wegen Maschinenlast angeordnet hatte.
 
 Hinweis zum Player: Das Video bleibt in den Screenshots schwarz. Chrome for Testing hat keine H.264-Decoder, das liegt am Testaufbau und nicht an Flimmer.
 
