@@ -73,6 +73,15 @@
       <div class="error" id="perr"></div>
     </section>
 
+    <section class="card">
+      <h3>Diagnose</h3>
+      <div id="diag"></div>
+      <div id="streams"></div>
+      <details style="margin-top:12px"><summary class="hint" style="cursor:pointer">Protokoll (letzte 200 Zeilen)</summary>
+        <pre id="log" style="max-height:280px;overflow:auto;font-size:12px;background:var(--surface2);padding:12px;border-radius:10px;white-space:pre-wrap"></pre></details>
+      <div class="actions"><span class="hint">Für Fehlerberichte: kopiert Status und Protokoll.</span><button class="small" id="copyDiag">Diagnose kopieren</button></div>
+    </section>
+
     <section class="card" id="reviewCard" hidden>
       <h3>Bitte prüfen</h3>
       <p class="lead">Bei diesen Titeln war die Erkennung unsicher. Ein Klick auf „Ändern“ zeigt passende Treffer.</p>
@@ -120,7 +129,7 @@ function load() {
     $('ffhint').textContent = s.ffmpeg.download.error ? 'Download fehlgeschlagen: ' + s.ffmpeg.download.error : s.ffmpeg.hint;
     $('ffget').hidden = !s.ffmpeg.canDownload;
     if (s.lanUrl) { $('lanRow').hidden = false; $('lan').textContent = s.lanUrl; $('qr').src = '/api/qr' }
-    loadUsers(); loadReview(); status();
+    loadUsers(); loadReview(); status(); loadDiag();
   }).catch(function () {});
 }
 
@@ -249,6 +258,37 @@ function search(e, row) {
     row.after(box);
   }).catch(function (x) { toast(x.message) });
 }
+
+// --- Diagnose ---
+var methodText = { 'direct-play': 'läuft direkt', 'direct-stream': 'nur umverpackt', 'transcode-audio': 'Ton wird umgewandelt', 'transcode': 'wird transkodiert' };
+function gb(b) { return (b / 1e9).toFixed(1).replace('.', ',') + ' GB' }
+var diagText = '';
+function loadDiag() {
+  api('GET', '/api/diagnostics').then(function (d) {
+    var rows = [
+      ['Version', d.version + ' · ' + d.os + ' · ' + d.cpus + ' Kerne'],
+      ['ffmpeg', d.ffmpeg || 'fehlt'],
+      ['Transcoding', d.hw ? d.hw + ' (' + d.hwSpeed.toFixed(1).replace('.', ',') + '× Echtzeit bei 1080p)' : 'wird noch gemessen …'],
+      ['Speicher (Cache)', d.diskTotal ? gb(d.diskFree) + ' frei von ' + gb(d.diskTotal) : 'unbekannt']
+    ];
+    $('diag').innerHTML = rows.map(function (r) { return '<div class="row"><div class="grow"><small>' + r[0] + '</small>' + esc(r[1]) + '</div></div>' }).join('');
+    var all = d.active.map(function (s) { s.on = true; return s }).concat(d.recent);
+    $('streams').innerHTML = all.length ? '<label>Wiedergaben</label>' + all.map(function (s) {
+      return '<div class="row"><span class="dot ' + (s.light === 'green' ? 'ok' : s.light === 'red' ? 'bad' : '') + '" style="' + (s.light === 'yellow' ? 'background:#f5c043' : '') + '"></span>' +
+        '<div class="grow"><strong>' + esc(s.title) + '</strong><small>' + esc(s.user) + (s.device ? ' · ' + esc(s.device) : '') + ' · ' + (methodText[s.method] || s.method) + (s.on ? ' · läuft gerade' : '') + '</small>' +
+        (s.reasons && s.reasons.length ? '<small>Warum: ' + esc(s.reasons.join('; ')) + '</small>' : '') + '</div></div>';
+    }).join('') : '';
+    $('log').textContent = d.log.join('\n');
+    diagText = rows.map(function (r) { return r[0] + ': ' + r[1] }).join('\n') + '\n\nWiedergaben:\n' +
+      all.map(function (s) { return '- ' + s.title + ' (' + s.device + '): ' + s.method + ' ' + (s.reasons || []).join('; ') }).join('\n') + '\n\nProtokoll:\n' + d.log.join('\n');
+  }).catch(function () {});
+}
+$('copyDiag').onclick = function () {
+  var done = function () { toast('Diagnose kopiert') };
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(diagText).then(done);
+  else { var t = document.createElement('textarea'); t.value = diagText; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); done() }
+};
+setInterval(function () { if (!$('app').hidden) loadDiag() }, 5000);
 
 load();
 </script>

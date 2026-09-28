@@ -15,7 +15,6 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/flimmer-media/flimmer/internal/auth"
 	"github.com/flimmer-media/flimmer/internal/scan"
 	"github.com/flimmer-media/flimmer/internal/setup"
 	"github.com/flimmer-media/flimmer/internal/state"
@@ -27,7 +26,6 @@ func TestEndToEnd(t *testing.T) {
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		t.Skip("ffmpeg fehlt")
 	}
-	auth.Iterations = 1000
 	media, data := t.TempDir(), t.TempDir()
 	clip := filepath.Join(media, "Testfilm (2024).mkv")
 	if b, err := exec.Command("ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=size=320x240:rate=25:duration=8",

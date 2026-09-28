@@ -15,24 +15,41 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/crypto/argon2"
 )
 
-// Iterations nach OWASP 2023. Eine Variable nur, damit Tests schnell laufen; gespeicherte Hashes tragen ihren Wert selbst.
-// ponytail: PBKDF2 aus der Stdlib statt argon2id (x/crypto).
-var Iterations = 600_000
+// argon2id nach OWASP: 19 MiB, 2 Durchläufe, 1 Thread – ca. 50 ms am PC, wenige hundert ms auf dem Pi.
+// (PBKDF2 aus der Stdlib brauchte mit 600 000 Runden schon am PC 1,5 s.)
+const (
+	argonMem  = 19 * 1024
+	argonTime = 2
+)
 
 var b64 = base64.RawURLEncoding
 
-// HashPassword liefert "pbkdf2-sha256$<iter>$<salt>$<hash>".
+// HashPassword liefert "argon2id$<m>$<t>$<salt>$<hash>".
 func HashPassword(pw string) string {
 	salt := make([]byte, 16)
 	rand.Read(salt)
-	key, _ := pbkdf2.Key(sha256.New, pw, salt, Iterations, 32)
-	return fmt.Sprintf("pbkdf2-sha256$%d$%s$%s", Iterations, b64.EncodeToString(salt), b64.EncodeToString(key))
+	key := argon2.IDKey([]byte(pw), salt, argonTime, argonMem, 1, 32)
+	return fmt.Sprintf("argon2id$%d$%d$%s$%s", argonMem, argonTime, b64.EncodeToString(salt), b64.EncodeToString(key))
 }
 
 func CheckPassword(hash, pw string) bool {
 	parts := strings.Split(hash, "$")
+	if len(parts) == 5 && parts[0] == "argon2id" {
+		mem, err1 := strconv.ParseUint(parts[1], 10, 32)
+		t, err2 := strconv.ParseUint(parts[2], 10, 32)
+		salt, err3 := b64.DecodeString(parts[3])
+		want, err4 := b64.DecodeString(parts[4])
+		if err1 != nil || err2 != nil || err3 != nil || err4 != nil || mem > 1<<20 || t > 16 {
+			return false
+		}
+		got := argon2.IDKey([]byte(pw), salt, uint32(t), uint32(mem), 1, uint32(len(want)))
+		return subtle.ConstantTimeCompare(got, want) == 1
+	}
+	// Hashes aus der ersten Entwicklungsversion (PBKDF2) bleiben gültig.
 	if len(parts) != 4 || parts[0] != "pbkdf2-sha256" {
 		return false
 	}

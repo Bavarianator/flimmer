@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -200,14 +201,19 @@ func (s *Server) play(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u := userFrom(r)
-	plan := playback.Decide(it.Media, p, s.hw().Speed)
-	resp := playResponse{Plan: plan, Duration: it.Media.Duration, Title: it.Title, Subtitles: []subtitleOut{}}
+	var resume float64
+	var prefs state.TrackPref
 	s.State.View(func(d *state.Data) {
-		resp.Resume = d.Progress[u.ID][it.ID].Pos
+		resume = d.Progress[u.ID][it.ID].Pos
 		if it.Series != "" {
-			resp.Prefs = d.Prefs[u.ID][it.Series]
+			prefs = d.Prefs[u.ID][it.Series]
 		}
 	})
+	if p.AudioLang == "" {
+		p.AudioLang = prefs.Audio // zuletzt gewählte Tonsprache der Serie
+	}
+	plan := playback.Decide(it.Media, p, s.hw().Speed)
+	resp := playResponse{Plan: plan, Duration: it.Media.Duration, Title: it.Title, Subtitles: []subtitleOut{}, Resume: resume, Prefs: prefs}
 	// Medien-Token im Pfad: <video src>, hls.js-Segmente und TVs schicken keine Header.
 	base := "/api/m/" + auth.MediaToken(s.secret(), u.ID, mediaTTL) + "/items/" + it.ID
 	if plan.Method == playback.DirectPlay {
@@ -223,7 +229,19 @@ func (s *Server) play(w http.ResponseWriter, r *http.Request) {
 		resp.Subtitles = append(resp.Subtitles, subtitleOut{sub, base + "/subs/" + strconv.Itoa(sub.Index) + ext})
 	}
 	log.Printf("play %q für %s: %s (%v)", it.Title, u.Name, plan.Method, plan.Reasons)
+	title := it.Title
+	if it.Series != "" {
+		title = fmt.Sprintf("%s – S%02dE%02d %s", it.Series, it.Season, it.Episode, it.Title)
+	}
+	s.streams.start(u.ID+"|"+it.ID, stream{User: u.Name, Title: title, Device: p.Name, Method: plan.Method, Light: plan.Light, Reasons: plan.Reasons})
 	writeJSON(w, resp)
+}
+
+// touch hält eine Wiedergabe in der Diagnose als „aktiv“.
+func (s *Server) touch(r *http.Request, it *scan.Item) {
+	if u := userFrom(r); u != nil {
+		s.streams.touch(u.ID + "|" + it.ID)
+	}
 }
 
 func (s *Server) progress(w http.ResponseWriter, r *http.Request) {
@@ -231,6 +249,7 @@ func (s *Server) progress(w http.ResponseWriter, r *http.Request) {
 	if it == nil {
 		return
 	}
+	s.touch(r, it)
 	var req struct {
 		Pos      float64 `json:"pos"`
 		Duration float64 `json:"duration"`

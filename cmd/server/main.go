@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -46,6 +47,8 @@ func main() {
 	data := flag.String("data", "", "ein Ordner für alles (Einstellungen und Cache); Standard: Benutzerordner des Systems")
 	every := flag.Duration("rescan", 15*time.Minute, "Abstand zwischen automatischen Scans")
 	flag.Parse()
+	ring := &api.LogRing{}
+	log.SetOutput(io.MultiWriter(os.Stderr, ring))
 	addrSet := false
 	flag.Visit(func(f *flag.Flag) { addrSet = addrSet || f.Name == "addr" })
 
@@ -105,7 +108,7 @@ func main() {
 	hls := transcode.NewManager(tmp)
 	lanURL := discovery.LANURL(port)
 	srv := &api.Server{Lib: lib, HLS: hls, State: st, Meta: res, Images: img, CacheDir: cacheDir,
-		Web: web.FS(), Pages: setup.FS(), LANURL: lanURL, QR: discovery.QRHandler(port)}
+		Web: web.FS(), Pages: setup.FS(), LANURL: lanURL, QR: discovery.QRHandler(port), Log: ring}
 	srv.FFmpeg.Store(hasFF)
 
 	// Scan und Hardware-Erkennung brauchen ffmpeg – starten sofort oder nach dem Download aus der Einrichtung.

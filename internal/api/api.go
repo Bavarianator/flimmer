@@ -36,11 +36,13 @@ type Server struct {
 	Pages    fs.FS                         // setup.html, settings.html
 	LANURL   string                        // z. B. http://192.168.1.20:8096, für QR-Code und Anzeige
 	QR       http.Handler                  // PNG mit LANURL
+	Log      *LogRing                      // letzte Log-Zeilen für die Diagnose, nil = keine
 	FFmpeg   atomic.Bool                   // ffmpeg/ffprobe gefunden
 	HW       atomic.Pointer[hwaccel.Accel] // gesetzt, sobald hwaccel.Detect fertig ist
 
 	pairing auth.Pairing
 	limiter auth.Limiter
+	streams streams
 }
 
 func (s *Server) hw() hwaccel.Accel {
@@ -77,6 +79,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/settings", adminOnly(s.saveSettings))
 	mux.HandleFunc("GET /api/settings/review", adminOnly(s.review))
 	mux.HandleFunc("POST /api/rescan", adminOnly(s.rescan))
+	mux.HandleFunc("GET /api/diagnostics", adminOnly(s.diagnostics))
 
 	// Bibliothek und Wiedergabe
 	mux.HandleFunc("POST /api/library", s.library)
@@ -180,6 +183,7 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) file(w http.ResponseWriter, r *http.Request) {
 	if it := s.item(w, r); it != nil {
+		s.touch(r, it)
 		http.ServeFile(w, r, it.Path) // Range-Requests, If-Modified-Since usw. aus der Stdlib
 	}
 }
@@ -235,6 +239,9 @@ func (s *Server) segment(w http.ResponseWriter, r *http.Request) {
 	job, ok := s.job(w, r)
 	if !ok {
 		return
+	}
+	if it := s.Lib.Get(r.PathValue("id")); it != nil {
+		s.touch(r, it)
 	}
 	seg := r.PathValue("seg")
 	n, err := strconv.Atoi(seg[:len(seg)-len(filepath.Ext(seg))])
