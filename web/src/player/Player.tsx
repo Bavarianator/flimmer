@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
 import type Hls from 'hls.js/light'
 import { api, isTV, profile } from '../profile'
+import { probeSignal } from '../probe'
 
 interface Subtitle { index: number; language?: string; title?: string; format: 'vtt' | 'pgs' }
 interface Plan {
@@ -33,6 +34,7 @@ export function Player({ id, onBack }: { id: string; onBack: () => void }) {
   useEffect(() => {
     let hls: Hls | undefined
     let cancelled = false
+    probeSignal.aborted = true // Geräte-Test gibt den (oft einzigen) Hardware-Decoder frei
     const v = video.current!
     const resume = Number(localStorage.getItem('pos:' + id) || 0) // ponytail: lokal, bis Fortschritt serverseitig gespeichert wird
     api<Plan>(`/api/items/${id}/play`, profile)

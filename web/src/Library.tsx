@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'preact/hooks'
 import { FocusContext, useFocusable, setFocus } from '@noriginmedia/norigin-spatial-navigation'
-import { api, profile } from './profile'
+import { api, profile, setProbe } from './profile'
+import { loadProbe, runProbe } from './probe'
 
 export interface Item {
   id: string
@@ -70,8 +71,21 @@ export function Library({ onOpen }: { onOpen: (id: string) => void }) {
   const [error, setError] = useState('')
   const { ref, focusKey } = useFocusable({ focusKey: 'library' })
 
+  const [probing, setProbing] = useState(false)
+  const load = () => api<Item[] | null>('/api/library', profile).then((r) => setItems(r || []), (e) => setError(String(e)))
+  const probe = () => {
+    setProbing(true)
+    runProbe().then((r) => {
+      setProbing(false)
+      if (r) {
+        setProbe(r)
+        load() // Ampeln mit gemessenem Profil neu berechnen
+      }
+    })
+  }
   useEffect(() => {
-    api<Item[] | null>('/api/library', profile).then((r) => setItems(r || []), (e) => setError(String(e)))
+    load()
+    if (!loadProbe()) probe() // einmal pro Gerät/Firmware im Hintergrund
   }, [])
   useEffect(() => {
     if (items && items.length) setFocus('item-' + items[0].id)
@@ -89,7 +103,13 @@ export function Library({ onOpen }: { onOpen: (id: string) => void }) {
       <main ref={ref} class="library">
         <header>
           <h1>Flimmer</h1>
-          <span class="device">{profile.name}</span>
+          <span class="device">
+            {profile.name}
+            {' · '}
+            <button class="link" onClick={probe} disabled={probing}>
+              {probing ? 'Gerät wird getestet …' : 'Gerät neu testen'}
+            </button>
+          </span>
         </header>
         {resume.length > 0 && <Row title="Weiterschauen" items={resume} onOpen={onOpen} />}
         {movies.length > 0 && <Row title="Filme" items={movies} onOpen={onOpen} />}

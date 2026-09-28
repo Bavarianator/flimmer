@@ -1,3 +1,5 @@
+import { applyProbe, loadProbe, type ProbeResult } from './probe'
+
 // Ermittelt, was dieses Gerät abspielen kann. Der Server entscheidet damit pro Titel über
 // Direct Play / Remux / Ton-Transcoding und zeigt die Ampel passend zu genau diesem Gerät.
 
@@ -52,11 +54,33 @@ export function detectProfile(): Profile {
     p.containers.push('mkv', 'ts')
     for (const a of ['aac', 'ac3', 'eac3', 'mp3']) if (p.audio.indexOf(a) < 0) p.audio.push(a)
   }
-  // TODO(v0.1): Schicht 3 – echte Probe-Clips abspielen und Ergebnis gewinnen lassen.
   return p
 }
 
-export const profile = detectProfile()
+// Aktuelles Profil: Schicht 1+2 (detectProfile) plus gemessene Schicht 3 (Probe-Clips).
+export let profile = applyProbe(detectProfile(), loadProbe())
+
+export function setProbe(r: ProbeResult) {
+  profile = applyProbe(detectProfile(), r)
+  // Server merkt sich die Messung pro Gerät (Diagnose, Neuinstallation der App). Fehler sind egal.
+  fetch(`/api/devices/${deviceId()}/profile`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: profile.name, probe: r }),
+  }).catch(() => {})
+}
+
+export function deviceId(): string {
+  let id = ''
+  try {
+    id = localStorage.getItem('flimmer.device') || ''
+    if (!id) {
+      id = Math.random().toString(36).slice(2) + Date.now().toString(36)
+      localStorage.setItem('flimmer.device', id)
+    }
+  } catch {}
+  return id || 'unbekannt'
+}
 
 export async function api<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, {
