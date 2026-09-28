@@ -3,8 +3,10 @@
 package transcode
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -75,12 +77,24 @@ type Job struct {
 	AudioIndex int      // -1 = kein Ton
 	AudioCodec string   // copy, aac, eac3
 	VideoCodec string   // copy, h264
+	Height     int      // >0: beim Transcoding auf diese Höhe verkleinern
 	InputArgs  []string // vor -i, z. B. Hardware-Decoding (hwaccel.Accel.Input)
 	Encoder    []string // Video-Encoder (hwaccel.Accel.Encode); leer = libx264
 }
 
 func (j Job) Key() string {
-	return fmt.Sprintf("%s|%d|%s|%s", j.Input, j.AudioIndex, j.AudioCodec, j.VideoCodec)
+	return fmt.Sprintf("%s|%d|%s|%s|%d", j.Input, j.AudioIndex, j.AudioCodec, j.VideoCodec, j.Height)
+}
+
+// ParseVideo zerlegt den Video-Teil der HLS-URL: "copy", "h264" oder "h264-720".
+func ParseVideo(v string) (codec string, height int, ok bool) {
+	switch v {
+	case "copy", "h264":
+		return v, 0, true
+	case "h264-720":
+		return "h264", 720, true
+	}
+	return "", 0, false
 }
 
 // Ein Session-Prozess erzeugt fortlaufend Segmente ab einem Startsegment – kontinuierlich,
@@ -95,6 +109,7 @@ type session struct {
 	done     chan struct{}
 	lastUsed time.Time
 	paused   bool
+	slow     bool // Speed-Wächter: ffmpeg schafft keine Echtzeit
 }
 
 type Manager struct {
@@ -103,6 +118,7 @@ type Manager struct {
 	mu       sync.Mutex
 	sessions map[string]*session
 	swOnly   map[string]bool // Dateien, bei denen der HW-Pfad scheiterte (z. B. Codec nicht HW-dekodierbar)
+	lowRes   map[string]bool // Dateien, die der Speed-Wächter auf 720p heruntergestuft hat
 }
 
 const (
@@ -112,7 +128,7 @@ const (
 )
 
 func NewManager(tempDir string) *Manager {
-	m := &Manager{TempDir: tempDir, sessions: map[string]*session{}, swOnly: map[string]bool{}}
+	m := &Manager{TempDir: tempDir, sessions: map[string]*session{}, swOnly: map[string]bool{}, lowRes: map[string]bool{}}
 	go m.reaper()
 	return m
 }
@@ -129,7 +145,7 @@ func (m *Manager) Segment(ctx context.Context, job Job, n int) (string, error) {
 		if s != nil {
 			s.lastUsed = time.Now()
 			produced := s.produced()
-			if n < s.cleaned || n > produced+restart {
+			if n < s.cleaned || n > produced+restart || s.slow {
 				s.stop()
 				s = nil
 			} else {
@@ -186,12 +202,22 @@ func (m *Manager) start(job Job, first int) (*session, error) {
 	if m.swOnly[job.Input] {
 		job.InputArgs, job.Encoder = nil, nil
 	}
+	if m.lowRes[job.Input] && job.VideoCodec != "copy" && job.Height == 0 {
+		job.Height = 720
+	}
 	s := &session{job: job, dir: dir, first: first, head: first - 1, cleaned: first, done: make(chan struct{}), lastUsed: time.Now()}
 	s.cmd = exec.Command("ffmpeg", args(job, first, dir)...)
 	s.cmd.Stderr = &tailWriter{}
+	var progress io.ReadCloser
+	if job.VideoCodec != "copy" && job.Height == 0 {
+		progress, _ = s.cmd.StdoutPipe()
+	}
 	if err := s.cmd.Start(); err != nil {
 		os.RemoveAll(dir)
 		return nil, err
+	}
+	if progress != nil {
+		go m.watch(s, progress)
 	}
 	go func() {
 		err := s.cmd.Wait()
@@ -232,6 +258,11 @@ func args(job Job, first int, dir string) []string {
 	if job.VideoCodec == "copy" {
 		a = append(a, "-c:v", "copy")
 	} else {
+		a = append(a, "-progress", "pipe:1", "-stats_period", "1")
+		if job.Height > 0 && len(job.InputArgs) == 0 {
+			// ponytail: Verkleinern nur im Software-Pfad; HW-Frames bräuchten scale_vaapi/scale_cuda/… je Backend.
+			a = append(a, "-vf", "scale=-2:"+strconv.Itoa(job.Height))
+		}
 		enc := job.Encoder
 		if len(enc) == 0 {
 			enc = []string{"-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p", "-profile:v", "high"}
@@ -330,6 +361,46 @@ func (m *Manager) Close() {
 	for k, s := range m.sessions {
 		s.stop()
 		delete(m.sessions, k)
+	}
+}
+
+// watch ist der Speed-Wächter: Kommt ffmpeg nicht mit ≥1,05× Echtzeit hinterher, obwohl der Player
+// wartet (nicht gedrosselt), wird die Datei für diese Laufzeit auf 720p heruntergestuft – lieber
+// etwas unschärfer als Stocken.
+var watchWindow = 6 * time.Second
+
+func (m *Manager) watch(s *session, progress io.Reader) {
+	var winStart time.Time
+	var winOut, out float64
+	sc := bufio.NewScanner(progress)
+	for sc.Scan() {
+		k, v, _ := strings.Cut(sc.Text(), "=")
+		switch k {
+		case "out_time_us":
+			if us, err := strconv.ParseFloat(v, 64); err == nil {
+				out = us / 1e6
+			}
+		case "progress":
+			m.mu.Lock()
+			paused, slow := s.paused, s.slow
+			m.mu.Unlock()
+			now := time.Now()
+			if paused || winStart.IsZero() {
+				winStart, winOut = now, out // gedrosselt zählt nicht
+				continue
+			}
+			if slow || now.Sub(winStart) < watchWindow {
+				continue
+			}
+			if speed := (out - winOut) / now.Sub(winStart).Seconds(); speed < 1.05 {
+				log.Printf("transcode: %s nur %.2f× Echtzeit – wechsle auf 720p", filepath.Base(s.job.Input), speed)
+				m.mu.Lock()
+				s.slow = true
+				m.lowRes[s.job.Input] = true
+				m.mu.Unlock()
+			}
+			winStart, winOut = now, out
+		}
 	}
 }
 

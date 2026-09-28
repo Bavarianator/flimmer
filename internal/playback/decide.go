@@ -48,7 +48,7 @@ type Plan struct {
 	Reasons    []string   `json:"reasons,omitempty"`
 	AudioIndex int        `json:"audioIndex"`
 	AudioCodec string     `json:"audioCodec"` // Ziel-Codec, "copy" wenn unverändert
-	VideoCodec string     `json:"videoCodec"` // "copy" oder "h264"
+	VideoCodec string     `json:"videoCodec"` // "copy", "h264" oder "h264-720"
 	Subtitles  []Subtitle `json:"subtitles"`
 }
 
@@ -117,13 +117,19 @@ func Decide(m *probe.Media, p Profile, speed float64) Plan {
 		plan.Method, plan.Light = TranscodeAudio, Yellow
 		plan.AudioCodec = targetAudio(a, p)
 	default:
-		plan.Method, plan.Light = Transcode, Red
-		if speed >= requiredSpeed(v) {
+		plan.Method, plan.Light, plan.VideoCodec = Transcode, Red, "h264"
+		switch need := requiredSpeed(v); {
+		case speed >= need:
 			plan.Light = Yellow
-		} else {
+		case v != nil && v.Height > 720 && speed >= need*reduce720:
+			plan.Light, plan.VideoCodec = Yellow, "h264-720"
+			plan.Reasons = append(plan.Reasons, "wird in 720p umgewandelt, damit nichts ruckelt")
+		default:
+			if v != nil && v.Height > 720 {
+				plan.VideoCodec = "h264-720" // bestmöglicher Versuch
+			}
 			plan.Reasons = append(plan.Reasons, "Server ist für Echtzeit-Transcoding zu langsam")
 		}
-		plan.VideoCodec = "h264"
 		if a != nil && !(audioOK && slices.Contains(tsAudio, a.Codec)) {
 			plan.AudioCodec = targetAudio(a, p)
 		}
@@ -145,6 +151,9 @@ func Decide(m *probe.Media, p Profile, speed float64) Plan {
 }
 
 // requiredSpeed: 1,5× Reserve bei 1080p, größere Quellen kosten beim Dekodieren proportional mehr.
+// reduce720: 720p-Encoding kostet grob die Hälfte von 1080p (Dekodieren der Quelle bleibt gleich teuer).
+const reduce720 = 0.5
+
 func requiredSpeed(v *probe.Stream) float64 {
 	f := 1.5
 	if v != nil && v.Width*v.Height > 1920*1080 {

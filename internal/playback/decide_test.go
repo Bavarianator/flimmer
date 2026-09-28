@@ -105,16 +105,20 @@ func TestTranscodeLightFollowsServerSpeed(t *testing.T) {
 		m     *probe.Media
 		speed float64
 		want  Light
+
+		video string
 	}{
-		{hd, 0, Red},      // Pi 5: kein HW-Encoder, nicht gemessen
-		{hd, 1.2, Red},    // zu knapp – würde ruckeln
-		{hd, 3.3, Yellow}, // VAAPI auf iGPU
-		{uhd, 3.3, Red},   // 4K braucht ~6×
-		{uhd, 8, Yellow},
+		{hd, 0, Red, "h264-720"},      // nicht gemessen
+		{hd, 0.5, Red, "h264-720"},    // selbst 720p zu knapp
+		{hd, 1.2, Yellow, "h264-720"}, // Pi 5 mit x264: 1080p würde ruckeln, 720p läuft
+		{hd, 3.3, Yellow, "h264"},     // VAAPI auf iGPU
+		{uhd, 3.3, Yellow, "h264-720"},
+		{uhd, 8, Yellow, "h264"},
 	}
 	for _, tt := range tests {
-		if got := Decide(tt.m, oldBrowser, tt.speed); got.Light != tt.want {
-			t.Errorf("%dx%d bei %.1fx: got %s want %s", tt.m.Streams[0].Width, tt.m.Streams[0].Height, tt.speed, got.Light, tt.want)
+		got := Decide(tt.m, oldBrowser, tt.speed)
+		if got.Light != tt.want || got.VideoCodec != tt.video {
+			t.Errorf("%dx%d bei %.1fx: got %s/%s want %s/%s", tt.m.Streams[0].Width, tt.m.Streams[0].Height, tt.speed, got.Light, got.VideoCodec, tt.want, tt.video)
 		}
 	}
 }
