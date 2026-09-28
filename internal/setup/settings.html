@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flimmer · Einstellungen</title>
+<link rel="stylesheet" href="/pages.css">
+</head>
+<body>
+<main>
+  <div class="top"><h1 class="brand">Einstellungen</h1><a href="/">← Zur Bibliothek</a></div>
+
+  <!-- Anmeldung, falls nötig -->
+  <section class="card" id="login" hidden>
+    <h2>Bitte anmelden</h2>
+    <p class="lead">Die Einstellungen kann nur ein Admin ändern.</p>
+    <label for="luser">Profil</label>
+    <select id="luser"></select>
+    <label for="lpass">Passwort</label>
+    <input id="lpass" type="password" autocomplete="current-password">
+    <div class="error" id="lerr"></div>
+    <div class="actions"><span></span><button class="primary" id="lgo">Anmelden</button></div>
+  </section>
+
+  <div id="app" hidden>
+    <section class="card">
+      <h3>Status</h3>
+      <div class="status"><span class="dot" id="sdot"></span><span id="stext">…</span></div>
+      <div id="ffbox" hidden><p class="hint" id="ffhint"></p><button class="small" id="ffget" hidden>ffmpeg automatisch installieren</button></div>
+      <div class="row" id="lanRow" hidden style="margin-top:12px"><img id="qr" alt="" width="96" height="96" style="border-radius:8px;background:#fff"><div class="grow"><strong>Auf Handy oder Fernseher öffnen</strong><small id="lan"></small></div></div>
+    </section>
+
+    <section class="card">
+      <h3>Allgemein</h3>
+      <label for="serverName">Name des Servers</label>
+      <input id="serverName" maxlength="40">
+      <label for="language">Sprache für Titel und Beschreibungen</label>
+      <select id="language">
+        <option value="de">Deutsch</option><option value="en">English</option><option value="fr">Français</option>
+        <option value="es">Español</option><option value="it">Italiano</option><option value="nl">Nederlands</option>
+        <option value="pl">Polski</option><option value="tr">Türkçe</option>
+      </select>
+      <label for="tmdb">Eigener TMDB-Schlüssel (optional)</label>
+      <input id="tmdb" placeholder="leer lassen – Flimmer bringt einen mit" autocomplete="off">
+      <div class="actions"><span class="hint">Ein neuer Schlüssel gilt nach dem nächsten Neustart.</span><button class="primary" id="saveGeneral">Speichern</button></div>
+    </section>
+
+    <section class="card">
+      <h3>Medienordner</h3>
+      <ul class="chosen" id="chosen"></ul>
+      <div class="browser">
+        <div class="crumb"><button class="small" id="up" hidden>↑</button><code id="cwd">Vorschläge</code><button class="small" id="pick" hidden>Hinzufügen</button></div>
+        <div class="list" id="list"></div>
+        <div class="manual"><input id="manual" placeholder="Pfad eingeben, z. B. /srv/filme"><button class="small" id="go">Öffnen</button></div>
+      </div>
+      <div class="actions"><button class="small" id="rescan">Jetzt nach neuen Dateien suchen</button><button class="primary" id="saveDirs">Ordner speichern</button></div>
+    </section>
+
+    <section class="card">
+      <h3>Personen</h3>
+      <div id="users"></div>
+      <label>Neue Person</label>
+      <div class="inline"><input id="nuName" placeholder="Name" maxlength="40"><input id="nuPass" type="password" placeholder="Passwort (optional)" autocomplete="new-password"></div>
+      <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="nuAdmin" style="width:auto"> darf Einstellungen ändern (Admin)</label>
+      <div class="error" id="uerr"></div>
+      <div class="actions"><span class="hint">Ohne Passwort genügt im Heimnetz ein Klick aufs Profil.</span><button class="primary" id="addUser">Hinzufügen</button></div>
+    </section>
+
+    <section class="card">
+      <h3>Fernseher koppeln</h3>
+      <p class="lead">Öffne Flimmer auf dem Fernseher und wähle „Mit Code anmelden“. Gib hier den angezeigten Code ein.</p>
+      <div class="inline"><input id="code" inputmode="numeric" maxlength="6" placeholder="6-stelliger Code"><button class="primary" id="pair">Koppeln</button></div>
+      <div class="error" id="perr"></div>
+    </section>
+
+    <section class="card" id="reviewCard" hidden>
+      <h3>Bitte prüfen</h3>
+      <p class="lead">Bei diesen Titeln war die Erkennung unsicher. Ein Klick auf „Ändern“ zeigt passende Treffer.</p>
+      <div id="review"></div>
+    </section>
+  </div>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+var $ = function (id) { return document.getElementById(id) };
+function api(method, url, body) {
+  return fetch(url, { method: method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined })
+    .then(function (r) {
+      if (r.status === 401 || r.status === 403) { showLogin(); throw new Error('login') }
+      return r.ok ? (r.status === 204 ? null : r.json()) : r.text().then(function (t) { throw new Error(t.trim() || r.statusText) });
+    });
+}
+function toast(msg) { var t = $('toast'); t.textContent = msg; t.className = 'toast on'; setTimeout(function () { t.className = 'toast' }, 2200) }
+function err(id) { return function (e) { if (e.message !== 'login') $(id).textContent = e.message } }
+function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML }
+
+// --- Anmeldung ---
+function showLogin() {
+  $('app').hidden = true; $('login').hidden = false;
+  fetch('/api/users').then(function (r) { return r.json() }).then(function (us) {
+    $('luser').innerHTML = us.filter(function (u) { return u.admin }).map(function (u) { return '<option value="' + u.id + '">' + esc(u.name) + '</option>' }).join('');
+    $('lpass').focus();
+  });
+}
+$('lgo').onclick = function () {
+  fetch('/api/login', { method: 'POST', body: JSON.stringify({ user: $('luser').value, password: $('lpass').value, device: 'Einstellungen' }) })
+    .then(function (r) { if (!r.ok) return r.text().then(function (t) { throw new Error(t) }); load() })
+    .catch(function (e) { $('lerr').textContent = e.message });
+};
+$('lpass').onkeydown = function (e) { if (e.key === 'Enter') $('lgo').click() };
+
+// --- Laden ---
+var dirs = [];
+function load() {
+  api('GET', '/api/settings').then(function (s) {
+    $('login').hidden = true; $('app').hidden = false;
+    $('serverName').value = s.serverName; $('language').value = s.language;
+    $('tmdb').placeholder = s.tmdbKey ? 'eigener Schlüssel ist gesetzt – leer lassen zum Beibehalten' : 'leer lassen – Flimmer bringt einen mit';
+    dirs = s.dirs.slice(); renderDirs(); browse('');
+    $('ffhint').textContent = s.ffmpeg.download.error ? 'Download fehlgeschlagen: ' + s.ffmpeg.download.error : s.ffmpeg.hint;
+    $('ffget').hidden = !s.ffmpeg.canDownload;
+    if (s.lanUrl) { $('lanRow').hidden = false; $('lan').textContent = s.lanUrl; $('qr').src = '/api/qr' }
+    loadUsers(); loadReview(); status();
+  }).catch(function () {});
+}
+
+// --- Status ---
+var stTimer;
+function status() {
+  clearTimeout(stTimer);
+  fetch('/api/status').then(function (r) { return r.json() }).then(function (st) {
+    var ok = st.ffmpeg;
+    $('sdot').className = 'dot ' + (ok ? 'ok' : 'bad');
+    $('stext').textContent = !ok ? 'ffmpeg fehlt – Wiedergabe nicht möglich' : st.scanning ? 'Suche läuft … ' + st.found + ' Titel bisher' : st.found + ' Titel in der Bibliothek';
+    $('ffbox').hidden = ok;
+    stTimer = setTimeout(status, st.scanning ? 1000 : 5000);
+  });
+}
+$('ffget').onclick = function () { api('POST', '/api/setup/ffmpeg').then(function () { toast('Download gestartet – dauert ein paar Minuten'); $('ffget').hidden = true }).catch(function (e) { toast(e.message) }) };
+
+// --- Allgemein ---
+$('saveGeneral').onclick = function () {
+  var body = { serverName: $('serverName').value, language: $('language').value };
+  if ($('tmdb').value.trim()) body.tmdbKey = $('tmdb').value.trim();
+  api('PUT', '/api/settings', body).then(function () { $('tmdb').value = ''; toast('Gespeichert') }).catch(function (e) { toast(e.message) });
+};
+
+// --- Ordner ---
+var cwd = '';
+function browse(path) {
+  api('GET', '/api/setup/dirs?path=' + encodeURIComponent(path)).then(function (r) {
+    cwd = r.path; $('cwd').textContent = r.path || 'Vorschläge';
+    $('up').hidden = !r.path; $('up').onclick = function () { browse(r.parent) };
+    $('pick').hidden = !r.path;
+    $('list').innerHTML = r.dirs.length ? '' : '<div class="empty">Keine Unterordner.</div>';
+    r.dirs.forEach(function (d) {
+      var b = document.createElement('button'); b.textContent = '📁  ' + d.name;
+      b.onclick = function () { browse(d.path) }; $('list').appendChild(b);
+    });
+  }).catch(function (e) { toast(e.message) });
+}
+$('go').onclick = function () { if ($('manual').value.trim()) browse($('manual').value.trim()) };
+$('manual').onkeydown = function (e) { if (e.key === 'Enter') $('go').click() };
+$('pick').onclick = function () { if (dirs.indexOf(cwd) < 0) dirs.push(cwd); renderDirs() };
+function renderDirs() {
+  $('chosen').innerHTML = '';
+  dirs.forEach(function (d, i) {
+    var li = document.createElement('li');
+    li.innerHTML = '<span>📁</span><code></code><button class="x" title="Entfernen">✕</button>';
+    li.querySelector('code').textContent = d;
+    li.querySelector('.x').onclick = function () { dirs.splice(i, 1); renderDirs() };
+    $('chosen').appendChild(li);
+  });
+}
+$('saveDirs').onclick = function () { api('PUT', '/api/settings', { dirs: dirs }).then(function () { toast('Gespeichert – Bibliothek wird neu eingelesen'); status() }).catch(function (e) { toast(e.message) }) };
+$('rescan').onclick = function () { api('POST', '/api/rescan').then(function () { toast('Suche gestartet'); setTimeout(status, 300) }) };
+
+// --- Personen ---
+function loadUsers() {
+  Promise.all([api('GET', '/api/users'), api('GET', '/api/me')]).then(function (a) {
+    var me = a[1];
+    $('users').innerHTML = '';
+    a[0].forEach(function (u) {
+      var row = document.createElement('div'); row.className = 'row';
+      row.innerHTML = '<div class="avatar" style="background:hsl(' + u.color + ',55%,40%)">' + esc(u.name.charAt(0).toUpperCase()) + '</div>' +
+        '<div class="grow"><strong>' + esc(u.name) + '</strong><small>' + (u.admin ? 'Admin' : 'Zuschauer') + (u.hasPassword ? ' · mit Passwort' : ' · ohne Passwort') + (u.id === me.id ? ' · du' : '') + '</small></div>' +
+        '<button class="small" data-pw>Passwort</button>' + (u.id === me.id ? '' : '<button class="small" data-del>Löschen</button>');
+      row.querySelector('[data-pw]').onclick = function () {
+        var pw = prompt('Neues Passwort für ' + u.name + (u.admin ? '' : ' (leer = ohne Passwort)') + ':');
+        if (pw === null) return;
+        api('PUT', '/api/users/' + u.id, { password: pw }).then(function () { toast('Passwort geändert'); loadUsers() }).catch(function (e) { toast(e.message) });
+      };
+      var del = row.querySelector('[data-del]');
+      if (del) del.onclick = function () {
+        if (!confirm(u.name + ' wirklich löschen? Fortschritt und Einstellungen dieser Person gehen verloren.')) return;
+        api('DELETE', '/api/users/' + u.id).then(function () { toast('Gelöscht'); loadUsers() }).catch(function (e) { toast(e.message) });
+      };
+      $('users').appendChild(row);
+    });
+  }).catch(function () {});
+}
+$('addUser').onclick = function () {
+  $('uerr').textContent = '';
+  api('POST', '/api/users', { name: $('nuName').value, password: $('nuPass').value, admin: $('nuAdmin').checked, color: Math.floor(Math.random() * 360) })
+    .then(function () { $('nuName').value = $('nuPass').value = ''; $('nuAdmin').checked = false; toast('Hinzugefügt'); loadUsers() })
+    .catch(err('uerr'));
+};
+
+// --- Koppeln ---
+$('pair').onclick = function () {
+  $('perr').textContent = '';
+  api('POST', '/api/pair/' + encodeURIComponent($('code').value.trim()) + '/confirm')
+    .then(function (r) { $('code').value = ''; toast((r.device || 'Gerät') + ' ist gekoppelt') }).catch(err('perr'));
+};
+$('code').onkeydown = function (e) { if (e.key === 'Enter') $('pair').click() };
+
+// --- Bitte prüfen ---
+function loadReview() {
+  api('GET', '/api/settings/review').then(function (list) {
+    $('reviewCard').hidden = !list.length;
+    $('review').innerHTML = '';
+    list.forEach(function (e) {
+      var row = document.createElement('div'); row.className = 'row';
+      row.innerHTML = '<div class="grow"><strong></strong><small></small></div><button class="small">Ändern</button>';
+      row.querySelector('strong').textContent = (e.meta && e.meta.title) || e.guess;
+      row.querySelector('small').textContent = e.file;
+      row.querySelector('button').onclick = function () { search(e, row) };
+      $('review').appendChild(row);
+    });
+  }).catch(function () {});
+}
+function search(e, row) {
+  var q = prompt('Wonach suchen?', e.guess);
+  if (!q) return;
+  api('GET', '/api/items/' + e.id + '/search?q=' + encodeURIComponent(q)).then(function (cands) {
+    var box = document.createElement('div');
+    if (!cands.length) box.innerHTML = '<p class="hint">Nichts gefunden.</p>';
+    cands.slice(0, 6).forEach(function (c) {
+      var r = document.createElement('div'); r.className = 'row';
+      r.innerHTML = '<div class="poster"></div><div class="grow"><strong></strong><small></small></div><button class="small">Übernehmen</button>';
+      if (c.poster) r.querySelector('.poster').style.backgroundImage = 'url(' + c.poster + ')';
+      r.querySelector('strong').textContent = c.title + (c.year ? ' (' + c.year + ')' : '');
+      r.querySelector('small').textContent = (c.overview || '').slice(0, 120);
+      r.querySelector('button').onclick = function () {
+        api('POST', '/api/items/' + e.id + '/identify', { tmdbId: c.tmdbId }).then(function () { toast('Übernommen'); loadReview() }).catch(function (x) { toast(x.message) });
+      };
+      box.appendChild(r);
+    });
+    row.after(box);
+  }).catch(function (x) { toast(x.message) });
+}
+
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flimmer einrichten</title>
+<link rel="stylesheet" href="/pages.css">
+</head>
+<body>
+<main>
+  <h1 class="brand">Flimmer</h1>
+  <div class="steps" id="steps"><span></span><span></span><span></span><span></span></div>
+
+  <!-- 1: Willkommen -->
+  <section class="card" data-step="0">
+    <h2>Willkommen!</h2>
+    <p class="lead">In zwei Minuten ist dein Medienserver bereit. Zuerst ein Name, unter dem ihn deine Geräte finden.</p>
+    <label for="serverName">Name des Servers</label>
+    <input id="serverName" maxlength="40" placeholder="z. B. Wohnzimmer">
+    <label for="language">Sprache für Titel und Beschreibungen</label>
+    <select id="language">
+      <option value="de">Deutsch</option><option value="en">English</option><option value="fr">Français</option>
+      <option value="es">Español</option><option value="it">Italiano</option><option value="nl">Nederlands</option>
+      <option value="pl">Polski</option><option value="tr">Türkçe</option>
+    </select>
+    <div class="actions"><span></span><button class="primary" data-next>Weiter</button></div>
+  </section>
+
+  <!-- 2: Admin -->
+  <section class="card" data-step="1" hidden>
+    <h2>Dein Konto</h2>
+    <p class="lead">Damit verwaltest du Flimmer. Weitere Personen legst du später in den Einstellungen an – auf Wunsch auch ohne Passwort.</p>
+    <label for="name">Dein Name</label>
+    <input id="name" maxlength="40" autocomplete="username" placeholder="z. B. Anna">
+    <label for="password">Passwort</label>
+    <input id="password" type="password" autocomplete="new-password" placeholder="mindestens 4 Zeichen">
+    <label for="password2">Passwort wiederholen</label>
+    <input id="password2" type="password" autocomplete="new-password">
+    <div class="error" id="err1"></div>
+    <div class="actions"><button class="ghost" data-back>Zurück</button><button class="primary" data-next>Weiter</button></div>
+  </section>
+
+  <!-- 3: Ordner -->
+  <section class="card" data-step="2" hidden>
+    <h2>Wo liegen deine Filme und Serien?</h2>
+    <p class="lead">Wähle einen oder mehrere Ordner. Flimmer erkennt Filme und Serien am Dateinamen und findet neue Dateien von selbst.</p>
+    <div class="browser">
+      <div class="crumb"><button class="small" id="up" hidden>↑</button><code id="cwd">Vorschläge</code><button class="small" id="pick" hidden>Diesen Ordner wählen</button></div>
+      <div class="list" id="list"></div>
+      <div class="manual"><input id="manual" placeholder="Pfad eingeben, z. B. /srv/filme oder \\nas\filme"><button class="small" id="go">Öffnen</button></div>
+    </div>
+    <ul class="chosen" id="chosen"></ul>
+    <div class="error" id="err2"></div>
+    <div class="actions"><button class="ghost" data-back>Zurück</button><button class="primary" data-next>Weiter</button></div>
+  </section>
+
+  <!-- 4: ffmpeg + Abschluss -->
+  <section class="card" data-step="3" hidden>
+    <h2>Fast geschafft</h2>
+    <p class="lead">Für die Wiedergabe braucht Flimmer das Programm ffmpeg.</p>
+    <div class="status"><span class="dot" id="ffdot"></span><span id="fftext">Prüfe …</span></div>
+    <div id="ffmissing" hidden>
+      <div class="bar" id="ffbar" hidden><i></i></div>
+      <p class="hint" id="ffhint"></p>
+      <button class="small" id="ffget" hidden>Automatisch installieren</button>
+    </div>
+    <div class="error" id="err3"></div>
+    <div class="actions"><button class="ghost" data-back>Zurück</button><button class="primary" id="finish">Fertig – los geht's</button></div>
+  </section>
+
+  <section class="card done" data-step="4" hidden>
+    <div class="check">✓</div>
+    <h2>Flimmer ist eingerichtet</h2>
+    <p class="lead" id="donetext">Deine Bibliothek wird jetzt eingelesen …</p>
+  </section>
+</main>
+<script>
+var $ = function (id) { return document.getElementById(id) };
+var step = 0, dirs = [], counts = {};
+
+function api(method, url, body) {
+  return fetch(url, { method: method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined })
+    .then(function (r) { return r.ok ? (r.status === 204 ? null : r.json()) : r.text().then(function (t) { throw new Error(t.trim() || r.statusText) }) });
+}
+
+function show(n) {
+  step = n;
+  document.querySelectorAll('[data-step]').forEach(function (s) { s.hidden = +s.dataset.step !== n });
+  document.querySelectorAll('#steps span').forEach(function (s, i) { s.className = i <= n ? 'on' : '' });
+  var first = document.querySelector('[data-step="' + n + '"] input');
+  if (first) first.focus();
+  if (n === 3) pollFFmpeg();
+}
+
+function validate(n) {
+  if (n === 1) {
+    if (!$('name').value.trim()) return fail('err1', 'Bitte gib deinen Namen ein.');
+    if ($('password').value.length < 4) return fail('err1', 'Das Passwort braucht mindestens 4 Zeichen.');
+    if ($('password').value !== $('password2').value) return fail('err1', 'Die Passwörter stimmen nicht überein.');
+  }
+  if (n === 2 && !dirs.length) return fail('err2', 'Bitte wähle mindestens einen Ordner.');
+  return true;
+}
+function fail(id, msg) { $(id).textContent = msg; return false }
+
+document.querySelectorAll('[data-next]').forEach(function (b) {
+  b.onclick = function () { if (validate(step)) { $('err1').textContent = $('err2').textContent = ''; show(step + 1) } };
+});
+document.querySelectorAll('[data-back]').forEach(function (b) { b.onclick = function () { show(step - 1) } });
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Enter' && e.target.tagName === 'INPUT') { var n = document.querySelector('[data-step="' + step + '"] [data-next]'); if (n) n.click() }
+});
+
+// --- Ordner-Browser ---
+var cwd = '';
+function browse(path) {
+  api('GET', '/api/setup/dirs?path=' + encodeURIComponent(path)).then(function (r) {
+    cwd = r.path;
+    $('cwd').textContent = r.path || 'Vorschläge';
+    $('up').hidden = !r.path;
+    $('up').onclick = function () { browse(r.parent) };
+    $('pick').hidden = !r.path;
+    var list = $('list');
+    list.innerHTML = '';
+    if (!r.dirs.length) list.innerHTML = '<div class="empty">' + (r.path ? 'Keine Unterordner.' : 'Keine Vorschläge – bitte den Pfad unten eingeben.') + '</div>';
+    r.dirs.forEach(function (d) {
+      var b = document.createElement('button');
+      b.textContent = '📁  ' + d.name;
+      b.onclick = function () { browse(d.path) };
+      list.appendChild(b);
+    });
+  }).catch(function (e) { fail('err2', e.message) });
+}
+$('go').onclick = function () { if ($('manual').value.trim()) browse($('manual').value.trim()) };
+$('manual').onkeydown = function (e) { if (e.key === 'Enter') { e.stopPropagation(); $('go').click() } };
+$('pick').onclick = function () {
+  if (dirs.indexOf(cwd) < 0) { dirs.push(cwd); count(cwd) }
+  renderChosen();
+};
+function count(path) {
+  api('GET', '/api/setup/count?path=' + encodeURIComponent(path)).then(function (r) {
+    counts[path] = r.videos === 0 ? 'keine Videos gefunden' : (r.complete ? '' : 'über ') + r.videos + ' Videos';
+    renderChosen();
+  });
+}
+function renderChosen() {
+  var ul = $('chosen');
+  ul.innerHTML = '';
+  dirs.forEach(function (d, i) {
+    var li = document.createElement('li');
+    li.innerHTML = '<span>📁</span><code></code><small></small><button class="x" title="Entfernen">✕</button>';
+    li.querySelector('code').textContent = d;
+    li.querySelector('small').textContent = counts[d] || 'zähle …';
+    li.querySelector('.x').onclick = function () { dirs.splice(i, 1); renderChosen() };
+    ul.appendChild(li);
+  });
+}
+
+// --- ffmpeg ---
+var ffTimer;
+function pollFFmpeg() {
+  clearTimeout(ffTimer);
+  api('GET', '/api/setup').then(function (r) {
+    if (r.done) return;
+    var f = r.ffmpeg, d = f.download;
+    $('ffdot').className = 'dot ' + (f.ok ? 'ok' : 'bad');
+    $('fftext').textContent = f.ok ? 'ffmpeg ist installiert.' : d.running ? 'ffmpeg wird heruntergeladen … ' + d.percent + ' %' : 'ffmpeg fehlt noch.';
+    $('ffmissing').hidden = f.ok;
+    $('ffhint').textContent = d.error ? 'Das hat nicht geklappt: ' + d.error : f.hint;
+    $('ffget').hidden = !f.canDownload || d.running;
+    $('ffbar').hidden = !d.running;
+    $('ffbar').firstChild.style.width = d.percent + '%';
+    if (!f.ok) ffTimer = setTimeout(pollFFmpeg, d.running ? 500 : 3000);
+  });
+}
+$('ffget').onclick = function () { api('POST', '/api/setup/ffmpeg').then(pollFFmpeg).catch(function (e) { fail('err3', e.message) }) };
+
+$('finish').onclick = function () {
+  var b = this;
+  b.disabled = true;
+  api('POST', '/api/setup', {
+    serverName: $('serverName').value, language: $('language').value,
+    name: $('name').value, password: $('password').value, dirs: dirs
+  }).then(function () {
+    clearTimeout(ffTimer);
+    show(4);
+    setTimeout(function () { location.href = '/' }, 1800);
+  }).catch(function (e) { b.disabled = false; fail('err3', e.message) });
+};
+
+api('GET', '/api/setup').then(function (r) {
+  if (r.done) { location.href = '/'; return }
+  $('serverName').value = r.serverName || '';
+  $('language').value = r.language || 'de';
+  dirs = r.dirs.slice();
+  dirs.forEach(count);
+  renderChosen();
+  browse('');
+  show(0);
+});
+</script>
+</body>
+</html>

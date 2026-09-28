@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/flimmer-media/flimmer/internal/meta"
 	"github.com/flimmer-media/flimmer/internal/probe"
 )
 
@@ -31,10 +32,13 @@ type Item struct {
 	Season  int          `json:"season,omitempty"`
 	Episode int          `json:"episode,omitempty"`
 	Size    int64        `json:"size"`
+	Added   time.Time    `json:"added"`
 	Media   *probe.Media `json:"-"`
 }
 
 var videoExt = []string{".mkv", ".mp4", ".m4v", ".mov", ".avi", ".ts", ".m2ts", ".webm", ".wmv", ".mpg"}
+
+func IsVideo(path string) bool { return slices.Contains(videoExt, strings.ToLower(filepath.Ext(path))) }
 
 var (
 	reEpisode = regexp.MustCompile(`(?i)[. _-]*s(\d{1,2})[. _-]*e(\d{1,3})`)
@@ -90,9 +94,15 @@ func ID(path string) string {
 type Library struct {
 	Dirs     []string
 	CacheDir string
+	Meta     *meta.Resolver // nil = keine Metadaten
+	// Colorize ermittelt die Platzhalterfarbe ("#rrggbb") direkt nach den Metadaten, nicht erst beim Abruf.
+	Colorize func(ctx context.Context, it *Item, m *meta.Meta) string
 
 	mu       sync.RWMutex
 	items    map[string]*Item
+	metas    map[string]*meta.Meta
+	metaErr  map[string]bool // Netzfehler bei TMDB → nächster Lauf versucht es erneut
+	colors   map[string]string
 	kf       map[string][]float64 // nur Titel, die gerade abgespielt werden
 	inflight map[string]chan struct{}
 
@@ -116,6 +126,7 @@ func (l *Library) Run(ctx context.Context, every time.Duration) {
 		} else {
 			log.Printf("scan: %d Titel", len(l.All()))
 		}
+		l.resolveMeta(ctx)
 		l.Prefetch(ctx)
 		select {
 		case <-ctx.Done():
@@ -215,7 +226,7 @@ func (l *Library) Scan(ctx context.Context) error {
 				log.Printf("scan: %v", err)
 				return nil
 			}
-			if d.IsDir() || !slices.Contains(videoExt, strings.ToLower(filepath.Ext(path))) {
+			if d.IsDir() || !IsVideo(path) {
 				return nil
 			}
 			info, err := d.Info()
@@ -234,7 +245,7 @@ func (l *Library) Scan(ctx context.Context) error {
 			}
 			newCache[path] = c
 			it := Parse(path)
-			it.ID, it.Path, it.Size, it.Media = ID(path), path, info.Size(), c.Media
+			it.ID, it.Path, it.Size, it.Added, it.Media = ID(path), path, info.Size(), info.ModTime(), c.Media
 			items[it.ID] = &it
 			l.mu.Lock()
 			l.items[it.ID] = &it
@@ -330,6 +341,75 @@ func (l *Library) keyframeFile(ctx context.Context, it *Item) ([]float64, error)
 	b, _ := json.Marshal(kfEntry{Size: info.Size(), MTime: info.ModTime(), Keyframes: kf})
 	os.MkdirAll(filepath.Dir(path), 0o755)
 	return kf, writeAtomic(path, b)
+}
+
+// MetaFor liefert Metadaten eines Titels, nil solange noch nicht aufgelöst.
+func (l *Library) MetaFor(id string) *meta.Meta {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return l.metas[id]
+}
+
+func (l *Library) ColorFor(id string) string {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return l.colors[id]
+}
+
+func (l *Library) SetColor(id, c string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.colors == nil {
+		l.colors = map[string]string{}
+	}
+	l.colors[id] = c
+}
+
+// SetMeta ersetzt die Metadaten (nach „Falsch erkannt?“).
+func (l *Library) SetMeta(id string, m *meta.Meta) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.metas == nil {
+		l.metas = map[string]*meta.Meta{}
+	}
+	l.metas[id] = m
+}
+
+// Query beschreibt einen Titel für internal/meta.
+func (it *Item) Query() meta.Query {
+	return meta.Query{ID: it.ID, Path: it.Path, Title: it.Title, Series: it.Series, Year: it.Year, Season: it.Season, Episode: it.Episode}
+}
+
+// resolveMeta holt nacheinander Metadaten für alle Titel ohne; Resolve cacht selbst, TMDB wird je Titel nur einmal gefragt.
+func (l *Library) resolveMeta(ctx context.Context) {
+	if l.Meta == nil {
+		return
+	}
+	for _, it := range l.All() {
+		if ctx.Err() != nil || len(l.wake) > 0 {
+			return
+		}
+		l.mu.RLock()
+		done := l.metas[it.ID] != nil && !l.metaErr[it.ID]
+		l.mu.RUnlock()
+		if done {
+			continue
+		}
+		m, err := l.Meta.Resolve(ctx, it.Query())
+		if err != nil && ctx.Err() == nil {
+			log.Printf("meta %s: %v", filepath.Base(it.Path), err)
+		}
+		l.SetMeta(it.ID, m)
+		l.mu.Lock()
+		if l.metaErr == nil {
+			l.metaErr = map[string]bool{}
+		}
+		l.metaErr[it.ID] = err != nil
+		l.mu.Unlock()
+		if l.Colorize != nil {
+			l.SetColor(it.ID, l.Colorize(ctx, it, m))
+		}
+	}
 }
 
 // Prefetch misst im Hintergrund die Keyframes aller Titel, damit der erste Start per HLS nicht warten muss.

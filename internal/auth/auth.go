@@ -17,8 +17,9 @@ import (
 	"time"
 )
 
-// ponytail: PBKDF2 aus der Stdlib statt argon2id (x/crypto); Iterationen nach OWASP 2023.
-const iterations = 600_000
+// Iterations nach OWASP 2023. Eine Variable nur, damit Tests schnell laufen; gespeicherte Hashes tragen ihren Wert selbst.
+// ponytail: PBKDF2 aus der Stdlib statt argon2id (x/crypto).
+var Iterations = 600_000
 
 var b64 = base64.RawURLEncoding
 
@@ -26,8 +27,8 @@ var b64 = base64.RawURLEncoding
 func HashPassword(pw string) string {
 	salt := make([]byte, 16)
 	rand.Read(salt)
-	key, _ := pbkdf2.Key(sha256.New, pw, salt, iterations, 32)
-	return fmt.Sprintf("pbkdf2-sha256$%d$%s$%s", iterations, b64.EncodeToString(salt), b64.EncodeToString(key))
+	key, _ := pbkdf2.Key(sha256.New, pw, salt, Iterations, 32)
+	return fmt.Sprintf("pbkdf2-sha256$%d$%s$%s", Iterations, b64.EncodeToString(salt), b64.EncodeToString(key))
 }
 
 func CheckPassword(hash, pw string) bool {

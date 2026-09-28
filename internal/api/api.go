@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"io/fs"
 	"log"
@@ -11,20 +12,35 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync/atomic"
+	"time"
 
+	"github.com/flimmer-media/flimmer/internal/auth"
+	"github.com/flimmer-media/flimmer/internal/ffmpeg"
 	"github.com/flimmer-media/flimmer/internal/hwaccel"
-	"github.com/flimmer-media/flimmer/internal/playback"
+	"github.com/flimmer-media/flimmer/internal/images"
+	"github.com/flimmer-media/flimmer/internal/meta"
 	"github.com/flimmer-media/flimmer/internal/scan"
+	"github.com/flimmer-media/flimmer/internal/state"
 	"github.com/flimmer-media/flimmer/internal/transcode"
 )
 
 type Server struct {
 	Lib      *scan.Library
 	HLS      *transcode.Manager
+	State    *state.Store
+	Meta     *meta.Resolver    // nil = keine Metadaten
+	Images   *images.Store     // nil = keine Bilder
+	FF       *ffmpeg.Installer // nil = kein Download möglich
 	CacheDir string
 	Web      fs.FS
-	FFmpeg   bool                          // ffmpeg/ffprobe gefunden
+	Pages    fs.FS                         // setup.html, settings.html
+	LANURL   string                        // z. B. http://192.168.1.20:8096, für QR-Code und Anzeige
+	QR       http.Handler                  // PNG mit LANURL
+	FFmpeg   atomic.Bool                   // ffmpeg/ffprobe gefunden
 	HW       atomic.Pointer[hwaccel.Accel] // gesetzt, sobald hwaccel.Detect fertig ist
+
+	pairing auth.Pairing
+	limiter auth.Limiter
 }
 
 func (s *Server) hw() hwaccel.Accel {
@@ -35,26 +51,108 @@ func (s *Server) hw() hwaccel.Accel {
 }
 
 func (s *Server) Handler() http.Handler {
+	s.limiter = auth.Limiter{Max: 5, Window: time.Minute}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/status", s.status)
+
+	// Anmeldung und Benutzer
+	mux.HandleFunc("GET /api/users", s.users)
+	mux.HandleFunc("POST /api/login", s.login)
+	mux.HandleFunc("POST /api/logout", s.logout)
+	mux.HandleFunc("GET /api/me", s.me)
+	mux.HandleFunc("POST /api/users", adminOnly(s.createUser))
+	mux.HandleFunc("PUT /api/users/{id}", adminOnly(s.updateUser))
+	mux.HandleFunc("DELETE /api/users/{id}", adminOnly(s.deleteUser))
+	mux.HandleFunc("POST /api/pair", s.pairStart)
+	mux.HandleFunc("GET /api/pair/{code}", s.pairPoll)
+	mux.HandleFunc("POST /api/pair/{code}/confirm", s.pairConfirm)
+
+	// Einrichtung und Einstellungen
+	mux.HandleFunc("GET /api/setup", s.setupInfo)
+	mux.HandleFunc("POST /api/setup", s.setup)
+	mux.HandleFunc("GET /api/setup/dirs", s.dirs)
+	mux.HandleFunc("GET /api/setup/count", s.count)
+	mux.HandleFunc("POST /api/setup/ffmpeg", s.ffmpegDownload)
+	mux.HandleFunc("GET /api/settings", adminOnly(s.settings))
+	mux.HandleFunc("PUT /api/settings", adminOnly(s.saveSettings))
+	mux.HandleFunc("GET /api/settings/review", adminOnly(s.review))
+	mux.HandleFunc("POST /api/rescan", adminOnly(s.rescan))
+
+	// Bibliothek und Wiedergabe
 	mux.HandleFunc("POST /api/library", s.library)
+	mux.HandleFunc("POST /api/home", s.home)
 	mux.HandleFunc("POST /api/items/{id}/play", s.play)
+	mux.HandleFunc("POST /api/items/{id}/progress", s.progress)
+	mux.HandleFunc("POST /api/items/{id}/watched", s.watched)
 	mux.HandleFunc("GET /api/items/{id}/file", s.file)
 	mux.HandleFunc("GET /api/items/{id}/hls/{audio}/{acodec}/{vcodec}/index.m3u8", s.playlist)
 	mux.HandleFunc("GET /api/items/{id}/hls/{audio}/{acodec}/{vcodec}/{seg}", s.segment)
 	mux.HandleFunc("GET /api/items/{id}/subs/{index}", s.subtitle)
-	mux.HandleFunc("POST /api/rescan", s.rescan)
-	mux.Handle("GET /", spa(s.Web))
-	return cors(mux)
+	mux.HandleFunc("GET /api/devices/{device}/profile", s.deviceProfile)
+	mux.HandleFunc("PUT /api/devices/{device}/profile", s.deviceProfile)
+	if s.Meta != nil {
+		mux.Handle("GET /api/items/{id}/search", adminOnly(s.Meta.SearchHandler(s.metaLookup)))
+		mux.Handle("POST /api/items/{id}/identify", adminOnly(s.Meta.IdentifyHandler(s.metaLookup, s.identified)))
+	}
+	if s.Images != nil {
+		mux.Handle("GET /api/images/{id}/{kind}", s.Images.Handler(s.imageLookup))
+	}
+
+	// Seiten
+	mux.Handle("GET /setup", s.page("setup.html"))
+	mux.Handle("GET /settings", s.page("settings.html"))
+	mux.Handle("GET /pages.css", s.page("pages.css"))
+	if s.QR != nil {
+		mux.Handle("GET /api/qr", s.QR)
+	}
+	mux.Handle("GET /", s.root(spa(s.Web)))
+	return cors(s.authenticate(mux))
 }
 
-// ponytail: CORS offen, solange es keine Anmeldung gibt; mit Einladungs-Tokens auf bekannte Origins einschränken.
+// root schickt auf die Einrichtung, solange es keinen Admin gibt.
+func (s *Server) root(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" && !s.setupDone() {
+			http.Redirect(w, r, "/setup", http.StatusFound)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) page(name string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if name == "setup.html" && s.setupDone() {
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+		w.Header().Set("Cache-Control", "no-cache")
+		http.ServeFileFS(w, r, s.Pages, name)
+	})
+}
+
+// identified übernimmt eine Korrektur aus „Falsch erkannt?“ samt neuer Platzhalterfarbe.
+func (s *Server) identified(id string, m *meta.Meta) {
+	s.Lib.SetMeta(id, m)
+	it := s.Lib.Get(id)
+	if it == nil || s.Images == nil || s.Meta == nil {
+		return
+	}
+	if src, ok := ImageSource(it, m, s.Meta.ImgDir(), "poster"); ok {
+		if c, err := s.Images.Color(context.Background(), src); err == nil {
+			s.Lib.SetColor(id, c)
+		}
+	}
+}
+
+// CORS offen ist hier unbedenklich: Cookies sind SameSite=Lax und werden nie mit
+// Access-Control-Allow-Credentials freigegeben; TV-Apps (file://-Origin) schicken ihr Bearer-Token selbst.
 func cors(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Range")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Range, Authorization")
 		if r.Method == http.MethodOptions {
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
 			return
 		}
 		h.ServeHTTP(w, r)
@@ -77,58 +175,7 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, struct {
 		scan.Status
 		FFmpeg bool `json:"ffmpeg"`
-	}{s.Lib.Status(), s.FFmpeg})
-}
-
-type libraryItem struct {
-	*scan.Item
-	Duration float64         `json:"duration"`
-	Light    playback.Light  `json:"light"`
-	Method   playback.Method `json:"method"`
-}
-
-// library gibt alle Titel mit Ampel für genau das anfragende Gerät zurück.
-func (s *Server) library(w http.ResponseWriter, r *http.Request) {
-	var p playback.Profile
-	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
-		http.Error(w, "Geräteprofil fehlt", http.StatusBadRequest)
-		return
-	}
-	var out []libraryItem
-	for _, it := range s.Lib.All() {
-		plan := playback.Decide(it.Media, p, s.hw().Speed)
-		out = append(out, libraryItem{Item: it, Duration: it.Media.Duration, Light: plan.Light, Method: plan.Method})
-	}
-	writeJSON(w, out)
-}
-
-type playResponse struct {
-	playback.Plan
-	URL      string  `json:"url"`
-	Duration float64 `json:"duration"`
-	Title    string  `json:"title"`
-}
-
-func (s *Server) play(w http.ResponseWriter, r *http.Request) {
-	it := s.item(w, r)
-	if it == nil {
-		return
-	}
-	var p playback.Profile
-	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
-		http.Error(w, "Geräteprofil fehlt", http.StatusBadRequest)
-		return
-	}
-	plan := playback.Decide(it.Media, p, s.hw().Speed)
-	resp := playResponse{Plan: plan, Duration: it.Media.Duration, Title: it.Title}
-	base := "/api/items/" + it.ID
-	if plan.Method == playback.DirectPlay {
-		resp.URL = base + "/file"
-	} else {
-		resp.URL = base + "/hls/" + strconv.Itoa(plan.AudioIndex) + "/" + plan.AudioCodec + "/" + plan.VideoCodec + "/index.m3u8"
-	}
-	log.Printf("play %q: %s (%v)", it.Title, plan.Method, plan.Reasons)
-	writeJSON(w, resp)
+	}{s.Lib.Status(), s.FFmpeg.Load()})
 }
 
 func (s *Server) file(w http.ResponseWriter, r *http.Request) {

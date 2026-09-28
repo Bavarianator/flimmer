@@ -25,13 +25,15 @@ type Data struct {
 	Sessions map[string]Session              `json:"sessions"` // Schlüssel: SHA-256 des Tokens, nie das Token selbst
 	Progress map[string]map[string]Progress  `json:"progress"` // Benutzer → Titel
 	Prefs    map[string]map[string]TrackPref `json:"prefs"`    // Benutzer → Serie → Sprachen
+	Devices  map[string]json.RawMessage      `json:"devices"`  // Geräte-ID → Probe-Ergebnis (Format gehört playback)
 }
 
 type Settings struct {
 	ServerName string   `json:"serverName"`
 	Language   string   `json:"language"`
 	Dirs       []string `json:"dirs"`
-	Secret     []byte   `json:"secret"` // HMAC-Schlüssel für Medien-Tokens
+	TMDBKey    string   `json:"tmdbKey,omitempty"` // leer = eingebauter Projekt-Key
+	Secret     []byte   `json:"secret"`            // HMAC-Schlüssel für Medien-Tokens
 }
 
 type User struct {
@@ -93,6 +95,9 @@ func Open(path string) (*Store, error) {
 	}
 	if s.d.Prefs == nil {
 		s.d.Prefs = map[string]map[string]TrackPref{}
+	}
+	if s.d.Devices == nil {
+		s.d.Devices = map[string]json.RawMessage{}
 	}
 	if len(s.d.Settings.Secret) == 0 {
 		s.d.Settings.Secret = make([]byte, 32)
