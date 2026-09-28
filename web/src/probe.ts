@@ -45,7 +45,7 @@ function playClip(url: string, kind: string, signal: { aborted: boolean }): Prom
       v.remove()
       resolve(r)
     }
-    const timer = setTimeout(() => finish(false), 5000)
+    const timer = setTimeout(() => finish(false), 2500) // 1-s-Clips: was bis dahin nicht läuft, läuft nicht
     v.onerror = () => finish(false)
     v.ontimeupdate = () => {
       if (signal.aborted) return finish(null)

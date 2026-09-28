@@ -80,10 +80,13 @@ export function Home() {
           <h1>Flimmer</h1>
           <span class="device">
             {profile.name}
-            {' · '}
-            <button class="link" onClick={probe} disabled={probing}>
-              {probing ? 'Gerät wird getestet …' : 'Gerät neu testen'}
-            </button>
+            {!probing && ' · '}
+            {/* Der Test läuft still im Hintergrund; der Knopf erscheint erst danach wieder. */}
+            {!probing && (
+              <button class="link" onClick={probe}>
+                Gerät neu testen
+              </button>
+            )}
             {!isTV && (
               <>
                 {' · '}
