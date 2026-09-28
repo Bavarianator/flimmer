@@ -1,0 +1,49 @@
+<!doctype html>
+<!-- Starter: merkt sich die Server-Adresse und lädt dann die Oberfläche direkt vom Server.
+     So bekommt der TV jedes Server-Update ohne neue App-Version. -->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Flimmer</title>
+<style>
+  body { margin: 0; background: #0b0d12; color: #eef1f7; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; }
+  form { width: 720px; text-align: center; }
+  h1 { font-size: 64px; margin: 0 0 24px; }
+  input { width: 100%; font-size: 36px; padding: 16px 20px; border-radius: 12px; border: 3px solid #7c9cff; background: #151923; color: #fff; }
+  button { margin-top: 24px; font-size: 32px; padding: 14px 48px; border-radius: 12px; border: 0; background: #7c9cff; color: #0b0d12; }
+  p { color: #8b93a7; font-size: 24px; }
+</style>
+</head>
+<body>
+<form id="f">
+  <h1>Flimmer</h1>
+  <p>Adresse deines Flimmer-Servers</p>
+  <input id="url" placeholder="http://192.168.178.20:8096" autofocus>
+  <button type="submit">Verbinden</button>
+  <p id="err"></p>
+</form>
+<script>
+  var KEY = 'flimmer.server';
+  var saved = localStorage.getItem(KEY);
+  function go(url) {
+    url = url.replace(/\/+$/, '');
+    if (!/^https?:\/\//.test(url)) url = 'http://' + url;
+    if (!/:\d+$/.test(url)) url += ':8096';
+    var x = new XMLHttpRequest();
+    x.open('POST', url + '/api/library');
+    x.timeout = 5000;
+    x.onload = function () {
+      if (x.status !== 200) return fail();
+      localStorage.setItem(KEY, url);
+      location.href = url + '/';
+    };
+    x.onerror = x.ontimeout = fail;
+    x.send('{}');
+  }
+  function fail() { document.getElementById('err').textContent = 'Server nicht erreichbar. Adresse prüfen.'; }
+  document.getElementById('url').value = saved || '';
+  document.getElementById('f').onsubmit = function (e) { e.preventDefault(); go(document.getElementById('url').value); };
+  if (saved) go(saved);
+</script>
+</body>
+</html>

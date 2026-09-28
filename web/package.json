@@ -1,0 +1,23 @@
+{
+  "name": "flimmer-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@noriginmedia/norigin-spatial-navigation": "^3.3.0",
+    "hls.js": "^1.7.3",
+    "libpgs": "^0.9.0",
+    "preact": "^10.29.8"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.6",
+    "@vitejs/plugin-legacy": "^8.2.3",
+    "terser": "^5.51.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1"
+  }
+}
