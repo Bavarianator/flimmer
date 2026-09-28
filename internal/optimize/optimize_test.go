@@ -86,7 +86,11 @@ func TestPendingAndLookup(t *testing.T) {
 		{ID: "red", Path: src, Media: media("hevc")},
 		{ID: "green", Path: src, Media: media("h264")},
 		{ID: "stale", Path: src, Media: media("hevc")},
+		{ID: "dv5", Path: src, Media: media("hevc")},
+		{ID: "dv8", Path: src, Media: media("hevc")},
 	}
+	items[3].Media.Streams[0].HDR = "dv"                                        // Profil 5: keine Basisschicht → überspringen
+	items[4].Media.Streams[0].HDR, items[4].Media.Streams[0].DVCompat = "dv", 1 // Profil 8.1: HDR10-Basis → tone-mappen
 	o := New(Options{Dir: dir, MinFree: 1, Items: func(context.Context) ([]Item, error) { return items, nil },
 		Profiles: func(context.Context) []playback.Profile { return []playback.Profile{tv} }})
 
@@ -104,7 +108,7 @@ func TestPendingAndLookup(t *testing.T) {
 	for _, it := range todo {
 		ids = append(ids, it.ID)
 	}
-	if !slices.Equal(ids, []string{"red", "stale"}) {
+	if !slices.Equal(ids, []string{"red", "stale", "dv8"}) {
 		t.Fatalf("pending = %v", ids)
 	}
 	for _, f := range []string{"gone.mp4", "red.mp4.part"} {
@@ -119,7 +123,7 @@ func TestPendingAndLookup(t *testing.T) {
 	if o.Lookup("red", src) == "" {
 		t.Error("frische Version nicht gefunden")
 	}
-	o.failed["stale"] = "x"
+	o.failed["stale"], o.failed["dv8"] = "x", "x"
 	if todo, _ := o.pending(context.Background()); len(todo) != 0 {
 		t.Errorf("gescheiterte/fertige Titel erneut: %v", todo)
 	}

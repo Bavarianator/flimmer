@@ -191,6 +191,9 @@ func (o *Optimizer) pending(ctx context.Context) ([]Item, error) {
 		if !slices.ContainsFunc(profiles, func(p playback.Profile) bool { return playback.Decide(it.Media, p, speed).Light == playback.Red }) {
 			continue
 		}
+		if v := it.Media.First("video"); v != nil && v.HDR == "dv" && v.DVCompat == 0 {
+			continue // Dolby Vision Profil 5 (IPTPQc2): zscale rechnet die Farben falsch um, bräuchte libplacebo
+		}
 		todo = append(todo, it)
 	}
 	entries, _ := os.ReadDir(o.opts.Dir)
