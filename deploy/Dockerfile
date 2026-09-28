@@ -21,8 +21,8 @@ COPY . .
 COPY --from=web /src/web/dist ./web/dist
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GOARM=${TARGETVARIANT#v} \
     go build -trimpath -o /flimmer -ldflags "-s -w \
-      -X github.com/flimmer-media/flimmer/internal/meta.DefaultTMDBKey=$TMDB_KEY \
-      -X github.com/flimmer-media/flimmer/internal/update.Version=$VERSION" ./cmd/server
+      -X github.com/Bavarianator/flimmer/internal/meta.DefaultTMDBKey=$TMDB_KEY \
+      -X github.com/Bavarianator/flimmer/internal/update.Version=$VERSION" ./cmd/server
 
 # Rendezvous-Dienst (optional, ohne Video-Traffic):
 #   docker buildx build -f deploy/Dockerfile --target relay -t flimmer-relay .

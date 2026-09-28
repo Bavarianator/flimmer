@@ -6,7 +6,7 @@
 
 [Unit]
 Description=Flimmer Rendezvous-Dienst (ohne Video-Traffic)
-Documentation=https://github.com/flimmer-media/flimmer/blob/main/docs/fernzugriff.md
+Documentation=https://github.com/Bavarianator/flimmer/blob/main/docs/fernzugriff.md
 After=network-online.target
 Wants=network-online.target
 

@@ -23,10 +23,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/flimmer-media/flimmer/internal/hwaccel"
-	"github.com/flimmer-media/flimmer/internal/playback"
-	"github.com/flimmer-media/flimmer/internal/probe"
-	"github.com/flimmer-media/flimmer/internal/transcode"
+	"github.com/Bavarianator/flimmer/internal/hwaccel"
+	"github.com/Bavarianator/flimmer/internal/playback"
+	"github.com/Bavarianator/flimmer/internal/probe"
+	"github.com/Bavarianator/flimmer/internal/transcode"
 )
 
 // Item ist ein Titel aus dem Katalog.

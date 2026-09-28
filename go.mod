@@ -1,4 +1,4 @@
-module github.com/flimmer-media/flimmer
+module github.com/Bavarianator/flimmer
 
 go 1.27.1
 

@@ -7,7 +7,7 @@
 
 [Unit]
 Description=Flimmer Medienserver
-Documentation=https://github.com/flimmer-media/flimmer
+Documentation=https://github.com/Bavarianator/flimmer
 After=network-online.target
 Wants=network-online.target
 

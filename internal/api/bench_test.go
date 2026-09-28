@@ -13,10 +13,10 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/flimmer-media/flimmer/internal/auth"
-	"github.com/flimmer-media/flimmer/internal/db"
-	"github.com/flimmer-media/flimmer/internal/scan"
-	"github.com/flimmer-media/flimmer/internal/transcode"
+	"github.com/Bavarianator/flimmer/internal/auth"
+	"github.com/Bavarianator/flimmer/internal/db"
+	"github.com/Bavarianator/flimmer/internal/scan"
+	"github.com/Bavarianator/flimmer/internal/transcode"
 )
 
 // bigLibrary legt n Titel (Hälfte Episoden) und users Benutzer mit je 300 Fortschritts-Einträgen an.

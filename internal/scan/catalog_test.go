@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/flimmer-media/flimmer/internal/db"
+	"github.com/Bavarianator/flimmer/internal/db"
 )
 
 // Katalog überlebt einen Neustart, Keyframes kommen aus der DB, ein fehlender Ordner löscht nichts.

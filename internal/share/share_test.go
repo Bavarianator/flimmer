@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/flimmer-media/flimmer/internal/db"
+	"github.com/Bavarianator/flimmer/internal/db"
 )
 
 func setup(t *testing.T) (*Share, *db.DB) {

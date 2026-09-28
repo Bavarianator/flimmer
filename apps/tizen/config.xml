@@ -5,7 +5,7 @@
     <feature name="http://tizen.org/feature/screen.size.normal.1080.1920"/>
     <icon src="icon.png"/>
     <name>Flimmer</name>
-    <author href="https://github.com/flimmer-media/flimmer">Flimmer</author>
+    <author href="https://github.com/Bavarianator/flimmer">Flimmer</author>
     <license href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0</license>
     <!-- Oberfläche kommt vom eigenen Server im Heimnetz -->
     <access origin="*" subdomains="true"/>

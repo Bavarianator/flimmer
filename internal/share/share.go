@@ -22,9 +22,9 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/flimmer-media/flimmer/internal/db"
-	"github.com/flimmer-media/flimmer/internal/discovery"
-	"github.com/flimmer-media/flimmer/internal/ratelimit"
+	"github.com/Bavarianator/flimmer/internal/db"
+	"github.com/Bavarianator/flimmer/internal/discovery"
+	"github.com/Bavarianator/flimmer/internal/ratelimit"
 )
 
 // Scope sagt, was ein Gast sehen darf.

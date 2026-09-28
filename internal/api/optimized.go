@@ -7,10 +7,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/flimmer-media/flimmer/internal/optimize"
-	"github.com/flimmer-media/flimmer/internal/playback"
-	"github.com/flimmer-media/flimmer/internal/probe"
-	"github.com/flimmer-media/flimmer/internal/scan"
+	"github.com/Bavarianator/flimmer/internal/optimize"
+	"github.com/Bavarianator/flimmer/internal/playback"
+	"github.com/Bavarianator/flimmer/internal/probe"
+	"github.com/Bavarianator/flimmer/internal/scan"
 )
 
 // Optimierte Versionen (internal/optimize) liegen neben dem Cache, nie im Medienordner. Die Wiedergabe nimmt sie,

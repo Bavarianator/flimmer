@@ -16,12 +16,12 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/flimmer-media/flimmer/internal/db"
-	"github.com/flimmer-media/flimmer/internal/optimize"
-	"github.com/flimmer-media/flimmer/internal/scan"
-	"github.com/flimmer-media/flimmer/internal/setup"
-	"github.com/flimmer-media/flimmer/internal/share"
-	"github.com/flimmer-media/flimmer/internal/transcode"
+	"github.com/Bavarianator/flimmer/internal/db"
+	"github.com/Bavarianator/flimmer/internal/optimize"
+	"github.com/Bavarianator/flimmer/internal/scan"
+	"github.com/Bavarianator/flimmer/internal/setup"
+	"github.com/Bavarianator/flimmer/internal/share"
+	"github.com/Bavarianator/flimmer/internal/transcode"
 )
 
 // Einrichtung → Anmeldung → Bibliothek → Medien-Token (ohne Cookie) → Fortschritt → Home → Drossel.

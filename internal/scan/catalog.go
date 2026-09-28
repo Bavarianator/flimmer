@@ -6,7 +6,7 @@ import (
 	"encoding/binary"
 	"math"
 
-	"github.com/flimmer-media/flimmer/internal/probe"
+	"github.com/Bavarianator/flimmer/internal/probe"
 )
 
 // ProbeVersion erhöhen, wenn probe neue Felder liefert: Dann wird jeder Titel beim nächsten Scan neu geprobt

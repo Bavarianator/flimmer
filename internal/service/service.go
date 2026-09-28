@@ -159,7 +159,7 @@ func systemdUnit(bin string, args []string) string {
 	}
 	return `[Unit]
 Description=Flimmer Medienserver
-Documentation=https://github.com/flimmer-media/flimmer
+Documentation=https://github.com/Bavarianator/flimmer
 After=network-online.target
 
 [Service]

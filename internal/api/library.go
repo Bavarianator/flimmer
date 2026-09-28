@@ -13,12 +13,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/flimmer-media/flimmer/internal/auth"
-	"github.com/flimmer-media/flimmer/internal/db"
-	"github.com/flimmer-media/flimmer/internal/images"
-	"github.com/flimmer-media/flimmer/internal/meta"
-	"github.com/flimmer-media/flimmer/internal/playback"
-	"github.com/flimmer-media/flimmer/internal/scan"
+	"github.com/Bavarianator/flimmer/internal/auth"
+	"github.com/Bavarianator/flimmer/internal/db"
+	"github.com/Bavarianator/flimmer/internal/images"
+	"github.com/Bavarianator/flimmer/internal/meta"
+	"github.com/Bavarianator/flimmer/internal/playback"
+	"github.com/Bavarianator/flimmer/internal/scan"
 )
 
 type libraryItem struct {

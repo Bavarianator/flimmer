@@ -35,7 +35,7 @@ cd "$work/src"
 if [ -d "$repo/web/node_modules" ]; then ln -s "$repo/web/node_modules" web/node_modules; else (cd web && npm ci --silent --no-audit --no-fund); fi
 (cd web && npm run build --silent)
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o "$work/flimmer" \
-  -ldflags "-s -w -X github.com/flimmer-media/flimmer/internal/update.Version=$version" ./cmd/server
+  -ldflags "-s -w -X github.com/Bavarianator/flimmer/internal/update.Version=$version" ./cmd/server
 
 # Statisches ffmpeg einmal lokal holen (mit Prüfsumme) und nur ffmpeg/ffprobe übertragen.
 if ! remote "test -x ~/$DIR/ffmpeg && test -x ~/$DIR/ffprobe"; then

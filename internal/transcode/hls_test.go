@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/flimmer-media/flimmer/internal/probe"
+	"github.com/Bavarianator/flimmer/internal/probe"
 )
 
 func TestSegmentsFollowKeyframes(t *testing.T) {

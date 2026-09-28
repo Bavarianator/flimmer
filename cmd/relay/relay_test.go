@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/flimmer-media/flimmer/internal/remote"
+	"github.com/Bavarianator/flimmer/internal/remote"
 )
 
 type fakeDNS map[string]string

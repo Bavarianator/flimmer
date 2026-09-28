@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/flimmer-media/flimmer/internal/lang"
-	"github.com/flimmer-media/flimmer/internal/probe"
-	"github.com/flimmer-media/flimmer/internal/subs"
+	"github.com/Bavarianator/flimmer/internal/lang"
+	"github.com/Bavarianator/flimmer/internal/probe"
+	"github.com/Bavarianator/flimmer/internal/subs"
 )
 
 // Profile beschreibt, was ein Gerät nachweislich abspielen kann.

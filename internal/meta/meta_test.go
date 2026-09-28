@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/flimmer-media/flimmer/internal/db"
+	"github.com/Bavarianator/flimmer/internal/db"
 )
 
 func TestParseNFO(t *testing.T) {

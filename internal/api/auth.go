@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/flimmer-media/flimmer/internal/auth"
-	"github.com/flimmer-media/flimmer/internal/db"
+	"github.com/Bavarianator/flimmer/internal/auth"
+	"github.com/Bavarianator/flimmer/internal/db"
 )
 
 const (

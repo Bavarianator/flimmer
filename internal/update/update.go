@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-// Version wird beim Release-Build gesetzt: -ldflags "-X github.com/flimmer-media/flimmer/internal/update.Version=v0.1.0"
+// Version wird beim Release-Build gesetzt: -ldflags "-X github.com/Bavarianator/flimmer/internal/update.Version=v0.1.0"
 var Version = "dev"
 
 // API ist in Tests austauschbar.

@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/flimmer-media/flimmer/internal/hwaccel"
-	"github.com/flimmer-media/flimmer/internal/playback"
-	"github.com/flimmer-media/flimmer/internal/probe"
+	"github.com/Bavarianator/flimmer/internal/hwaccel"
+	"github.com/Bavarianator/flimmer/internal/playback"
+	"github.com/Bavarianator/flimmer/internal/probe"
 )
 
 func TestWindow(t *testing.T) {

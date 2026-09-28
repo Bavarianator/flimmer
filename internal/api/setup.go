@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/flimmer-media/flimmer/internal/db"
-	"github.com/flimmer-media/flimmer/internal/ffmpeg"
-	"github.com/flimmer-media/flimmer/internal/scan"
-	"github.com/flimmer-media/flimmer/internal/update"
+	"github.com/Bavarianator/flimmer/internal/db"
+	"github.com/Bavarianator/flimmer/internal/ffmpeg"
+	"github.com/Bavarianator/flimmer/internal/scan"
+	"github.com/Bavarianator/flimmer/internal/update"
 )
 
 func (s *Server) setupDone() bool { return s.DB.SetupDone(context.Background()) }

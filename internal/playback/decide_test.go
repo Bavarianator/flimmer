@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/flimmer-media/flimmer/internal/probe"
+	"github.com/Bavarianator/flimmer/internal/probe"
 )
 
 var lgTV = Profile{

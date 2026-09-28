@@ -7,7 +7,7 @@ goos=$1 goarch=$2 goarm=${3:-}
 VERSION=${VERSION:-dev}
 cd "$(dirname "$0")/.."
 export CGO_ENABLED=0 GOOS=$goos GOARCH=$goarch GOARM=$goarm
-ldflags="-s -w -X github.com/flimmer-media/flimmer/internal/meta.DefaultTMDBKey=${TMDB_KEY:-} -X github.com/flimmer-media/flimmer/internal/update.Version=$VERSION"
+ldflags="-s -w -X github.com/Bavarianator/flimmer/internal/meta.DefaultTMDBKey=${TMDB_KEY:-} -X github.com/Bavarianator/flimmer/internal/update.Version=$VERSION"
 name=flimmer-$VERSION-$goos-$goarch${goarm:+v$goarm}
 ext=; [ "$goos" = windows ] && ext=.exe
 rm -rf "pkg/$name" && mkdir -p "pkg/$name" dist

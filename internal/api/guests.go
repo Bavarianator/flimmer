@@ -4,9 +4,9 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/flimmer-media/flimmer/internal/db"
-	"github.com/flimmer-media/flimmer/internal/scan"
-	"github.com/flimmer-media/flimmer/internal/share"
+	"github.com/Bavarianator/flimmer/internal/db"
+	"github.com/Bavarianator/flimmer/internal/scan"
+	"github.com/Bavarianator/flimmer/internal/share"
 )
 
 // Gäste (Einladungen, internal/share) sehen nur, was ihre Einladung erlaubt. Der Scope hängt am Request;

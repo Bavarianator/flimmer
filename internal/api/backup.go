@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/flimmer-media/flimmer/internal/db"
+	"github.com/Bavarianator/flimmer/internal/db"
 )
 
 // backupDownload liefert eine konsistente Kopie der Datenbank (VACUUM INTO) als Download.

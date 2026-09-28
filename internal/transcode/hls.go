@@ -17,8 +17,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/flimmer-media/flimmer/internal/audio"
-	"github.com/flimmer-media/flimmer/internal/probe"
+	"github.com/Bavarianator/flimmer/internal/audio"
+	"github.com/Bavarianator/flimmer/internal/probe"
 )
 
 type Segment struct{ Start, End float64 }

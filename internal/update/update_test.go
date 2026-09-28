@@ -42,7 +42,7 @@ func fake(t *testing.T, status int, body string) {
 }
 
 func TestChecker(t *testing.T) {
-	fake(t, 200, `{"tag_name":"v0.3.0","html_url":"https://github.com/flimmer-media/flimmer/releases/tag/v0.3.0","published_at":"2026-10-01T12:00:00Z"}`)
+	fake(t, 200, `{"tag_name":"v0.3.0","html_url":"https://github.com/Bavarianator/flimmer/releases/tag/v0.3.0","published_at":"2026-10-01T12:00:00Z"}`)
 	var c Checker
 
 	Version = "v0.3.0"

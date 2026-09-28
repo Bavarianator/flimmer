@@ -19,8 +19,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/flimmer-media/flimmer/internal/meta"
-	"github.com/flimmer-media/flimmer/internal/probe"
+	"github.com/Bavarianator/flimmer/internal/meta"
+	"github.com/Bavarianator/flimmer/internal/probe"
 )
 
 type Item struct {

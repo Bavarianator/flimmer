@@ -20,8 +20,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/flimmer-media/flimmer/internal/ratelimit"
-	"github.com/flimmer-media/flimmer/internal/remote"
+	"github.com/Bavarianator/flimmer/internal/ratelimit"
+	"github.com/Bavarianator/flimmer/internal/remote"
 	_ "github.com/ncruces/go-sqlite3/driver"
 )
 

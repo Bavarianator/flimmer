@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/flimmer-media/flimmer/internal/playback"
-	"github.com/flimmer-media/flimmer/internal/update"
+	"github.com/Bavarianator/flimmer/internal/playback"
+	"github.com/Bavarianator/flimmer/internal/update"
 )
 
 // LogRing behält die letzten Log-Zeilen für die Diagnose (log.SetOutput(io.MultiWriter(os.Stderr, ring))).

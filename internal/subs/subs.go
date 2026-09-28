@@ -15,7 +15,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/flimmer-media/flimmer/internal/lang"
+	"github.com/Bavarianator/flimmer/internal/lang"
 )
 
 // External ist eine Untertiteldatei neben dem Video, z. B. „Film.de.forced.srt“.

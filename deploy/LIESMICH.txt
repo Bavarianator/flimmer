@@ -14,4 +14,4 @@ Automatisch mit Windows starten:
    In diesem Ordner eine Eingabeaufforderung öffnen und eingeben:  flimmer.exe install
    Wieder entfernen:                                              flimmer.exe uninstall
 
-Hilfe und Quellcode: https://github.com/flimmer-media/flimmer
+Hilfe und Quellcode: https://github.com/Bavarianator/flimmer

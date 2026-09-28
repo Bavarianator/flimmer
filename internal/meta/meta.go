@@ -46,7 +46,7 @@ type Query struct {
 	Year, Season, Episode   int
 }
 
-// DefaultTMDBKey wird beim Release-Build eingesetzt: -ldflags "-X github.com/flimmer-media/flimmer/internal/meta.DefaultTMDBKey=…"
+// DefaultTMDBKey wird beim Release-Build eingesetzt: -ldflags "-X github.com/Bavarianator/flimmer/internal/meta.DefaultTMDBKey=…"
 var DefaultTMDBKey string
 
 type Resolver struct {

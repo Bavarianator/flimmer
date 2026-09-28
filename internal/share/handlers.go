@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/flimmer-media/flimmer/internal/db"
-	"github.com/flimmer-media/flimmer/internal/discovery"
+	"github.com/Bavarianator/flimmer/internal/db"
+	"github.com/Bavarianator/flimmer/internal/discovery"
 )
 
 // CreateHandler: POST /api/invites, nur Admin.
