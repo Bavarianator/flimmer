@@ -139,7 +139,7 @@ func (l *Library) Scan(ctx context.Context) error {
 			if d.IsDir() || !slices.Contains(videoExt, strings.ToLower(filepath.Ext(path))) {
 				return nil
 			}
-			info, err := d.Info()
+			info, err := os.Stat(path) // folgt Symlinks, anders als d.Info()
 			if err != nil {
 				return nil
 			}

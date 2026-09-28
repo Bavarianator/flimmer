@@ -194,8 +194,9 @@ func args(job Job, first int, dir string) []string {
 	}
 	a = append(a, "-sn", "-dn", "-map_chapters", "-1", "-map_metadata", "-1")
 
+	// Immer ALLE Grenzen übergeben: der Segment-Muxer indiziert segment_times ab segment_start_number.
 	var bounds []string
-	for _, s := range segs[1:] {
+	for _, s := range job.Segments[1:] {
 		bounds = append(bounds, ftoa(s.Start))
 	}
 	if job.VideoCodec == "copy" {

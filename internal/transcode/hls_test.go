@@ -46,3 +46,15 @@ func TestPlaylist(t *testing.T) {
 		}
 	}
 }
+
+// Regression: nach einem Sprung muss ffmpeg trotzdem alle Grenzen kennen,
+// sonst wird der Rest der Datei ein einziges Riesensegment.
+func TestArgsAfterSeekKeepAllBoundaries(t *testing.T) {
+	job := Job{Input: "x.mkv", Segments: Segments(nil, 60), AudioIndex: 1, AudioCodec: "copy", VideoCodec: "copy"}
+	a := strings.Join(args(job, 5, "/tmp/x"), " ")
+	for _, want := range []string{"-ss 30.000000", "-segment_start_number 5", "-segment_times 6.000000,12.000000,"} {
+		if !strings.Contains(a, want) {
+			t.Fatalf("fehlt %q in %s", want, a)
+		}
+	}
+}
