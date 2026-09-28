@@ -11,6 +11,13 @@ import './style.css'
 
 init({ throttle: 100 })
 
+// Die D-Pad-Navigation (Listener auf window) blockiert Enter/←/→ auch in Eingabefeldern – selbst pausiert.
+// Hier auf document abfangen, damit Formulare abschicken und der Cursor im Text wandern kann.
+document.addEventListener('keydown', (e) => {
+  const t = e.target as HTMLElement
+  if ((t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') && [13, 37, 39].indexOf(e.keyCode) >= 0) e.stopPropagation()
+})
+
 function App() {
   const [path, setPath] = useState(current())
   const [needLogin, setNeedLogin] = useState(false)

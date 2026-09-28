@@ -1,7 +1,7 @@
 // Gemeinsame Bausteine: Karten, Reihen, Bilder mit Platzhalter.
 import type { ComponentChildren } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
-import { FocusContext, useFocusable } from '@noriginmedia/norigin-spatial-navigation'
+import { FocusContext, pause, resume, setFocus, useFocusable } from '@noriginmedia/norigin-spatial-navigation'
 import { BACK_KEYS } from './data'
 
 function hue(s: string) {
@@ -93,4 +93,19 @@ export function useBack(onBack: () => void) {
     window.addEventListener('keydown', on)
     return () => window.removeEventListener('keydown', on)
   }, [onBack])
+}
+
+// Solange Texteingabe oder eigene Tastensteuerung (Player) aktiv ist, darf die D-Pad-Navigation
+// Enter & Pfeile nicht abfangen – sonst wird z. B. das Login-Formular nie abgeschickt.
+export function usePausedNav() {
+  useEffect(() => {
+    pause()
+    return () => resume()
+  }, [])
+}
+
+// Preact führt Effekte der Eltern vor denen der Kinder aus – die Kinder sind dann noch nicht bei der
+// Navigation registriert. Deshalb erst im nächsten Tick fokussieren.
+export function focusSoon(key: string) {
+  setTimeout(() => setFocus(key), 0)
 }

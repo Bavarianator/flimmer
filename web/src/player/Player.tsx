@@ -3,6 +3,7 @@ import type Hls from 'hls.js/light'
 import { api, getToken, isTV, profile } from '../profile'
 import { probeSignal } from '../probe'
 import { BACK_KEYS, fmtTime, library, resumePos } from '../data'
+import { usePausedNav } from '../ui'
 
 interface Subtitle {
   index: number
@@ -86,6 +87,7 @@ export function Player({ id, start, onBack }: { id: string; start?: number; onBa
   const [time, setTime] = useState({ t: 0, d: 0, paused: false, waiting: false })
   const resumeAt = useRef(start !== undefined ? start : resumePos(id))
   const langRef = useRef({ audio: '', sub: 'off' })
+  usePausedNav() // eigene Tastensteuerung
 
   // Plan holen und Quelle setzen – erneut, wenn eine andere Tonspur gewählt wird.
   useEffect(() => {
@@ -255,7 +257,8 @@ export function Player({ id, start, onBack }: { id: string; start?: number; onBa
         {subs
           .filter((s) => s.format === 'vtt')
           .map((s) => (
-            <track key={s.index} id={'sub' + s.index} kind="subtitles" srcLang={s.language} label={subLabel(s)} src={subUrl(id, s)} />
+            // key mit URL: nach Tonwechsel neu einhängen, sonst hängt Chrome die Cues doppelt an
+            <track key={s.index + (plan ? plan.url : '')} id={'sub' + s.index} kind="subtitles" srcLang={s.language} label={subLabel(s)} src={subUrl(id, s)} />
           ))}
       </video>
       <div class={'osd' + (osd || panel ? ' visible' : '')}>

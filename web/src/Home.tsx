@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'preact/hooks'
-import { FocusContext, useFocusable, setFocus } from '@noriginmedia/norigin-spatial-navigation'
+import { FocusContext, useFocusable } from '@noriginmedia/norigin-spatial-navigation'
 import { api, isTV, profile, setProbe, setToken } from './profile'
 import { loadProbe, runProbe } from './probe'
 import { displayTitle, groupSeries, home, image, library, nextUp, resumePos, type HomeRow, type Item } from './data'
-import { Card, Row } from './ui'
+import { Card, Row, focusSoon } from './ui'
 import { go } from './route'
 
 function sub(it: Item) {
@@ -60,7 +60,7 @@ export function Home() {
     if (!loadProbe()) probe() // einmal pro Gerät/Firmware im Hintergrund
   }, [])
   useEffect(() => {
-    if (items && items.length) setFocus('home')
+    if (items && items.length) focusSoon('home')
   }, [items])
 
   const empty = error

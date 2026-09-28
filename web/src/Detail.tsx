@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks'
-import { FocusContext, useFocusable, setFocus } from '@noriginmedia/norigin-spatial-navigation'
+import { FocusContext, useFocusable } from '@noriginmedia/norigin-spatial-navigation'
 import { displayTitle, fmtTime, groupSeries, image, library, lightText, nextUp, resumePos, type Item, type Series } from './data'
-import { Art, FocusButton, Row, useBack } from './ui'
+import { Art, FocusButton, Row, focusSoon, useBack } from './ui'
 import { ItemCard } from './Home'
 import { back, go } from './route'
 
@@ -56,7 +56,7 @@ export function Detail({ id }: { id: string }) {
     library().then((all) => setIt(all.filter((x) => x.id === id)[0] || null))
   }, [id])
   useEffect(() => {
-    if (it) setFocus('play')
+    if (it) focusSoon('play')
   }, [it])
   return (
     <FocusContext.Provider value={focusKey}>
@@ -81,7 +81,7 @@ export function SeriesPage({ name }: { name: string }) {
     library().then((all) => setS(groupSeries(all).filter((x) => x.name === name)[0] || null))
   }, [name])
   useEffect(() => {
-    if (s) setFocus('play')
+    if (s) focusSoon('play')
   }, [s])
   const next = s && nextUp(s)
   return (

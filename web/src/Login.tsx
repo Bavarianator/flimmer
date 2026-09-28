@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks'
-import { FocusContext, useFocusable, setFocus } from '@noriginmedia/norigin-spatial-navigation'
+import { FocusContext, useFocusable } from '@noriginmedia/norigin-spatial-navigation'
 import { api, isTV, profile, setToken } from './profile'
-import { FocusButton, useBack } from './ui'
+import { focusSoon, useBack, usePausedNav } from './ui'
 import { back, go } from './route'
 
 interface User {
@@ -29,7 +29,6 @@ function UserTile({ u, onPick }: { u: User; onPick: (u: User) => void }) {
 export function Login({ onDone }: { onDone: () => void }) {
   const [users, setUsers] = useState<User[] | null>(null)
   const [pick, setPick] = useState<User | null>(null)
-  const [pw, setPw] = useState('')
   const [error, setError] = useState('')
   const [pair, setPair] = useState<{ code: string; secret: string } | null>(null)
   const { ref, focusKey } = useFocusable({ focusKey: 'login' })
@@ -38,7 +37,7 @@ export function Login({ onDone }: { onDone: () => void }) {
     api<User[]>('/api/users').then(setUsers, (e) => setError(String(e.message || e)))
   }, [])
   useEffect(() => {
-    if (users && users.length) setFocus('user-' + users[0].id)
+    if (users && users.length) focusSoon('user-' + users[0].id)
   }, [users])
 
   // TV-Kopplung: Code anzeigen, pollen bis am Handy bestätigt.
@@ -78,29 +77,10 @@ export function Login({ onDone }: { onDone: () => void }) {
     setError('')
     if (u.hasPassword) {
       setPick(u)
-      setPw('')
     } else login(u)
   }
 
-  if (pick)
-    return (
-      <main class="page login">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            login(pick, pw)
-          }}
-        >
-          <h1>Hallo {pick.name}</h1>
-          <input type="password" autoFocus placeholder="Passwort" value={pw} onInput={(e) => setPw((e.target as HTMLInputElement).value)} />
-          <div class="buttons">
-            <button class="btn primary" type="submit">Anmelden</button>
-            <button class="btn" type="button" onClick={() => setPick(null)}>Zurück</button>
-          </div>
-          {error && <p class="error-text">{error}</p>}
-        </form>
-      </main>
-    )
+  if (pick) return <PasswordForm user={pick} error={error} onSubmit={(pw) => login(pick, pw)} onCancel={() => setPick(null)} />
 
   return (
     <FocusContext.Provider value={focusKey}>
@@ -120,10 +100,35 @@ export function Login({ onDone }: { onDone: () => void }) {
   )
 }
 
+function PasswordForm({ user, error, onSubmit, onCancel }: { user: User; error: string; onSubmit: (pw: string) => void; onCancel: () => void }) {
+  const [pw, setPw] = useState('')
+  usePausedNav()
+  useBack(onCancel)
+  return (
+    <main class="page login">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          onSubmit(pw)
+        }}
+      >
+        <h1>Hallo {user.name}</h1>
+        <input type="password" autoFocus placeholder="Passwort" value={pw} onInput={(e) => setPw((e.target as HTMLInputElement).value)} />
+        <div class="buttons">
+          <button class="btn primary" type="submit">Anmelden</button>
+          <button class="btn" type="button" onClick={onCancel}>Zurück</button>
+        </div>
+        {error && <p class="error-text">{error}</p>}
+      </form>
+    </main>
+  )
+}
+
 // Handy-Seite: Code vom Fernseher bestätigen.
 export function PairConfirm() {
   const [code, setCode] = useState('')
   const [msg, setMsg] = useState('')
+  usePausedNav()
   useBack(back)
   const confirm = () =>
     api<{ device: string }>(`/api/pair/${code.replace(/\D/g, '')}/confirm`, {}).then(
@@ -143,7 +148,7 @@ export function PairConfirm() {
         <input inputMode="numeric" autoFocus maxLength={7} placeholder="123 456" value={code} onInput={(e) => setCode((e.target as HTMLInputElement).value)} />
         <div class="buttons">
           <button class="btn primary" type="submit">Koppeln</button>
-          <FocusButton focusKey="pair-back" onPress={() => go('/')}>Fertig</FocusButton>
+          <button class="btn" type="button" onClick={() => go('/')}>Fertig</button>
         </div>
         {msg && <p class="muted">{msg}</p>}
       </form>
