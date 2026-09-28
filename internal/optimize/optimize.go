@@ -24,6 +24,7 @@ import (
 
 	"github.com/flimmer-media/flimmer/internal/playback"
 	"github.com/flimmer-media/flimmer/internal/probe"
+	"github.com/flimmer-media/flimmer/internal/transcode"
 )
 
 // Item ist ein Titel aus dem Katalog.
@@ -52,7 +53,6 @@ type Status struct {
 	Current   *Job   `json:"current,omitempty"`
 	Done      int    `json:"done"`    // fertige Versionen
 	Pending   int    `json:"pending"` // Titel, die noch drankommen
-	SkipHDR   int    `json:"skipHdr"` // rote HDR-Titel, die ohne Tone-Mapping übersprungen werden
 	LastError string `json:"lastError,omitempty"`
 }
 
@@ -69,7 +69,7 @@ type Optimizer struct {
 	mu     sync.Mutex
 	st     Status
 	failed map[string]string // ID → Grund; ponytail: nur bis zum Neustart gemerkt, in die DB wenn das nervt
-	hdr    map[string]bool   // ID → HDR-Quelle (Cache für isHDR)
+	hdr    map[string]bool   // ID → HDR-Quelle (Cache für hdrOf)
 }
 
 func New(opts Options) *Optimizer {
@@ -183,17 +183,12 @@ func (o *Optimizer) pending(ctx context.Context) ([]Item, error) {
 	speed := o.opts.Speed()
 	known := map[string]bool{}
 	var todo []Item
-	skipHDR := 0
 	for _, it := range items {
 		known[it.ID] = true
 		if it.Media == nil || o.Lookup(it.ID, it.Path) != "" || o.failedReason(it.ID) != "" {
 			continue
 		}
 		if !slices.ContainsFunc(profiles, func(p playback.Profile) bool { return playback.Decide(it.Media, p, speed).Light == playback.Red }) {
-			continue
-		}
-		if o.isHDR(ctx, it) {
-			skipHDR++
 			continue
 		}
 		todo = append(todo, it)
@@ -215,33 +210,32 @@ func (o *Optimizer) pending(ctx context.Context) ([]Item, error) {
 		done++
 	}
 	o.mu.Lock()
-	o.st.Done, o.st.Pending, o.st.SkipHDR = done, len(todo), skipHDR
+	o.st.Done, o.st.Pending = done, len(todo)
 	o.mu.Unlock()
 	return todo, nil
 }
 
-// isHDR: HDR-Quellen (HDR10/HDR10+/HLG/Dolby Vision) werden übersprungen, bis transcode ein Tone-Mapping-Rezept hat –
-// sonst entstünden blasse SDR-Versionen, die als grün gälten. Im Zweifel (ffprobe scheitert) auch überspringen.
-func (o *Optimizer) isHDR(ctx context.Context, it Item) bool {
-	if it.Media != nil { // HDR-Feld von probe; fängt auch Dolby Vision Profil 5 ohne Transfer-Tag
-		if v := it.Media.First("video"); v != nil && v.HDR != "" {
-			return true
-		}
+// hdrOf sagt, ob die Quelle HDR ist (dann Tone-Mapping nach SDR). Erst das Feld von probe (fängt auch
+// Dolby Vision Profil 5 ohne Transfer-Tag), sonst – für Probe-Caches von vor dem Feld – color_transfer per ffprobe.
+func (o *Optimizer) hdrOf(ctx context.Context, it Item) (bool, error) {
+	if v := it.Media.First("video"); v != nil && v.HDR != "" {
+		return true, nil
 	}
 	o.mu.Lock()
 	v, ok := o.hdr[it.ID]
 	o.mu.Unlock()
 	if ok {
-		return v
+		return v, nil
 	}
 	trc, err := colorTransfer(ctx, it.Path)
-	v = err != nil || trc == "smpte2084" || trc == "arib-std-b67"
-	if err == nil { // Fehler nicht cachen: Laufwerk kann kurz weg sein
-		o.mu.Lock()
-		o.hdr[it.ID] = v
-		o.mu.Unlock()
+	if err != nil { // nicht cachen: Laufwerk kann kurz weg sein
+		return false, err
 	}
-	return v
+	v = trc == "smpte2084" || trc == "arib-std-b67"
+	o.mu.Lock()
+	o.hdr[it.ID] = v
+	o.mu.Unlock()
+	return v, nil
 }
 
 // colorTransfer liest color_transfer des ersten Videostreams (in Tests austauschbar).
@@ -287,12 +281,16 @@ func (o *Optimizer) encode(ctx context.Context, it Item, deadline time.Time) err
 	if free := diskFree(o.opts.Dir); free != 0 && free < o.opts.MinFree {
 		return errSpace
 	}
+	hdr, err := o.hdrOf(ctx, it)
+	if err != nil {
+		return fmt.Errorf("HDR-Prüfung: %w", err) // nie ohne Tone-Mapping raten: blasse Version gälte als grün
+	}
 	part := filepath.Join(o.opts.Dir, it.ID+".mp4.part")
 	defer os.Remove(part)
 
 	jobCtx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
-	name, args := niceCmd(o.opts.FFmpeg, Args(it, part))
+	name, args := niceCmd(o.opts.FFmpeg, Args(it, hdr, part))
 	cmd := exec.CommandContext(jobCtx, name, args...)
 	var stderr tail
 	cmd.Stderr = &stderr
@@ -390,13 +388,20 @@ func (o *Optimizer) shouldStop(start time.Time, pos, dur float64, deadline time.
 
 // Args baut den ffmpeg-Aufruf: Video H.264 (max. 1080p), Ton AAC/AC3/EAC3 bleibt, alles andere wird
 // EAC3 (Surround) bzw. AAC (Stereo). Untertitel bleiben im Original, das Server-seitig ausgeliefert wird.
-// Noch ohne HDR-Tone-Mapping: Das Filter-Rezept entsteht in internal/transcode (Schritt 7) und wird dann
-// von hier aus aufgerufen, nicht kopiert.
-func Args(it Item, out string) []string {
+// Skalieren und HDR→SDR-Tone-Mapping kommen aus transcode.VideoArgs (dasselbe Rezept wie beim Streaming).
+// ponytail: immer libx264; hwaccel-Encoder (VAAPI ~7× schneller auf dem Celeron) mit vault-0e einhängen, wenn Nächte zu kurz sind
+func Args(it Item, hdr bool, out string) []string {
 	a := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", it.Path,
-		"-map", "0:v:0", "-map", "0:a?", "-sn", "-dn", "-map_chapters", "-1",
-		"-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-pix_fmt", "yuv420p", "-profile:v", "high", "-level:v", "4.1",
-		"-vf", "scale=-2:'min(1080,ih)'"}
+		"-map", "0:v:0", "-map", "0:a?", "-sn", "-dn", "-map_chapters", "-1"}
+	var v probe.Stream
+	if f := it.Media.First("video"); f != nil {
+		v = *f
+	}
+	if hdr && v.HDR == "" {
+		v.HDR = "hdr10" // alter Probe-Cache: ffprobe sagt PQ/HLG, das Feld fehlt noch
+	}
+	a = append(a, transcode.VideoArgs(&v, 1080, []string{"-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
+		"-pix_fmt", "yuv420p", "-profile:v", "high", "-level:v", "4.1"})...)
 	for i, s := range it.Media.All("audio") {
 		n := strconv.Itoa(i)
 		switch {

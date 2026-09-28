@@ -41,7 +41,13 @@ func TestArgs(t *testing.T) {
 		{Index: 2, Type: "audio", Codec: "dts", Channels: 6},
 		{Index: 3, Type: "audio", Codec: "opus", Channels: 2},
 	}}}
-	a := strings.Join(Args(it, "/d/x.mp4.part"), " ")
+	a := strings.Join(Args(it, false, "/d/x.mp4.part"), " ")
+	if !strings.Contains(a, "-vf scale=") || strings.Contains(a, "tonemap") {
+		t.Errorf("SDR: %s", a)
+	}
+	if h := strings.Join(Args(it, true, "/d/x.mp4.part"), " "); !strings.Contains(h, "tonemap") {
+		t.Errorf("HDR ohne Tone-Mapping: %s", h)
+	}
 	for _, want := range []string{"-c:a:0 copy", "-c:a:1 eac3", "-c:a:2 aac", "-movflags +faststart", "-f mp4 /d/x.mp4.part", "-sn"} {
 		if !strings.Contains(a, want) {
 			t.Errorf("fehlt %q in %s", want, a)
@@ -113,9 +119,6 @@ func TestPendingAndLookup(t *testing.T) {
 	if o.Lookup("red", src) == "" {
 		t.Error("frische Version nicht gefunden")
 	}
-	if o.Status().SkipHDR != 0 {
-		t.Error("SDR als HDR gezählt")
-	}
 	o.failed["stale"] = "x"
 	if todo, _ := o.pending(context.Background()); len(todo) != 0 {
 		t.Errorf("gescheiterte/fertige Titel erneut: %v", todo)
@@ -149,28 +152,22 @@ func TestShouldStop(t *testing.T) {
 	}
 }
 
-func TestSkipHDR(t *testing.T) {
-	lib := t.TempDir()
-	var items []Item
-	for _, n := range []string{"pq.mkv", "hlg.mkv", "sdr.mkv", "leer.mkv", "kaputt.mkv"} {
-		os.WriteFile(filepath.Join(lib, n), nil, 0o644)
-		items = append(items, Item{ID: n, Path: filepath.Join(lib, n), Media: media("hevc")})
-	}
+func TestHDROf(t *testing.T) {
+	fakeTransfer(t, map[string]string{"pq.mkv": "smpte2084", "hlg.mkv": "arib-std-b67", "sdr.mkv": "bt709", "leer.mkv": "", "dv5.mkv": ""})
+	o := New(Options{Dir: t.TempDir()})
 	dv := media("hevc")
 	dv.Streams[0].HDR = "dv" // Profil 5: kein Transfer-Tag, aber probe erkennt es
-	os.WriteFile(filepath.Join(lib, "dv5.mkv"), nil, 0o644)
-	items = append(items, Item{ID: "dv5.mkv", Path: filepath.Join(lib, "dv5.mkv"), Media: dv})
-	trc := map[string]string{"pq.mkv": "smpte2084", "hlg.mkv": "arib-std-b67", "sdr.mkv": "bt709", "leer.mkv": "", "dv5.mkv": ""}
-	fakeTransfer(t, trc)
-	o := New(Options{Dir: t.TempDir(), MinFree: 1, Items: func(context.Context) ([]Item, error) { return items, nil },
-		Profiles: func(context.Context) []playback.Profile { return []playback.Profile{tv} }})
-	todo, _ := o.pending(context.Background())
-	var ids []string
-	for _, it := range todo {
-		ids = append(ids, it.ID)
+	for name, want := range map[string]bool{"pq.mkv": true, "hlg.mkv": true, "sdr.mkv": false, "leer.mkv": false, "dv5.mkv": true} {
+		m := media("hevc")
+		if name == "dv5.mkv" {
+			m = dv
+		}
+		if got, err := o.hdrOf(context.Background(), Item{ID: name, Path: "/x/" + name, Media: m}); err != nil || got != want {
+			t.Errorf("%s: %v %v", name, got, err)
+		}
 	}
-	if !slices.Equal(ids, []string{"sdr.mkv", "leer.mkv"}) || o.Status().SkipHDR != 4 {
-		t.Fatalf("pending = %v, SkipHDR = %d", ids, o.Status().SkipHDR)
+	if _, err := o.hdrOf(context.Background(), Item{ID: "k", Path: "/x/kaputt.mkv", Media: media("hevc")}); err == nil {
+		t.Error("ffprobe-Fehler muss durchkommen")
 	}
 }
 
@@ -185,9 +182,24 @@ func TestHDRProbe(t *testing.T) {
 	if err != nil {
 		t.Skipf("Testclip: %v %s", err, out)
 	}
-	o := New(Options{Dir: t.TempDir()})
-	if !o.isHDR(context.Background(), Item{ID: "pq", Path: src}) {
-		t.Fatal("PQ-Clip nicht als HDR erkannt")
+	o := New(Options{Dir: t.TempDir(), MinFree: 1})
+	ctx := context.Background()
+	m, err := probe.File(ctx, src)
+	if err != nil {
+		t.Skip(err)
+	}
+	m.Streams[0].HDR = "" // wie ein alter Probe-Cache ohne das Feld
+	it := Item{ID: "pq", Path: src, Media: m}
+	if hdr, err := o.hdrOf(ctx, it); err != nil || !hdr {
+		t.Fatalf("PQ-Clip nicht als HDR erkannt: %v", err)
+	}
+	// Die Version ist SDR (BT.709), nicht blass-PQ.
+	if err := o.encode(ctx, it, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	trc, err := colorTransfer(ctx, filepath.Join(o.opts.Dir, "pq.mp4"))
+	if err != nil || trc != "bt709" {
+		t.Fatalf("Ergebnis color_transfer = %q (%v)", trc, err)
 	}
 }
 
