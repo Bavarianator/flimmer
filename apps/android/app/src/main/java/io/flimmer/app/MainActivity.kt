@@ -21,7 +21,13 @@ import io.flimmer.app.ui.FlimmerTheme
 import io.flimmer.app.ui.HomeScreen
 import io.flimmer.app.ui.LoginScreen
 import io.flimmer.app.ui.SeriesScreen
+import io.flimmer.app.ui.BibliothekScreen
+import io.flimmer.app.ui.ProfilScreen
+import io.flimmer.app.ui.Raster
+import io.flimmer.app.ui.SearchScreen
 import io.flimmer.app.ui.Shelf
+import io.flimmer.app.ui.Shell
+import io.flimmer.app.ui.Tab
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -46,12 +52,29 @@ class MainActivity : ComponentActivity() {
         setContent { FlimmerTheme(tv) { App(store, profile, tv) } }
     }
 
-    fun play(api: ApiClient, item: Item, start: Double?) {
+    fun play(api: ApiClient, item: Item, start: Double?, party: String? = null) = play(api, item.id, start, party)
+
+    fun play(api: ApiClient, itemId: String, start: Double?, party: String?) {
         player.launch(
             Intent(this, PlayerActivity::class.java)
                 .putExtra("server", api.base).putExtra("token", api.token)
-                .putExtra("id", item.id).putExtra("start", start ?: -1.0),
+                .putExtra("id", itemId).putExtra("start", start ?: -1.0).putExtra("party", party),
         )
+    }
+
+    fun partyFailed(e: Throwable) =
+        android.widget.Toast.makeText(this, "Gemeinsam schauen geht gerade nicht: ${e.message ?: "Server nicht erreichbar"}", android.widget.Toast.LENGTH_LONG).show()
+
+    /** Neuen Raum für „Gemeinsam schauen“ öffnen und selbst beitreten. */
+    suspend fun startParty(api: ApiClient, item: Item) {
+        val room = PartyClient(api).create(item.id)
+        play(api, item.id, 0.0, room.id)
+    }
+
+    /** Raum per Code beitreten: der Raum bestimmt den Titel. */
+    suspend fun joinParty(api: ApiClient, code: String) {
+        val room = PartyClient(api).get(code.trim().lowercase())
+        play(api, room.state.mediaId, null, room.id)
     }
 
     @Composable
@@ -66,6 +89,14 @@ class MainActivity : ComponentActivity() {
         var me by remember { mutableStateOf<User?>(null) }
         var shelves by remember { mutableStateOf<List<Shelf>?>(null) }
         var library by remember { mutableStateOf<List<Item>>(emptyList()) }
+        var tab by remember { mutableStateOf(Tab.Start) }
+        var watch by remember { mutableStateOf(store.watchlist) }
+        fun watchKey(it: Item) = it.series?.let { "s:$it" } ?: it.id // Serien als Ganzes merken
+        fun toggle(it: Item) {
+            val k = watchKey(it)
+            watch = if (k in watch) watch - k else watch + k
+            store.watchlist = watch
+        }
         val screen = stack.last()
 
         fun go(s: Screen) = stack.add(s)
@@ -133,27 +164,42 @@ class MainActivity : ComponentActivity() {
                         val lib = c.library(profile)
                         library = lib
                         val rows = runCatching { c.home(profile) }.getOrDefault(emptyList())
-                        shelves = rows.map { Shelf(it.title, it.items, wide = true) } +
+                        shelves = rows.filter { it.items.isNotEmpty() }.map { Shelf(it.title, it.items, wide = true) } +
                             listOf(Shelf("Filme", lib.filter { it.series == null }), Shelf("Serien", lib.filter { it.series != null }.distinctBy { it.series }))
                                 .filter { it.items.isNotEmpty() }
                     }.onFailure(::onAuthError)
                 }
-                HomeScreen(shelves, error, me?.name ?: "", c::abs,
-                    onOpen = { go(Screen.Detail(it)) },
-                    onOpenSeries = { go(Screen.Series(it)) },
-                    onLogout = { scope.launch { c.logout(); store.token = ""; me = null; shelves = null; reset(Screen.Login) } },
-                    onRefresh = { refresh.intValue++ })
+                val open: (Item) -> Unit = { if (it.series != null) go(Screen.Series(it.series)) else go(Screen.Detail(it)) }
+                val logout: () -> Unit = { scope.launch { c.logout(); store.token = ""; me = null; shelves = null; reset(Screen.Login) } }
+                BackHandler(enabled = tab != Tab.Start) { tab = Tab.Start }
+                Shell(tab, me?.name ?: "", me?.color ?: 0, error, onTab = { tab = it; error = "" }) {
+                    when (tab) {
+                        Tab.Start -> HomeScreen(shelves, error, c::abs, open) { item, start -> play(c, item, start) }
+                        Tab.Filme -> Raster(library.filter { it.series == null }, c::abs, "Noch keine Filme", open)
+                        Tab.Serien -> Raster(library.filter { it.series != null }.distinctBy { it.series }, c::abs, "Noch keine Serien", open)
+                        Tab.Merkliste -> Raster(library.filter { watchKey(it) in watch }.distinctBy { watchKey(it) }, c::abs,
+                            "Noch nichts gemerkt – bei einem Titel „+ Merkliste“ wählen.", open)
+                        Tab.Suche -> SearchScreen(library, c::abs, open)
+                        Tab.Bibliothek -> BibliothekScreen(library, library.filter { watchKey(it) in watch }.distinctBy { watchKey(it) }, c::abs, open)
+                        Tab.Profil -> ProfilScreen(me?.name ?: "", me?.color ?: 0, c.base, profile.name + " · " + profile.video.joinToString(", "),
+                            logout, onChangeServer = { store.server = ""; api = null; reset(Screen.Connect) }, onRefresh = { refresh.intValue++ },
+                            onJoin = { code -> scope.launch { runCatching { joinParty(c, code) }.onFailure { error = "Raum „$code“ nicht gefunden" } } })
+                    }
+                }
             }
 
             is Screen.Detail -> {
                 val c = api ?: return reset(Screen.Connect)
                 val fresh = library.firstOrNull { it.id == s.item.id } ?: s.item
-                DetailScreen(fresh, c::abs) { item, start -> play(c, item, start) }
+                DetailScreen(fresh, c::abs, watchKey(fresh) in watch, { toggle(fresh) }, onParty = { scope.launch { runCatching { startParty(c, fresh) }.onFailure { partyFailed(it) } } }) { item, start -> play(c, item, start) }
             }
 
             is Screen.Series -> {
                 val c = api ?: return reset(Screen.Connect)
-                SeriesScreen(s.name, library.filter { it.series == s.name }, c::abs) { item, start -> play(c, item, start) }
+                val eps = library.filter { it.series == s.name }
+                val key = eps.firstOrNull()
+                SeriesScreen(s.name, eps, c::abs, key != null && watchKey(key) in watch, { key?.let(::toggle) },
+                    onParty = { e -> scope.launch { runCatching { startParty(c, e) }.onFailure { partyFailed(it) } } }) { item, start -> play(c, item, start) }
             }
         }
     }

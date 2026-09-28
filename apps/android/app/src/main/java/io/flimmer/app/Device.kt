@@ -25,6 +25,10 @@ class Store(ctx: Context) {
     var token: String
         get() = p.getString("token", "") ?: ""
         set(v) = p.edit().putString("token", v).apply()
+    /** Merkliste (lokal, bis der Server eine hat). */
+    var watchlist: Set<String>
+        get() = p.getStringSet("watchlist", emptySet()) ?: emptySet()
+        set(v) = p.edit().putStringSet("watchlist", v).apply()
     val deviceId: String
         get() = p.getString("device", null) ?: UUID.randomUUID().toString().replace("-", "").also { p.edit().putString("device", it).apply() }
 }
