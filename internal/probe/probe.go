@@ -32,7 +32,6 @@ type Media struct {
 	Duration  float64   `json:"duration"`
 	Bitrate   int64     `json:"bitrate"`
 	Streams   []Stream  `json:"streams"`
-	Keyframes []float64 `json:"keyframes,omitempty"` // Zeitstempel in Sekunden, Grundlage für HLS-Segmentgrenzen
 }
 
 func (m *Media) First(typ string) *Stream {
@@ -76,7 +75,7 @@ type ffprobeOut struct {
 	} `json:"streams"`
 }
 
-// File probt eine Datei inkl. Keyframe-Index.
+// File probt Container und Streams. Schnell, weil nur der Header gelesen wird; den Keyframe-Index liefert Keyframes.
 func File(ctx context.Context, path string) (*Media, error) {
 	out, err := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-print_format", "json",
 		"-show_format", "-show_streams", path).Output()
@@ -103,18 +102,12 @@ func File(ctx context.Context, path string) (*Media, error) {
 			Language: s.Tags["language"], Title: s.Tags["title"], Default: s.Disposition.Default == 1,
 		})
 	}
-	if v := m.First("video"); v != nil {
-		m.Keyframes, err = keyframes(ctx, path, v.Index)
-		if err != nil {
-			return nil, err
-		}
-	}
 	return m, nil
 }
 
-// keyframes liest nur die Pakete (kein Decoding) und sammelt die Zeitstempel der Keyframes.
-// ponytail: liest die ganze Datei einmal beim Scan; bei riesigen Bibliotheken später parallel/im Hintergrund.
-func keyframes(ctx context.Context, path string, stream int) ([]float64, error) {
+// Keyframes liest nur die Pakete (kein Decoding) und sammelt die Zeitstempel der Keyframes (Sekunden),
+// die Grundlage für HLS-Segmentgrenzen. Liest die ganze Datei, deshalb getrennt vom schnellen File.
+func Keyframes(ctx context.Context, path string, stream int) ([]float64, error) {
 	cmd := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-select_streams", strconv.Itoa(stream),
 		"-show_entries", "packet=pts_time,flags", "-of", "csv=p=0", path)
 	out, err := cmd.Output()

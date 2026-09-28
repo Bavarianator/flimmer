@@ -73,8 +73,9 @@ type Job struct {
 	Segments   []Segment
 	AudioIndex int    // -1 = kein Ton
 	AudioCodec string // copy, aac, eac3
-	VideoCodec string // copy, h264
-	Encoder    []string
+	VideoCodec string   // copy, h264
+	InputArgs  []string // vor -i, z. B. Hardware-Decoding (hwaccel.Accel.Input)
+	Encoder    []string // Video-Encoder (hwaccel.Accel.Encode); leer = libx264
 }
 
 func (j Job) Key() string {
@@ -182,34 +183,42 @@ func (m *Manager) start(job Job, first int) (*session, error) {
 	return s, nil
 }
 
+// seekPad: ffmpeg zieht bei Formaten mit B-Frames ~0,13 s vom Sprungziel ab (siehe ffmpeg_demux.c)
+// und landet sonst auf dem VORHERIGEN Keyframe. Etwas hinter den Keyframe zu springen trifft ihn genau.
+const seekPad = 0.2
+
 func args(job Job, first int, dir string) []string {
 	segs := job.Segments[first:]
 	a := []string{"-hide_banner", "-loglevel", "error", "-nostdin"}
 	if first > 0 {
-		a = append(a, "-ss", ftoa(segs[0].Start))
+		a = append(a, "-ss", ftoa(segs[0].Start+seekPad), "-noaccurate_seek")
 	}
+	a = append(a, job.InputArgs...)
+	// -copyts: Zeitstempel bleiben die der Quelle – egal, ab welchem Segment ffmpeg gestartet wurde,
+	// passen die Segmente nahtlos aneinander.
 	a = append(a, "-copyts", "-i", job.Input, "-map", "0:v:0?")
 	if job.AudioIndex >= 0 {
 		a = append(a, "-map", "0:"+strconv.Itoa(job.AudioIndex))
 	}
 	a = append(a, "-sn", "-dn", "-map_chapters", "-1", "-map_metadata", "-1")
 
-	// Immer ALLE Grenzen übergeben: der Segment-Muxer indiziert segment_times ab segment_start_number.
-	var bounds []string
-	for _, s := range job.Segments[1:] {
-		bounds = append(bounds, ftoa(s.Start))
+	// Der Segment-Muxer misst segment_times relativ zum ersten Paket und zählt ab 0 (unabhängig von
+	// segment_start_number), -force_key_frames dagegen arbeitet auf den (absoluten) Ausgabe-Zeitstempeln.
+	var rel, abs []string
+	for _, s := range segs[1:] {
+		rel = append(rel, ftoa(s.Start-segs[0].Start))
+		abs = append(abs, ftoa(s.Start))
 	}
 	if job.VideoCodec == "copy" {
 		a = append(a, "-c:v", "copy")
 	} else {
 		enc := job.Encoder
 		if len(enc) == 0 {
-			// ponytail: nur Software-x264; HW-Encoder (VAAPI/QSV/NVENC/V4L2) kommen mit internal/hwaccel.
 			enc = []string{"-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p", "-profile:v", "high"}
 		}
 		a = append(a, enc...)
-		if len(bounds) > 0 {
-			a = append(a, "-force_key_frames", strings.Join(bounds, ","))
+		if len(abs) > 0 {
+			a = append(a, "-force_key_frames", strings.Join(abs, ","))
 		}
 	}
 	switch job.AudioCodec {
@@ -220,9 +229,10 @@ func args(job Job, first int, dir string) []string {
 	default:
 		a = append(a, "-c:a", "aac", "-b:a", "192k", "-ac", "2")
 	}
-	a = append(a, "-f", "segment", "-segment_format", "mpegts", "-segment_start_number", strconv.Itoa(first))
-	if len(bounds) > 0 {
-		a = append(a, "-segment_times", strings.Join(bounds, ","))
+	a = append(a, "-muxdelay", "0", "-muxpreload", "0",
+		"-f", "segment", "-segment_format", "mpegts", "-segment_start_number", strconv.Itoa(first))
+	if len(rel) > 0 {
+		a = append(a, "-segment_times", strings.Join(rel, ","))
 	} else {
 		a = append(a, "-segment_time", "100000")
 	}
@@ -291,6 +301,16 @@ func (s *session) stop() {
 	s.cmd.Process.Kill()
 	<-s.done
 	os.RemoveAll(dir)
+}
+
+// Close beendet alle ffmpeg-Prozesse und räumt ihre Segmente weg (beim Herunterfahren).
+func (m *Manager) Close() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for k, s := range m.sessions {
+		s.stop()
+		delete(m.sessions, k)
+	}
 }
 
 func (m *Manager) reaper() {

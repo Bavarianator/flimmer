@@ -2,7 +2,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"io/fs"
 	"log"
@@ -22,10 +21,12 @@ type Server struct {
 	HLS      *transcode.Manager
 	CacheDir string
 	Web      fs.FS
+	FFmpeg   bool // ffmpeg/ffprobe gefunden
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/status", s.status)
 	mux.HandleFunc("POST /api/library", s.library)
 	mux.HandleFunc("POST /api/items/{id}/play", s.play)
 	mux.HandleFunc("GET /api/items/{id}/file", s.file)
@@ -60,6 +61,13 @@ func spa(web fs.FS) http.Handler {
 		}
 		files.ServeHTTP(w, r)
 	})
+}
+
+func (s *Server) status(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, struct {
+		scan.Status
+		FFmpeg bool `json:"ffmpeg"`
+	}{s.Lib.Status(), s.FFmpeg})
 }
 
 type libraryItem struct {
@@ -135,9 +143,15 @@ func (s *Server) job(w http.ResponseWriter, r *http.Request) (transcode.Job, boo
 		http.Error(w, "Tonspur existiert nicht", http.StatusBadRequest)
 		return transcode.Job{}, false
 	}
+	kf, err := s.Lib.Keyframes(r.Context(), it)
+	if err != nil {
+		log.Printf("keyframes %q: %v", it.Title, err)
+		http.Error(w, "Datei konnte nicht gelesen werden", http.StatusInternalServerError)
+		return transcode.Job{}, false
+	}
 	return transcode.Job{
 		Input:      it.Path,
-		Segments:   transcode.Segments(it.Media.Keyframes, it.Media.Duration),
+		Segments:   transcode.Segments(kf, it.Media.Duration),
 		AudioIndex: audio,
 		AudioCodec: acodec,
 		VideoCodec: vcodec,
@@ -197,7 +211,13 @@ func (s *Server) subtitle(w http.ResponseWriter, r *http.Request) {
 		} else {
 			args = append(args, "-c", "copy", "-f", "sup")
 		}
-		tmp := out + ".tmp"
+		f, err := os.CreateTemp(filepath.Dir(out), "*"+ext) // eigene Temp-Datei je Anfrage, kein Race bei Doppelklick
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		f.Close()
+		tmp := f.Name()
 		if b, err := exec.CommandContext(r.Context(), "ffmpeg", append(args, "-y", tmp)...).CombinedOutput(); err != nil {
 			os.Remove(tmp)
 			log.Printf("untertitel %s: %v %s", name, err, b)
@@ -213,11 +233,7 @@ func (s *Server) subtitle(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) rescan(w http.ResponseWriter, r *http.Request) {
-	go func() {
-		if err := s.Lib.Scan(context.Background()); err != nil {
-			log.Printf("rescan: %v", err)
-		}
-	}()
+	s.Lib.Rescan()
 	w.WriteHeader(http.StatusAccepted)
 }
 
