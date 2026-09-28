@@ -63,9 +63,12 @@ export let profile = applyProbe(detectProfile(), loadProbe())
 export function setProbe(r: ProbeResult) {
   profile = applyProbe(detectProfile(), r)
   // Server merkt sich die Messung pro Gerät (Diagnose, Neuinstallation der App). Fehler sind egal.
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (getToken()) headers.Authorization = 'Bearer ' + getToken()
   fetch(`/api/devices/${deviceId()}/profile`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    headers,
     body: JSON.stringify({ name: profile.name, probe: r }),
   }).catch(() => {})
 }
@@ -83,11 +86,39 @@ export function deviceId(): string {
 }
 
 export async function api<T>(path: string, body?: unknown): Promise<T> {
+  const headers: Record<string, string> = {}
+  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  const token = getToken()
+  if (token) headers.Authorization = 'Bearer ' + token // TVs nach Kopplung; Browser nutzen das Cookie
   const res = await fetch(path, {
+    credentials: 'same-origin',
     method: body === undefined ? 'GET' : 'POST',
-    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   })
+  if (res.status === 401) {
+    let setup = false
+    try {
+      setup = !!(await res.json()).setup
+    } catch {}
+    const { LoginError } = await import('./data')
+    throw new LoginError(setup)
+  }
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`)
   return res.json()
+}
+
+export function getToken(): string {
+  try {
+    return localStorage.getItem('flimmer.token') || ''
+  } catch {
+    return ''
+  }
+}
+
+export function setToken(t: string) {
+  try {
+    if (t) localStorage.setItem('flimmer.token', t)
+    else localStorage.removeItem('flimmer.token')
+  } catch {}
 }

@@ -1,26 +1,65 @@
 import { render } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
 import { init } from '@noriginmedia/norigin-spatial-navigation'
-import { Library } from './Library'
+import { Home } from './Home'
+import { Detail, SeriesPage } from './Detail'
+import { Login, PairConfirm } from './Login'
 import { Player } from './player/Player'
+import { LoginError, library } from './data'
+import { back, current, go } from './route'
 import './style.css'
 
 init({ throttle: 100 })
 
-function route() {
-  const m = location.hash.match(/^#\/watch\/(\w+)/)
-  return m ? m[1] : ''
-}
-
 function App() {
-  const [watching, setWatching] = useState(route())
+  const [path, setPath] = useState(current())
+  const [needLogin, setNeedLogin] = useState(false)
+
   useEffect(() => {
-    const on = () => setWatching(route())
+    const on = () => setPath(current())
     window.addEventListener('hashchange', on)
-    return () => window.removeEventListener('hashchange', on)
+    // Jede Seite lädt über library(); ein 401 dort schaltet auf die Profilauswahl.
+    const onErr = (e: PromiseRejectionEvent) => {
+      if (e.reason instanceof LoginError) {
+        e.preventDefault()
+        if (e.reason.setup) location.href = '/setup'
+        else setNeedLogin(true)
+      }
+    }
+    window.addEventListener('unhandledrejection', onErr)
+    library().catch((e) => {
+      if (e instanceof LoginError) {
+        if (e.setup) location.href = '/setup'
+        else setNeedLogin(true)
+      }
+    })
+    return () => {
+      window.removeEventListener('hashchange', on)
+      window.removeEventListener('unhandledrejection', onErr)
+    }
   }, [])
-  if (watching) return <Player id={watching} onBack={() => (location.hash = '#/')} />
-  return <Library onOpen={(id) => (location.hash = '#/watch/' + id)} />
+
+  if (needLogin)
+    return (
+      <Login
+        onDone={() => {
+          setNeedLogin(false)
+          library(true)
+          go('/')
+        }}
+      />
+    )
+  switch (path[0]) {
+    case 'watch':
+      return <Player key={path[1]} id={path[1]} start={path[2] ? Number(path[2]) : undefined} onBack={back} />
+    case 'item':
+      return <Detail key={path[1]} id={path[1]} />
+    case 'series':
+      return <SeriesPage key={path[1]} name={path[1]} />
+    case 'pair':
+      return <PairConfirm />
+  }
+  return <Home />
 }
 
 render(<App />, document.getElementById('app')!)

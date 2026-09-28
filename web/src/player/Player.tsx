@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
 import type Hls from 'hls.js/light'
-import { api, isTV, profile } from '../profile'
+import { api, getToken, isTV, profile } from '../profile'
 import { probeSignal } from '../probe'
+import { BACK_KEYS, library, resumePos } from '../data'
 
-interface Subtitle { index: number; language?: string; title?: string; format: 'vtt' | 'pgs' }
+interface Subtitle { index: number; language?: string; title?: string; format: 'vtt' | 'pgs'; url?: string }
 interface Plan {
   method: string
   light: 'green' | 'yellow' | 'red'
@@ -12,6 +13,7 @@ interface Plan {
   title: string
   duration: number
   subtitles: Subtitle[] | null
+  prefs?: { audio?: string; subtitle?: string } // pro Serie gemerkt
 }
 
 const methodLabel: Record<string, string> = {
@@ -21,14 +23,32 @@ const methodLabel: Record<string, string> = {
   transcode: 'Wird transkodiert',
 }
 
-const BACK_KEYS = [461, 10009, 8, 27] // webOS, Tizen, Backspace, Escape
+function subUrl(id: string, s: Subtitle) {
+  return s.url || `/api/items/${id}/subs/${s.index}.${s.format === 'pgs' ? 'sup' : 'vtt'}`
+}
 
-export function Player({ id, onBack }: { id: string; onBack: () => void }) {
+// Fortschritt an den Server; ohne Route/Anmeldung bleibt die lokale Kopie.
+function saveProgress(id: string, pos: number, duration: number, subtitle: string, beacon = false) {
+  if (pos < 5) return
+  try {
+    localStorage.setItem('pos:' + id, String(Math.floor(pos)))
+  } catch {}
+  const body = JSON.stringify({ pos: Math.floor(pos), duration: Math.floor(duration), subtitle })
+  const url = `/api/items/${id}/progress`
+  // sendBeacon überlebt das Schließen der App, kann aber keinen Bearer-Header (TVs) – dann fetch mit keepalive.
+  if (beacon && navigator.sendBeacon && !getToken() && navigator.sendBeacon(url, body)) return
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (getToken()) headers.Authorization = 'Bearer ' + getToken()
+  fetch(url, { method: 'POST', headers, body, credentials: 'same-origin', keepalive: true }).catch(() => {})
+}
+
+export function Player({ id, start, onBack }: { id: string; start?: number; onBack: () => void }) {
   const video = useRef<HTMLVideoElement>(null)
   const [plan, setPlan] = useState<Plan | null>(null)
   const [error, setError] = useState('')
   const [sub, setSub] = useState(-1)
   const [osd, setOsd] = useState(true)
+  const subLangRef = useRef('off')
 
   // Plan holen und Quelle setzen.
   useEffect(() => {
@@ -36,11 +56,14 @@ export function Player({ id, onBack }: { id: string; onBack: () => void }) {
     let cancelled = false
     probeSignal.aborted = true // Geräte-Test gibt den (oft einzigen) Hardware-Decoder frei
     const v = video.current!
-    const resume = Number(localStorage.getItem('pos:' + id) || 0) // ponytail: lokal, bis Fortschritt serverseitig gespeichert wird
+    const resume = start !== undefined ? start : resumePos(id)
     api<Plan>(`/api/items/${id}/play`, profile)
       .then(async (p) => {
         if (cancelled) return
         setPlan(p)
+        const want = p.prefs && p.prefs.subtitle
+        const pre = want && want !== 'off' && (p.subtitles || []).filter((s) => s.language === want)[0]
+        if (pre) setSub(pre.index)
         const isHls = p.url.indexOf('.m3u8') > 0
         if (!isHls || profile.nativeHls) {
           // Direct Play und natives HLS: die Videopipeline des Geräts puffert selbst – auf TVs der stabilste Weg.
@@ -65,12 +88,17 @@ export function Player({ id, onBack }: { id: string; onBack: () => void }) {
         v.play().catch(() => {}) // Autoplay kann blockiert sein, dann startet der Nutzer selbst
       })
       .catch((e) => setError(String(e)))
-    const save = setInterval(() => {
-      if (v.currentTime > 5) localStorage.setItem('pos:' + id, String(Math.floor(v.currentTime)))
-    }, 5000)
+    const save = setInterval(() => !v.paused && saveProgress(id, v.currentTime, v.duration || 0, subLangRef.current), 10000)
+    const onHide = () => saveProgress(id, v.currentTime, v.duration || 0, subLangRef.current, true)
+    window.addEventListener('pagehide', onHide)
+    document.addEventListener('visibilitychange', onHide)
     return () => {
       cancelled = true
       clearInterval(save)
+      onHide()
+      window.removeEventListener('pagehide', onHide)
+      document.removeEventListener('visibilitychange', onHide)
+      library(true) // Fortschritt/„Weiterschauen“ auf der Startseite aktualisieren
       hls?.destroy()
       v.removeAttribute('src')
       v.load()
@@ -80,12 +108,13 @@ export function Player({ id, onBack }: { id: string; onBack: () => void }) {
   // PGS-Untertitel als Canvas-Overlay – niemals einbrennen (das erzwingt Transcoding und war ein Hauptgrund fürs Stocken).
   useEffect(() => {
     const s = plan?.subtitles?.find((x) => x.index === sub)
+    subLangRef.current = s ? s.language || 'und' : 'off'
     if (!s || s.format !== 'pgs') return
     let renderer: { dispose(): void } | undefined
     let cancelled = false
     Promise.all([import('libpgs'), import('libpgs/dist/libpgs.worker.js?url')]).then(([lib, worker]) => {
       if (cancelled) return
-      renderer = new lib.PgsRenderer({ workerUrl: worker.default, video: video.current!, subUrl: `/api/items/${id}/subs/${s.index}.sup` })
+      renderer = new lib.PgsRenderer({ workerUrl: worker.default, video: video.current!, subUrl: subUrl(id, s) })
     })
     return () => {
       cancelled = true
@@ -139,7 +168,7 @@ export function Player({ id, onBack }: { id: string; onBack: () => void }) {
     <div class="player">
       <video ref={video} controls={!isTV} playsInline crossOrigin="anonymous">
         {subs.filter((s) => s.format === 'vtt').map((s) => (
-          <track id={'sub' + s.index} kind="subtitles" srcLang={s.language} label={label(s)} src={`/api/items/${id}/subs/${s.index}.vtt`} />
+          <track id={'sub' + s.index} kind="subtitles" srcLang={s.language} label={label(s)} src={subUrl(id, s)} />
         ))}
       </video>
       <div class={'osd' + (osd ? ' visible' : '')}>
