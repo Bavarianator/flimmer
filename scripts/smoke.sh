@@ -38,6 +38,7 @@ declare -A want=(
   ["Tonwandel"]=transcode-audio
   ["Umwandeln"]=transcode
   ["Episode 1"]=direct-play
+  ["HDR"]=transcode
 )
 # Der Scan läuft im Hintergrund: warten, bis alle Titel da sind.
 for _ in $(seq 120); do
@@ -74,6 +75,11 @@ while IFS=$'\t' read -r id title; do
         dur=$(ffprobe -v error -select_streams v -show_entries packet=pts_time -of csv=p=0 "$work/seg.ts" | sort -n | sed -n '1p;$p' | paste -sd' ' | awk '{printf "%.2f", $2-$1+0.04}')
         python3 -c "import sys; d,w=map(float,sys.argv[1:]); sys.exit(abs(d-w)>0.6 or d>7)" "$dur" "${extinf[$s]}" &&
           ok "Segment $s: $codecs${dur}s (Playlist ${extinf[$s]}s)" || bad "Segment $s dauert ${dur}s, Playlist sagt ${extinf[$s]}s"
+        # HDR-Quelle im SDR-Profil: Segmente müssen tone-gemappt (BT.709, 8 bit) sein, sonst sieht man Grauschleier
+        if [[ $url == */h264*-sdr/* ]]; then
+          trc=$(ffprobe -v error -select_streams v -show_entries stream=color_transfer,pix_fmt -of csv=p=0 "$work/seg.ts" | head -1)
+          [ "$trc" = "yuv420p,bt709" ] && ok "Segment $s tone-gemappt ($trc)" || bad "Segment $s nicht tone-gemappt ($trc)"
+        fi
       else
         bad "Segment $s nicht abspielbar (${codecs:-leer})"
       fi

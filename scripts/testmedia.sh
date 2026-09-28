@@ -35,6 +35,11 @@ D=60 ff -i "$tmp/de.srt" -i "$tmp/en.ass" -map 0 -map 1 -map 2 -map 3 "${h264[@]
 ff "${h264[@]}" -c:a dca -strict -2 -ac 6 "$out/Tonwandel (2022).mkv"
 # Voll transkodieren: HEVC 10 bit
 ff -c:v libx265 -preset ultrafast -pix_fmt yuv420p10le -x265-params log-level=error:keyint=50 -c:a aac "$out/Umwandeln (2023).mkv"
+# Echtes HDR10 (SDR sauber nach PQ/BT.2020 umgerechnet, mit Mastering-Metadaten) – prüft Tone-Mapping
+ffmpeg -hide_banner -loglevel error -y -f lavfi -i testsrc2=size=640x360:rate=25:duration=10 -f lavfi -i sine=frequency=440:duration=10 \
+  -vf "format=yuv420p,setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv,zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt2020:t=smpte2084:m=bt2020nc:r=tv,format=yuv420p10le" \
+  -c:v libx265 -preset ultrafast -x265-params "keyint=50:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc:hdr10=1:master-display=G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1):max-cll=1000,400:log-level=error" \
+  -c:a aac "$out/HDR (2024).mkv"
 # Episode, Serienname kommt aus dem Ordner
 ff "${h264[@]}" -c:a aac "$out/Testserie/Staffel 1/S01E01.mp4"
 
