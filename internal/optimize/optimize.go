@@ -220,9 +220,14 @@ func (o *Optimizer) pending(ctx context.Context) ([]Item, error) {
 	return todo, nil
 }
 
-// isHDR: HDR-Quellen (PQ/HLG) werden übersprungen, bis transcode ein Tone-Mapping-Rezept hat –
+// isHDR: HDR-Quellen (HDR10/HDR10+/HLG/Dolby Vision) werden übersprungen, bis transcode ein Tone-Mapping-Rezept hat –
 // sonst entstünden blasse SDR-Versionen, die als grün gälten. Im Zweifel (ffprobe scheitert) auch überspringen.
 func (o *Optimizer) isHDR(ctx context.Context, it Item) bool {
+	if it.Media != nil { // HDR-Feld von probe; fängt auch Dolby Vision Profil 5 ohne Transfer-Tag
+		if v := it.Media.First("video"); v != nil && v.HDR != "" {
+			return true
+		}
+	}
 	o.mu.Lock()
 	v, ok := o.hdr[it.ID]
 	o.mu.Unlock()

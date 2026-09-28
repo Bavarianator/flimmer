@@ -150,13 +150,18 @@ func TestShouldStop(t *testing.T) {
 }
 
 func TestSkipHDR(t *testing.T) {
-	fakeTransfer(t, map[string]string{"pq.mkv": "smpte2084", "hlg.mkv": "arib-std-b67", "sdr.mkv": "bt709", "leer.mkv": ""})
 	lib := t.TempDir()
 	var items []Item
 	for _, n := range []string{"pq.mkv", "hlg.mkv", "sdr.mkv", "leer.mkv", "kaputt.mkv"} {
 		os.WriteFile(filepath.Join(lib, n), nil, 0o644)
 		items = append(items, Item{ID: n, Path: filepath.Join(lib, n), Media: media("hevc")})
 	}
+	dv := media("hevc")
+	dv.Streams[0].HDR = "dv" // Profil 5: kein Transfer-Tag, aber probe erkennt es
+	os.WriteFile(filepath.Join(lib, "dv5.mkv"), nil, 0o644)
+	items = append(items, Item{ID: "dv5.mkv", Path: filepath.Join(lib, "dv5.mkv"), Media: dv})
+	trc := map[string]string{"pq.mkv": "smpte2084", "hlg.mkv": "arib-std-b67", "sdr.mkv": "bt709", "leer.mkv": "", "dv5.mkv": ""}
+	fakeTransfer(t, trc)
 	o := New(Options{Dir: t.TempDir(), MinFree: 1, Items: func(context.Context) ([]Item, error) { return items, nil },
 		Profiles: func(context.Context) []playback.Profile { return []playback.Profile{tv} }})
 	todo, _ := o.pending(context.Background())
@@ -164,7 +169,7 @@ func TestSkipHDR(t *testing.T) {
 	for _, it := range todo {
 		ids = append(ids, it.ID)
 	}
-	if !slices.Equal(ids, []string{"sdr.mkv", "leer.mkv"}) || o.Status().SkipHDR != 3 {
+	if !slices.Equal(ids, []string{"sdr.mkv", "leer.mkv"}) || o.Status().SkipHDR != 4 {
 		t.Fatalf("pending = %v, SkipHDR = %d", ids, o.Status().SkipHDR)
 	}
 }
