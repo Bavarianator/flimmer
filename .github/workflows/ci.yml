@@ -71,7 +71,8 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           GOARM: ${{ matrix.goarm }}
-        run: go build -trimpath -ldflags "-s -w" -o dist/flimmer-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goarm && format('v{0}', matrix.goarm) || '' }}${{ matrix.ext }} ./cmd/server
+          TMDB_KEY: ${{ secrets.TMDB_KEY }} # Projekt-Key, damit Metadaten ohne eigenen Key funktionieren
+        run: go build -trimpath -ldflags "-s -w -X github.com/flimmer-media/flimmer/internal/meta.DefaultTMDBKey=$TMDB_KEY" -o dist/flimmer-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goarm && format('v{0}', matrix.goarm) || '' }}${{ matrix.ext }} ./cmd/server
       - uses: actions/upload-artifact@v4
         with:
           name: flimmer-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goarm && format('v{0}', matrix.goarm) || '' }}
@@ -101,5 +102,6 @@ jobs:
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           push: ${{ github.event_name == 'push' }}
           tags: ghcr.io/${{ github.repository }}:latest
+          build-args: TMDB_KEY=${{ secrets.TMDB_KEY }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
