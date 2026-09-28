@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Flimmer – zwei Richtungen</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..700;1,8..60,400&display=swap">
+<style>
+/* Beide Richtungen halten Chromium 53 ein: Flexbox + margin, kein gap, kein Grid, kein aspect-ratio, kein Blur. */
+html,body{margin:0;background:#000}
+.sec{position:relative;width:1920px;overflow:hidden}
+.cover{height:600px}
+.start{height:1080px}
+canvas{display:block}
+.abs{position:absolute}
+.row{display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center}
+.tile{position:relative;overflow:hidden;display:inline-block;vertical-align:top}
+.tile canvas{position:absolute;left:0;top:0}
+
+/* ======================= Richtung A: Kinemathek ======================= */
+.A{--saal:#11100e;--f1:#1a1916;--f2:#24221e;--linie:#34312b;--text:#ece7dd;--t2:#a8a195;--t3:#817a6f;--gruen:#8fae86;--gelb:#cfae5c;--rot:#cf7c6d;
+   background:var(--saal);color:var(--text);font-family:"IBM Plex Sans",system-ui,sans-serif}
+.A .serif{font-family:"Source Serif 4",Georgia,serif;font-optical-sizing:auto}
+.A .mono{font-family:"IBM Plex Mono",monospace}
+.A .nav span{font-size:24px;font-weight:500;color:var(--t2);margin-right:44px;letter-spacing:.2px}
+.A .nav span.an{color:var(--text)}
+.A .nav span.an:after{content:'';display:block;height:2px;background:var(--text);margin-top:8px}
+.A .meta{font-size:24px;color:var(--t2)}
+.A .meta span{margin-right:28px}
+.A .btn{display:inline-block;height:64px;line-height:64px;padding:0 32px;border-radius:2px;font-size:24px;font-weight:600;margin-right:16px}
+.A .btn.prim{background:var(--text);color:var(--saal)}
+.A .btn.sek{box-shadow:inset 0 0 0 1px var(--linie);color:var(--text)}
+.A h2{font-size:26px;font-weight:600;margin:0 0 20px;letter-spacing:.3px}
+.A .card{display:inline-block;vertical-align:top;margin-right:28px;width:416px}
+.A .card .tile{width:416px;height:234px;border-radius:2px}
+.A .card .bar{height:2px;background:var(--linie);margin-top:12px}
+.A .card .bar i{display:block;height:2px;background:var(--text)}
+.A .card b{display:block;font-size:26px;font-weight:500;margin-top:14px}
+.A .card small{display:block;font-size:24px;color:var(--t2);margin-top:4px}
+.A .card.fokus .tile{box-shadow:0 0 0 3px var(--saal),0 0 0 6px var(--text);-webkit-transform:scale(1.04);transform:scale(1.04)}
+.A .poster{display:inline-block;vertical-align:top;margin-right:28px;width:220px}
+.A .poster .tile{width:220px;height:330px;border-radius:2px}
+.A .dot{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:10px;vertical-align:1px}
+.A .dot.g{background:var(--gruen)} .A .dot.y{background:linear-gradient(90deg,var(--gelb) 50%,transparent 50%);box-shadow:inset 0 0 0 2px var(--gelb)} .A .dot.r{box-shadow:inset 0 0 0 3px var(--rot)}
+.A .platz{position:absolute;left:0;top:0;right:0;bottom:0;padding:22px 20px;background:#3b3a33}
+.A .platz .k{font-size:15px;letter-spacing:2.5px;text-transform:uppercase;color:rgba(236,231,221,.72);font-weight:500}
+.A .platz .t{font-family:"Source Serif 4",serif;font-size:30px;line-height:34px;margin-top:10px;color:#ece7dd}
+.A .platz .l{position:absolute;left:20px;right:20px;bottom:22px;border-top:1px solid rgba(236,231,221,.35);padding-top:10px;font-size:15px;letter-spacing:1px;color:rgba(236,231,221,.72)}
+
+/* ======================= Richtung B: Plakat ======================= */
+.B{--saal:#0c0c0c;--f1:#161616;--f2:#1f1f1f;--linie:#2e2e2e;--text:#f3f2ee;--t2:#9e9d98;--t3:#7a7975;--gruen:#9bb592;--gelb:#d4bc6a;--rot:#d98b7c;
+   background:var(--saal);color:var(--text);font-family:"Archivo",system-ui,sans-serif;font-variation-settings:"wdth" 100}
+.B .cond{font-family:"Archivo",sans-serif;font-stretch:62%;font-variation-settings:"wdth" 62;font-weight:800;text-transform:uppercase;letter-spacing:.5px}
+.B .nav span{font-size:24px;font-weight:600;color:var(--t2);margin-right:40px;text-transform:uppercase;letter-spacing:1.5px}
+.B .nav span.an{color:var(--text)}
+.B .meta{font-size:24px;color:var(--t2);font-feature-settings:"tnum"}
+.B .meta span{margin-right:12px}
+.B .meta .sep{color:var(--t3)}
+.B .btn{display:inline-block;height:64px;line-height:64px;padding:0 30px;border-radius:0;font-size:22px;font-weight:700;margin-right:12px;text-transform:uppercase;letter-spacing:1.5px}
+.B .btn.prim{background:var(--text);color:var(--saal)}
+.B .btn.sek{box-shadow:inset 0 0 0 2px var(--t3);color:var(--text)}
+.B h2{font-size:24px;font-weight:700;margin:0 0 20px;text-transform:uppercase;letter-spacing:2px;color:var(--t2)}
+.B .card{display:inline-block;vertical-align:top;margin-right:20px;width:432px}
+.B .card .tile{width:432px;height:243px}
+.B .card .bar{position:absolute;left:0;right:0;bottom:0;height:4px;background:rgba(243,242,238,.25)}
+.B .card .bar i{display:block;height:4px;background:var(--text)}
+.B .card b{display:block;font-size:26px;font-weight:600;margin-top:14px}
+.B .card small{display:block;font-size:24px;color:var(--t2);margin-top:2px;font-feature-settings:"tnum"}
+.B .card.fokus .tile{box-shadow:0 0 0 3px var(--text);-webkit-transform:scale(1.05);transform:scale(1.05)}
+.B .card.fokus b{color:var(--text)}
+.B .poster{display:inline-block;vertical-align:top;margin-right:20px;width:216px}
+.B .poster .tile{width:216px;height:324px}
+.B .sq{display:inline-block;width:10px;height:10px;margin-right:10px;vertical-align:2px}
+.B .sq.g{background:var(--gruen)} .B .sq.y{background:linear-gradient(90deg,var(--gelb) 50%,transparent 50%);box-shadow:inset 0 0 0 2px var(--gelb)} .B .sq.r{box-shadow:inset 0 0 0 2px var(--rot)}
+.B .platz{position:absolute;left:0;top:0;right:0;bottom:0;padding:18px;background:#2f3437}
+.B .platz .t{font-family:"Archivo",sans-serif;font-stretch:62%;font-variation-settings:"wdth" 62;font-weight:800;text-transform:uppercase;font-size:44px;line-height:40px;color:#f3f2ee}
+.B .platz .j{position:absolute;left:18px;bottom:16px;font-size:16px;font-weight:600;letter-spacing:2px;color:rgba(243,242,238,.75)}
+.B .platz .n{position:absolute;right:18px;bottom:16px;font-size:16px;font-weight:600;letter-spacing:2px;color:rgba(243,242,238,.75)}
+.lbl{position:absolute;right:96px;top:20px;font:500 14px "IBM Plex Mono",monospace;color:rgba(255,255,255,.45);letter-spacing:1px}
+</style>
+</head>
+<body>
+
+<!-- ============ A · COVER ============ -->
+<section class="sec cover A" id="a-cover">
+  <div class="abs" style="left:96px;top:84px">
+    <div class="mono" style="font-size:16px;letter-spacing:3px;color:var(--t3)">RICHTUNG A · KINEMATHEK</div>
+  </div>
+  <div class="abs" style="left:96px;bottom:84px;width:820px">
+    <!-- Wortmarke A: Serife, das i trägt statt des Punkts einen kleinen Bildstrich (Filmsteg) -->
+    <div class="serif" style="font-size:176px;line-height:.9;font-weight:600;letter-spacing:-3px;position:relative;display:inline-block">Flımmer<span style="position:absolute;left:163px;top:22px;width:22px;height:13px;background:var(--text)"></span></div>
+    <p style="font-size:22px;line-height:32px;color:var(--t2);margin:28px 0 0;max-width:640px">Dein Kino zu Hause. Warmes Schwarz, Papierweiß, und die Filme bringen die Farbe mit.</p>
+  </div>
+  <!-- Palette als ruhige Flächen, rechts -->
+  <div class="abs" style="left:1040px;top:84px;right:96px;bottom:84px">
+    <div class="row" style="height:100%;-webkit-align-items:stretch;align-items:stretch">
+      <div style="-webkit-flex:3;flex:3;background:#ece7dd;margin-right:12px;position:relative"><span class="mono abs" style="left:16px;bottom:14px;font-size:14px;color:#11100e">Papier #ece7dd</span></div>
+      <div style="-webkit-flex:2;flex:2;background:#24221e;margin-right:12px;position:relative;box-shadow:inset 0 0 0 1px #34312b"><span class="mono abs" style="left:16px;bottom:14px;font-size:14px;color:#a8a195">Fläche #24221e</span></div>
+      <div style="-webkit-flex:2;flex:2;position:relative"><canvas data-scene="sea" width="330" height="432" style="width:100%;height:100%"></canvas><span class="mono abs" style="left:16px;bottom:14px;font-size:14px;color:rgba(236,231,221,.8)">Farbe = der Film</span></div>
+    </div>
+    <div class="abs" style="left:0;top:-44px;font-size:15px;color:var(--t3)" ><span class="dot g"></span>direkt <span class="dot y" style="margin-left:24px"></span>teilweise <span class="dot r" style="margin-left:24px"></span>knapp</div>
+  </div>
+</section>
+
+<!-- ============ A · START TV ============ -->
+<section class="sec start A" id="a-start">
+  <div class="abs" style="left:0;top:0;right:0;height:720px"><canvas data-scene="sea" width="1920" height="720"></canvas></div>
+  <div class="abs" style="left:0;top:0;right:0;height:720px;background:linear-gradient(90deg,rgba(17,16,14,.92) 0%,rgba(17,16,14,.6) 40%,rgba(17,16,14,0) 70%),linear-gradient(0deg,#11100e 0%,rgba(17,16,14,0) 40%)"></div>
+  <div class="abs row" style="left:96px;right:96px;top:54px">
+    <div class="serif" style="font-size:40px;font-weight:600;letter-spacing:-.5px;margin-right:72px;position:relative">Flımmer<span style="position:absolute;left:34px;top:5px;width:6px;height:4px;background:var(--text)"></span></div>
+    <div class="nav row"><span class="an">Start</span><span>Filme</span><span>Serien</span><span>Suche</span></div>
+    <div style="margin-left:auto;font-size:24px;color:var(--t2)">Chris</div>
+  </div>
+  <div class="abs" style="left:96px;top:190px;width:900px">
+    <div class="mono" style="font-size:20px;letter-spacing:3px;color:var(--t2);margin-bottom:18px">WEITERSCHAUEN</div>
+    <div class="serif" style="font-size:96px;line-height:.98;font-weight:600;letter-spacing:-1.5px">Das Boot</div>
+    <div class="meta" style="margin:22px 0 22px"><span>1981</span><span>2 Std. 29 Min.</span><span>FSK 12</span><span><span class="dot g"></span>läuft direkt</span></div>
+    <p style="font-size:26px;line-height:38px;color:#d6d0c4;margin:0 0 34px;max-width:780px">Herbst 1941: Ein deutsches U-Boot läuft von La Rochelle zur Feindfahrt in den Atlantik aus.</p>
+    <span class="btn prim">Fortsetzen · 1:12:04</span><span class="btn sek">Details</span>
+  </div>
+  <div class="abs" style="left:96px;top:650px;right:0;white-space:nowrap">
+    <h2>Weiterschauen</h2>
+    <div class="card fokus"><div class="tile"><canvas data-scene="sea" width="416" height="234"></canvas></div><div class="bar"><i style="width:49%"></i></div><b>Das Boot</b><small>Noch 1 Std. 17 Min.</small></div><div class="card"><div class="tile"><canvas data-scene="forest" width="416" height="234"></canvas></div><div class="bar"><i style="width:30%"></i></div><b>Dark</b><small>S1 E2 · Lügen</small></div><div class="card"><div class="tile"><canvas data-scene="city" width="416" height="234"></canvas></div><div class="bar"><i style="width:40%"></i></div><b>Metropolis</b><small><span class="dot y"></span>Noch 1 Std. 32 Min.</small></div><div class="card"><div class="tile"><div class="platz"><div class="k">Film · 1922</div><div class="t">Nosferatu</div><div class="l">F. W. Murnau</div></div></div><div class="bar"><i style="width:12%"></i></div><b>Nosferatu</b><small><span class="dot r"></span>Noch 1 Std. 22 Min.</small></div>
+  </div>
+  <div class="lbl">Richtung A · TV 1920 · Standbilder sind Platzhalter</div>
+</section>
+
+<!-- ============ B · COVER ============ -->
+<section class="sec cover B" id="b-cover">
+  <div class="abs" style="left:96px;top:84px"><div style="font-size:16px;font-weight:700;letter-spacing:3px;color:var(--t3)">RICHTUNG B · PLAKAT</div></div>
+  <div class="abs" style="left:96px;bottom:72px;width:900px">
+    <!-- Wortmarke B: schmale Versalien, das I ist durch einen Bildstrich geteilt (ein Filmsteg) -->
+    <div class="cond" style="font-size:230px;line-height:.82;letter-spacing:2px;position:relative;display:inline-block">FLIMMER<span style="position:absolute;left:0;right:0;top:92px;height:10px;background:var(--saal)"></span></div>
+    <p style="font-size:22px;line-height:32px;color:var(--t2);margin:26px 0 0;max-width:640px">Dein Kino zu Hause. Schwarz, Weiß und große Schrift wie auf einem Aushang – die Farbe kommt nur aus dem Film.</p>
+  </div>
+  <div class="abs" style="left:1080px;top:84px;right:96px;bottom:72px;white-space:nowrap;font-size:0">
+    <div class="tile" style="width:240px;height:444px;margin-right:12px"><canvas data-scene="portrait" width="240" height="444"></canvas></div><div class="tile" style="width:240px;height:444px;margin-right:12px;background:#f3f2ee"><div class="cond abs" style="left:18px;top:14px;font-size:64px;line-height:58px;color:#0c0c0c">SCHWARZ<br>WEISS<br>BILD</div><div class="abs" style="left:18px;bottom:14px;font:600 14px Archivo;letter-spacing:2px;color:#0c0c0c">#F3F2EE · #0C0C0C</div></div><div class="tile" style="width:240px;height:444px;background:#1f1f1f"><div class="abs" style="left:18px;bottom:14px;font:600 14px Archivo;letter-spacing:2px;color:#9e9d98">#1F1F1F · #2E2E2E</div><div class="abs" style="left:18px;top:18px;font:600 15px Archivo;color:#9e9d98;letter-spacing:1px"><span class="sq g"></span>DIREKT<br><br><span class="sq y"></span>TEILWEISE<br><br><span class="sq r"></span>KNAPP</div></div>
+  </div>
+</section>
+
+<!-- ============ B · START TV ============ -->
+<section class="sec start B" id="b-start">
+  <div class="abs" style="left:0;top:0;right:0;height:760px"><canvas data-scene="forest" width="1920" height="760"></canvas></div>
+  <div class="abs" style="left:0;top:0;right:0;height:760px;background:linear-gradient(90deg,rgba(12,12,12,.9) 0%,rgba(12,12,12,.45) 45%,rgba(12,12,12,0) 70%),linear-gradient(0deg,#0c0c0c 0%,rgba(12,12,12,0) 45%)"></div>
+  <div class="abs row" style="left:96px;right:96px;top:54px">
+    <div class="cond" style="font-size:48px;line-height:1;margin-right:64px;position:relative">FLIMMER<span style="position:absolute;left:0;right:0;top:19px;height:3px;background:var(--saal)"></span></div>
+    <div class="nav row"><span class="an">Start</span><span>Filme</span><span>Serien</span><span>Suche</span></div>
+    <div style="margin-left:auto;font-size:22px;font-weight:600;letter-spacing:1.5px;color:var(--t2)">CHRIS</div>
+  </div>
+  <div class="abs" style="left:96px;top:190px;width:1000px">
+    <div style="font-size:20px;font-weight:700;letter-spacing:3px;color:var(--t2);margin-bottom:10px">WEITERSCHAUEN · S1 E3</div>
+    <div class="cond" style="font-size:180px;line-height:.86">DARK</div>
+    <div class="meta" style="margin:18px 0 20px"><span>Vergangenheit und Gegenwart</span><span class="sep">/</span><span>47 Min.</span><span class="sep">/</span><span>FSK 16</span><span class="sep">/</span><span><span class="sq g"></span>direkt</span></div>
+    <p style="font-size:26px;line-height:38px;color:#d9d8d3;margin:0 0 32px;max-width:760px">Ein Junge verschwindet, und die Kleinstadt Winden gerät aus den Fugen.</p>
+    <span class="btn prim">Fortsetzen</span><span class="btn sek">Alle Folgen</span>
+  </div>
+  <div class="abs" style="left:96px;top:680px;right:0;white-space:nowrap">
+    <h2>Weiterschauen</h2>
+    <div class="card fokus"><div class="tile"><canvas data-scene="forest" width="432" height="243"></canvas><div class="bar"><i style="width:42%"></i></div></div><b>Dark</b><small>S1 E3 · noch 34 Min.</small></div><div class="card"><div class="tile"><canvas data-scene="sea" width="432" height="243"></canvas><div class="bar"><i style="width:49%"></i></div></div><b>Das Boot</b><small>noch 1:17 Std.</small></div><div class="card"><div class="tile"><div class="platz"><div class="t">Lola<br>rennt</div><div class="j">1998</div><div class="n">81 MIN.</div></div><div class="bar"><i style="width:20%"></i></div></div><b>Lola rennt</b><small><span class="sq y"></span>noch 64 Min.</small></div><div class="card"><div class="tile"><canvas data-scene="city" width="432" height="243"></canvas><div class="bar"><i style="width:40%"></i></div></div><b>Metropolis</b><small>noch 1:32 Std.</small></div>
+  </div>
+  <div class="lbl" style="font-family:Archivo">Richtung B · TV 1920 · Standbilder sind Platzhalter</div>
+</section>
+
+<script>
+// Platzhalter-„Standbilder“: einfache Szenen mit Filmkorn, damit die Seiten wie mit echtem Inhalt wirken.
+function rnd(s){return function(){s=(s*16807)%2147483647;return (s-1)/2147483646}}
+var P={sea:['#4a5a5e','#23302f','#0e1413','#c9c2ae'],forest:['#2a3a36','#141d1b','#07090a','#8fa39a'],city:['#6e5a3c','#3a2e1e','#140f09','#e0c38e'],portrait:['#8a3b2a','#3c1a13','#120807','#e8b89a']};
+[].forEach.call(document.querySelectorAll('canvas[data-scene]'),function(c,idx){
+  var k=c.getAttribute('data-scene'),p=P[k],x=c.getContext('2d'),w=c.width,h=c.height,r=rnd(idx*97+13);
+  var g=x.createLinearGradient(0,0,0,h);g.addColorStop(0,p[0]);g.addColorStop(.55,p[1]);g.addColorStop(1,p[2]);x.fillStyle=g;x.fillRect(0,0,w,h);
+  if(k==='sea'){x.fillStyle=p[3];x.globalAlpha=.18;x.fillRect(0,h*.46,w,h*.02);x.globalAlpha=1;x.fillStyle=p[2];x.beginPath();x.moveTo(w*.45,h*.62);x.lineTo(w*.9,h*.6);x.lineTo(w*.95,h*.66);x.lineTo(w*.42,h*.68);x.fill();x.fillRect(w*.66,h*.5,w*.05,h*.12);}
+  if(k==='forest'){for(var i=0;i<26;i++){var tx=r()*w,tw=w*(.006+r()*.02);x.globalAlpha=.25+r()*.6;x.fillStyle=p[2];x.fillRect(tx,0,tw,h);}x.globalAlpha=.25;x.fillStyle=p[3];x.fillRect(0,h*.55,w,h*.08);x.globalAlpha=1;}
+  if(k==='city'){x.fillStyle=p[3];x.globalAlpha=.35;x.beginPath();x.arc(w*.7,h*.3,h*.14,0,7);x.fill();x.globalAlpha=1;for(var j=0;j<18;j++){var bx=r()*w,bw=w*(.03+r()*.07),bh=h*(.25+r()*.55);x.fillStyle=p[2];x.globalAlpha=.6+r()*.4;x.fillRect(bx,h-bh,bw,bh);}x.globalAlpha=1;}
+  if(k==='portrait'){x.fillStyle=p[2];x.beginPath();x.arc(w*.52,h*.42,w*.2,0,7);x.fill();x.beginPath();x.ellipse(w*.52,h*.95,w*.42,h*.3,0,0,7);x.fill();x.fillStyle=p[3];x.globalAlpha=.25;x.fillRect(w*.72,0,w*.06,h);x.globalAlpha=1;}
+  var v=x.createRadialGradient(w/2,h/2,Math.min(w,h)*.2,w/2,h/2,Math.max(w,h)*.75);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,.55)');x.fillStyle=v;x.fillRect(0,0,w,h);
+  var d=x.getImageData(0,0,w,h),a=d.data;for(var q=0;q<a.length;q+=4){var n=(r()-.5)*26;a[q]+=n;a[q+1]+=n;a[q+2]+=n;}x.putImageData(d,0,0);
+});
+</script>
+</body>
+</html>
