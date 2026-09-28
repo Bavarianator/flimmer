@@ -15,6 +15,7 @@ import { usePausierteNavigation } from '../lib/focus'
 import { folge, t, uhr } from '../lib/i18n'
 import { back, go, pfad, useZurueck } from '../lib/router'
 import { Icon } from '../components/Icon'
+import { AmpelPunkt } from '../components/Karte'
 import { startUntertitel, tonName, untertitelName, untertitelUrl, type Plan } from './spuren'
 import { setVorlieben, vorlieben } from './vorlieben'
 import { useGleichlauf, type Gemeinsam } from './gemeinsam'
@@ -466,8 +467,8 @@ export function Player(p: {
           <h1 class="pl-titel-text eine-zeile">{kopf}</h1>
           {unter && <p class="pl-unter eine-zeile">{unter}</p>}
           {plan && (
-            <p class="pl-methode ampel-zeile">
-              <span class={'ampel ampel-' + plan.light} />
+            <p class="pl-methode fl-ampel-zeile">
+              <AmpelPunkt stufe={plan.light} />
               <span>
                 {t('player.methode.' + plan.method)}
                 {plan.optimized ? ' · ' + t('player.optimiert') : ''}

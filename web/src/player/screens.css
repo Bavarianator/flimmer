@@ -59,7 +59,7 @@ html.hd .koppeln-seite { padding-top: 72px; }
 .koppeln-karte { width: 540px; max-width: 100%; margin: 0 auto; padding: 40px; background: var(--flaeche-1); border-radius: var(--radius-s); }
 html.hd .koppeln-karte { width: auto; padding: 0; background: none; }
 .koppeln-absatz { margin: var(--abstand-2) 0 var(--abstand-5); }
-.koppeln-eingabe { width: 100%; height: 72px; font: 500 40px/72px var(--schrift-mono); letter-spacing: 8px; text-align: center; }
+.koppeln-eingabe { width: 100%; height: 72px; font: 500 40px/72px var(--font-mono); letter-spacing: 8px; text-align: center; }
 .toast-inline { margin-top: var(--abstand-5); padding: var(--abstand-3) var(--abstand-4); background: var(--flaeche-2); border-radius: var(--radius-s); }
 .toast-inline .icon { margin-right: var(--abstand-3); color: var(--ampel-gruen); }
 .koppeln-tv-inhalt { padding-top: 120px; text-align: center; }
@@ -124,8 +124,8 @@ html.tv .einst-feld { width: 360px; }
 .einst-link { word-break: break-all; margin: 4px 0; }
 .einst-einladung { margin-top: var(--abstand-4); }
 .einladung-qr { width: 180px; height: 180px; background: #ece7dd; padding: 8px; margin-right: var(--abstand-5); -webkit-flex: 0 0 auto; flex: 0 0 auto; }
-.wert { font-family: var(--schrift-mono); }
-.protokoll { font: 400 13px/18px var(--schrift-mono); color: var(--text-2); background: var(--flaeche-1); padding: var(--abstand-4); border-radius: var(--radius-s); max-height: 420px; overflow: auto; white-space: pre-wrap; word-break: break-all; margin: 0 0 12px; }
+.wert { font-family: var(--font-mono); }
+.protokoll { font: 400 13px/18px var(--font-mono); color: var(--text-2); background: var(--flaeche-1); padding: var(--abstand-4); border-radius: var(--radius-s); max-height: 420px; overflow: auto; white-space: pre-wrap; word-break: break-all; margin: 0 0 12px; }
 html.tv .protokoll { font-size: 24px; line-height: 32px; }
 .einst-toast { position: fixed; left: 50%; bottom: var(--abstand-7); z-index: 20; -webkit-transform: translateX(-50%); transform: translateX(-50%); box-shadow: var(--schatten-overlay); }
 html.hd .einst-toast { bottom: 96px; }

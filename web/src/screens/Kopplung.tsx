@@ -147,7 +147,7 @@ export function KopplungTV({ onDone }: { onDone: () => void }) {
           <ol class="koppeln-schritte">
             {[1, 2, 3].map((n) => (
               <li key={n} class="zeile t-text">
-                <span class="koppeln-nr t-zahl">{n}</span>
+                <span class="koppeln-nr fl-zahl">{n}</span>
                 <span>{t('koppeln.tv.' + n)}</span>
               </li>
             ))}

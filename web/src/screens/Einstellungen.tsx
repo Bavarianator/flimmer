@@ -11,6 +11,7 @@ import { ergaenze, setSprache, sprache, t } from '../lib/i18n'
 import { go, teile } from '../lib/router'
 import { Button, Chip } from '../components/Button'
 import { Icon } from '../components/Icon'
+import { AmpelPunkt } from '../components/Karte'
 import { Seite } from '../components/Seite'
 import { Fehler } from '../components/Zustand'
 import { loadProbe } from '../probe'
@@ -1179,7 +1180,7 @@ function Diagnose() {
             icon="abspielen"
             titel={'„' + a.title + '“ · ' + a.user + ' · ' + a.device}
             unter={methode(a.method) + (a.reasons && a.reasons.length ? ': ' + a.reasons.join(' · ') : '')}
-            rechts={<span class={'ampel ampel-' + a.light} role="img" aria-label={t('ampel.' + a.light)} />}
+            rechts={<span class="wert" title={t('ampel.' + a.light)}><AmpelPunkt stufe={a.light} /></span>}
           />
         ))}
       </div>
