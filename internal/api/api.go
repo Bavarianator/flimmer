@@ -144,7 +144,8 @@ func (s *Server) job(w http.ResponseWriter, r *http.Request) (transcode.Job, boo
 	}
 	audio, err := strconv.Atoi(r.PathValue("audio"))
 	acodec, vcodec := r.PathValue("acodec"), r.PathValue("vcodec")
-	valid := err == nil && (acodec == "copy" || acodec == "aac" || acodec == "eac3") && (vcodec == "copy" || vcodec == "h264")
+	vc, height, vok := transcode.ParseVideo(vcodec)
+	valid := err == nil && (acodec == "copy" || acodec == "aac" || acodec == "eac3") && vok
 	if !valid {
 		http.Error(w, "ungültige Parameter", http.StatusBadRequest)
 		return transcode.Job{}, false
@@ -164,9 +165,10 @@ func (s *Server) job(w http.ResponseWriter, r *http.Request) (transcode.Job, boo
 		Segments:   transcode.Segments(kf, it.Media.Duration),
 		AudioIndex: audio,
 		AudioCodec: acodec,
-		VideoCodec: vcodec,
+		VideoCodec: vc,
+		Height:     height,
 	}
-	if vcodec == "h264" {
+	if vc == "h264" {
 		hw := s.hw()
 		job.InputArgs, job.Encoder = hw.Input, hw.Encode
 	}

@@ -68,10 +68,10 @@ type Installer struct {
 	Dir    string // Ziel, z. B. <data>/bin
 	OnDone func()
 
-	mu           sync.Mutex
-	running      bool
-	read, total  int64
-	err          string
+	mu          sync.Mutex
+	running     bool
+	read, total int64
+	err         string
 }
 
 type Status struct {
