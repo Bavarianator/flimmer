@@ -11,7 +11,9 @@ trap 'cd "$repo"; git worktree remove --force "$work/src" 2>/dev/null; rm -rf "$
 git -C "$repo" worktree add -q --detach "$work/src" "${REF:-HEAD}"
 cd "$work/src"
 
-(cd web && npm ci --silent --no-audit --no-fund && npm run build --silent)
+# Vorhandene node_modules des Haupt-Repos nutzen (kein Netz nötig), sonst npm ci.
+if [ -d "$repo/web/node_modules" ]; then ln -s "$repo/web/node_modules" web/node_modules; else (cd web && npm ci --silent --no-audit --no-fund); fi
+(cd web && npm run build --silent)
 export VERSION
 for t in "linux amd64" "linux arm64" "linux arm 7" "windows amd64" "darwin arm64"; do
   scripts/package.sh $t

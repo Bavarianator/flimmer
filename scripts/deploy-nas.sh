@@ -31,7 +31,9 @@ trap 'cd "$repo"; git worktree remove --force "$work/src" 2>/dev/null; rm -rf "$
 git -C "$repo" worktree add -q --detach "$work/src" "${REF:-HEAD}"
 version=$(git -C "$work/src" describe --tags --always)
 cd "$work/src"
-(cd web && npm ci --silent --no-audit --no-fund && npm run build --silent)
+# Vorhandene node_modules des Haupt-Repos nutzen (kein Netz nötig), sonst npm ci.
+if [ -d "$repo/web/node_modules" ]; then ln -s "$repo/web/node_modules" web/node_modules; else (cd web && npm ci --silent --no-audit --no-fund); fi
+(cd web && npm run build --silent)
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o "$work/flimmer" \
   -ldflags "-s -w -X github.com/flimmer-media/flimmer/internal/update.Version=$version" ./cmd/server
 
