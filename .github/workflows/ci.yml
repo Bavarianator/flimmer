@@ -81,6 +81,13 @@ jobs:
             -X github.com/flimmer-media/flimmer/internal/meta.DefaultTMDBKey=$TMDB_KEY \
             -X github.com/flimmer-media/flimmer/internal/update.Version=$VERSION" ./cmd/server
           cp LICENSE pkg/$name/
+          # Rendezvous-Dienst nur für Linux-Server als eigenes Asset
+          if [ "$GOOS" = linux ]; then
+            relay=flimmer-relay-$VERSION-$GOOS-$GOARCH${GOARM:+v$GOARM}
+            go build -trimpath -o "$relay/flimmer-relay" -ldflags "-s -w" ./cmd/relay
+            cp LICENSE deploy/relay.service "$relay/"
+            tar czf dist/$relay.tar.gz $relay
+          fi
           if [ "$GOOS" = windows ]; then
             cp deploy/LIESMICH.txt pkg/$name/
             (cd pkg && zip -qr ../dist/$name.zip $name)

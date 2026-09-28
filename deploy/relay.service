@@ -1,0 +1,34 @@
+# Installation:
+#   sudo install -m755 flimmer-relay /usr/local/bin/flimmer-relay
+#   sudo cp relay.service /etc/systemd/system/flimmer-relay.service && sudo systemctl daemon-reload
+#   sudo systemctl enable --now flimmer-relay
+# Hinter einem Reverse-Proxy: -trusted-proxy <Proxy-IP> an ExecStart anhängen (sonst wird X-Forwarded-For ignoriert).
+
+[Unit]
+Description=Flimmer Rendezvous-Dienst (ohne Video-Traffic)
+Documentation=https://github.com/flimmer-media/flimmer/blob/main/docs/fernzugriff.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+StateDirectory=flimmer-relay
+ExecStart=/usr/local/bin/flimmer-relay -addr :8098 -db /var/lib/flimmer-relay/relay.db
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target
