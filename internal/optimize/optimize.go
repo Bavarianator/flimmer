@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -22,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/flimmer-media/flimmer/internal/hwaccel"
 	"github.com/flimmer-media/flimmer/internal/playback"
 	"github.com/flimmer-media/flimmer/internal/probe"
 	"github.com/flimmer-media/flimmer/internal/transcode"
@@ -41,6 +43,7 @@ type Options struct {
 	Items    func(ctx context.Context) ([]Item, error)    // Katalog; Reihenfolge = Priorität (z. B. neueste zuerst)
 	Profiles func(ctx context.Context) []playback.Profile // bekannte Geräte
 	Speed    func() float64                               // hwaccel.Accel.Speed, 0 = unbekannt
+	Accel    hwaccel.Accel                                // Ergebnis von hwaccel.Detect; leer = libx264
 	Busy     func() bool                                  // läuft gerade eine Wiedergabe?
 	Window   func() (from, to int, on bool)               // volle Stunden, Standard 2–6 Uhr; on=false schaltet ab
 	MinFree  uint64                                       // so viel muss frei bleiben, Standard 20 GB
@@ -157,7 +160,12 @@ func (o *Optimizer) tick(ctx context.Context) {
 		return
 	}
 	it := todo[0]
-	err = o.encode(ctx, it, windowEnd(now, to))
+	err = o.encode(ctx, it, windowEnd(now, to), o.opts.Accel)
+	if errors.Is(err, errFailed) && len(o.opts.Accel.Encode) > 0 {
+		// Wie beim Streaming: Die GPU dekodiert nicht jeden Codec (z. B. HEVC 10 bit auf alter Hardware) → Software.
+		log.Printf("optimize: %s mit %s gescheitert, versuche Software: %v", it.Title, o.opts.Accel.Name, err)
+		err = o.encode(ctx, it, windowEnd(now, to), hwaccel.Accel{})
+	}
 	var slow errTooSlow
 	switch {
 	case err == nil:
@@ -280,7 +288,7 @@ func (e errTooSlow) Error() string {
 }
 
 // encode erzeugt die Version für it; deadline ist das Ende des Zeitfensters.
-func (o *Optimizer) encode(ctx context.Context, it Item, deadline time.Time) error {
+func (o *Optimizer) encode(ctx context.Context, it Item, deadline time.Time, accel hwaccel.Accel) error {
 	if free := diskFree(o.opts.Dir); free != 0 && free < o.opts.MinFree {
 		return errSpace
 	}
@@ -293,7 +301,7 @@ func (o *Optimizer) encode(ctx context.Context, it Item, deadline time.Time) err
 
 	jobCtx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
-	name, args := niceCmd(o.opts.FFmpeg, Args(it, hdr, part))
+	name, args := niceCmd(o.opts.FFmpeg, Args(it, hdr, accel, part))
 	cmd := exec.CommandContext(jobCtx, name, args...)
 	var stderr tail
 	cmd.Stderr = &stderr
@@ -336,8 +344,9 @@ func (o *Optimizer) encode(ctx context.Context, it Item, deadline time.Time) err
 			}
 		}
 	}()
+	every := checkEvery // vor dem go lesen: Tests setzen die Variable um
 	go func() {
-		t := time.NewTicker(checkEvery)
+		t := time.NewTicker(every)
 		defer t.Stop()
 		for {
 			select {
@@ -392,10 +401,18 @@ func (o *Optimizer) shouldStop(start time.Time, pos, dur float64, deadline time.
 // Args baut den ffmpeg-Aufruf: Video H.264 (max. 1080p), Ton AAC/AC3/EAC3 bleibt, alles andere wird
 // EAC3 (Surround) bzw. AAC (Stereo). Untertitel bleiben im Original, das Server-seitig ausgeliefert wird.
 // Skalieren und HDR→SDR-Tone-Mapping kommen aus transcode.VideoArgs (dasselbe Rezept wie beim Streaming).
-// ponytail: immer libx264; hwaccel-Encoder (VAAPI ~7× schneller auf dem Celeron) mit vault-0e einhängen, wenn Nächte zu kurz sind
-func Args(it Item, hdr bool, out string) []string {
-	a := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", it.Path,
-		"-map", "0:v:0", "-map", "0:a?", "-sn", "-dn", "-map_chapters", "-1"}
+// Mit accel (hwaccel.Detect) dekodiert und kodiert die GPU – auf dem Celeron-NAS ~7× schneller als libx264.
+// Bei HDR läuft das Tone-Mapping in Software: dann Software-Decode, und VideoArgs ersetzt GPU-Encoder mit eigenem -vf.
+func Args(it Item, hdr bool, accel hwaccel.Accel, out string) []string {
+	input, enc := accel.Input, accel.Encode
+	if len(enc) == 0 {
+		enc = []string{"-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-pix_fmt", "yuv420p", "-profile:v", "high", "-level:v", "4.1"}
+	}
+	if hdr {
+		input = nil
+	}
+	a := append([]string{"-hide_banner", "-loglevel", "error", "-nostdin", "-y"}, input...)
+	a = append(a, "-i", it.Path, "-map", "0:v:0", "-map", "0:a?", "-sn", "-dn", "-map_chapters", "-1")
 	var v probe.Stream
 	if f := it.Media.First("video"); f != nil {
 		v = *f
@@ -403,8 +420,7 @@ func Args(it Item, hdr bool, out string) []string {
 	if hdr && v.HDR == "" {
 		v.HDR = "hdr10" // alter Probe-Cache: ffprobe sagt PQ/HLG, das Feld fehlt noch
 	}
-	a = append(a, transcode.VideoArgs(&v, 1080, []string{"-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
-		"-pix_fmt", "yuv420p", "-profile:v", "high", "-level:v", "4.1"})...)
+	a = append(a, transcode.VideoArgs(&v, 1080, enc)...)
 	for i, s := range it.Media.All("audio") {
 		n := strconv.Itoa(i)
 		switch {

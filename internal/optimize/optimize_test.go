@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/flimmer-media/flimmer/internal/hwaccel"
 	"github.com/flimmer-media/flimmer/internal/playback"
 	"github.com/flimmer-media/flimmer/internal/probe"
 )
@@ -41,12 +42,22 @@ func TestArgs(t *testing.T) {
 		{Index: 2, Type: "audio", Codec: "dts", Channels: 6},
 		{Index: 3, Type: "audio", Codec: "opus", Channels: 2},
 	}}}
-	a := strings.Join(Args(it, false, "/d/x.mp4.part"), " ")
+	a := strings.Join(Args(it, false, hwaccel.Accel{}, "/d/x.mp4.part"), " ")
 	if !strings.Contains(a, "-vf scale=") || strings.Contains(a, "tonemap") {
 		t.Errorf("SDR: %s", a)
 	}
-	if h := strings.Join(Args(it, true, "/d/x.mp4.part"), " "); !strings.Contains(h, "tonemap") {
+	if h := strings.Join(Args(it, true, hwaccel.Accel{}, "/d/x.mp4.part"), " "); !strings.Contains(h, "tonemap") {
 		t.Errorf("HDR ohne Tone-Mapping: %s", h)
+	}
+	vaapi := hwaccel.Accel{Name: "vaapi", Input: []string{"-hwaccel", "vaapi", "-hwaccel_output_format", "vaapi"},
+		Encode: []string{"-vf", "scale_vaapi=format=nv12", "-c:v", "h264_vaapi", "-qp", "23"}}
+	if h := strings.Join(Args(it, false, vaapi, "o"), " "); !strings.Contains(h, "-hwaccel vaapi -hwaccel_output_format vaapi -i") ||
+		!strings.Contains(h, "h264_vaapi") || !strings.Contains(h, "scale_vaapi") {
+		t.Errorf("VAAPI SDR: %s", h)
+	}
+	if h := strings.Join(Args(it, true, vaapi, "o"), " "); strings.Contains(h, "-hwaccel") || strings.Contains(h, "h264_vaapi") ||
+		!strings.Contains(h, "tonemap") || !strings.Contains(h, "libx264") {
+		t.Errorf("VAAPI HDR muss Software sein: %s", h)
 	}
 	for _, want := range []string{"-c:a:0 copy", "-c:a:1 eac3", "-c:a:2 aac", "-movflags +faststart", "-f mp4 /d/x.mp4.part", "-sn"} {
 		if !strings.Contains(a, want) {
@@ -198,7 +209,7 @@ func TestHDRProbe(t *testing.T) {
 		t.Fatalf("PQ-Clip nicht als HDR erkannt: %v", err)
 	}
 	// Die Version ist SDR (BT.709), nicht blass-PQ.
-	if err := o.encode(ctx, it, time.Now().Add(time.Hour)); err != nil {
+	if err := o.encode(ctx, it, time.Now().Add(time.Hour), hwaccel.Accel{}); err != nil {
 		t.Fatal(err)
 	}
 	trc, err := colorTransfer(ctx, filepath.Join(o.opts.Dir, "pq.mp4"))
@@ -226,7 +237,7 @@ func TestEncode(t *testing.T) {
 	}
 	it := Item{ID: "clip", Title: "Clip", Path: src, Media: m}
 	o := New(Options{Dir: dir, MinFree: 1})
-	if err := o.encode(ctx, it, time.Now().Add(time.Hour)); err != nil {
+	if err := o.encode(ctx, it, time.Now().Add(time.Hour), hwaccel.Accel{}); err != nil {
 		t.Fatal(err)
 	}
 	p := o.Lookup("clip", src)
@@ -244,12 +255,22 @@ func TestEncode(t *testing.T) {
 		t.Fatal("Version sollte auf dem TV grün sein")
 	}
 
+	// GPU-Encoder scheitert → derselbe Titel sofort noch einmal in Software.
+	o3 := New(Options{Dir: t.TempDir(), MinFree: 1, Window: func() (int, int, bool) { return 0, 24, true },
+		Items:    func(context.Context) ([]Item, error) { return []Item{it}, nil },
+		Profiles: func(context.Context) []playback.Profile { return []playback.Profile{tv} },
+		Accel:    hwaccel.Accel{Name: "kaputt", Encode: []string{"-c:v", "gibtsnicht_enc"}}})
+	o3.tick(ctx)
+	if o3.Lookup("clip", src) == "" {
+		t.Fatalf("kein Software-Rückfall: %s", o3.Status().LastError)
+	}
+
 	// Abbruch bei Wiedergabe: keine Datei, kein .part.
 	old := checkEvery
 	checkEvery = 20 * time.Millisecond
 	defer func() { checkEvery = old }()
 	o2 := New(Options{Dir: t.TempDir(), MinFree: 1, Busy: func() bool { return true }})
-	if err := o2.encode(ctx, it, time.Now().Add(time.Hour)); err != nil && !errors.Is(err, errBusy) {
+	if err := o2.encode(ctx, it, time.Now().Add(time.Hour), hwaccel.Accel{}); err != nil && !errors.Is(err, errBusy) {
 		t.Fatalf("Abbruch: %v", err)
 	}
 	if entries, _ := os.ReadDir(o2.opts.Dir); len(entries) > 1 { // höchstens eine fertige Version, falls ffmpeg schneller war
