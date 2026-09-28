@@ -1,7 +1,10 @@
 # Flimmer mit Docker Compose:  docker compose -f deploy/compose.yml up -d  → http://<server-ip>:8096
 services:
   flimmer:
-    image: ghcr.io/flimmer-media/flimmer:latest
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: flimmer:local
     container_name: flimmer
     restart: unless-stopped
     ports:

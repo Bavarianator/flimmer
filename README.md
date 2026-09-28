@@ -11,31 +11,49 @@ Weitere Ziele:
 
 > Status: frühe Version. Benutzer, Metadaten (NFO/TMDB) und Hardware-Transcoding sind da; Apps außer dem LG-Starter fehlen noch.
 
-## Schnellstart in 3 Schritten
+## Installation (am einfachsten: Docker)
 
-1. **Herunterladen:** Die passende Datei aus den [Releases](https://github.com/flimmer-media/flimmer/releases/latest) holen und entpacken.
-   - Windows: `…-windows-amd64.zip`
-   - Mac mit Apple-Chip: `…-darwin-arm64.tar.gz`
-   - Linux-PC/NAS: `…-linux-amd64.tar.gz`
-   - Raspberry Pi 4/5: `…-linux-arm64.tar.gz`
-   - Raspberry Pi 2/3: `…-linux-armv7.tar.gz`
-2. **Starten:** `flimmer` doppelklicken bzw. im Terminal `./flimmer` ausführen.
-   - Unter Windows wird ffmpeg bei Bedarf automatisch geladen.
-   - Unter Linux und macOS muss ffmpeg installiert sein, z. B. mit `sudo apt install ffmpeg` bzw. `brew install ffmpeg`.
-3. **Browser:** Die Einrichtung öffnet sich unter `http://localhost:8096`. Dort Medienordner wählen, fertig. TV und Handy erreichen den Server unter der angezeigten Adresse oder per QR-Code.
-
-Automatisch mit dem Rechner starten: `flimmer install`, wieder entfernen mit `flimmer uninstall`. Dafür sind keine Admin-Rechte nötig. Unter Linux wird dabei eine systemd-User-Unit angelegt, unter macOS ein LaunchAgent, unter Windows ein Eintrag im Autostart.
-
-### Docker
+Es gibt noch keine fertigen Releases oder Images. Docker baut Flimmer deshalb selbst aus dem Quellcode, das dauert beim ersten Mal ein paar Minuten. Du brauchst nur [Docker](https://docs.docker.com/get-docker/) und Git, sonst nichts (ffmpeg steckt schon im Image).
 
 ```sh
-docker run -d --name flimmer -p 8096:8096 \
+git clone https://github.com/Bavarianator/flimmer.git
+cd flimmer
+docker build -f deploy/Dockerfile -t flimmer .
+docker run -d --name flimmer --restart unless-stopped -p 8096:8096 \
   -v /pfad/zu/filmen:/media:ro \
   -v flimmer-data:/data \
-  ghcr.io/flimmer-media/flimmer
+  flimmer
 ```
 
-Oder mit Compose: [`deploy/compose.yml`](deploy/compose.yml) anpassen und dann `docker compose -f deploy/compose.yml up -d` ausführen. `:latest` ist das letzte Release, `:edge` der aktuelle Stand von `main`.
+Dann im Browser `http://localhost:8096` öffnen (oder `http://<server-ip>:8096` von einem anderen Gerät). Dort Medienordner wählen, fertig. Der Ordner heißt im Container `/media`.
+
+**Mit Docker Compose** (statt `docker build` und `docker run`): in [`deploy/compose.yml`](deploy/compose.yml) den Pfad `/pfad/zu/filmen` anpassen, dann:
+
+```sh
+docker compose -f deploy/compose.yml up -d --build
+```
+
+Nützliche Befehle:
+
+| Aufgabe | Befehl |
+|---|---|
+| Logs ansehen | `docker logs -f flimmer` |
+| Stoppen / starten | `docker stop flimmer` / `docker start flimmer` |
+| Aktualisieren | `git pull`, dann `docker build …` wie oben, `docker rm -f flimmer` und `docker run …` erneut (die Daten bleiben im Volume `flimmer-data`) |
+| Mit Compose aktualisieren | `git pull && docker compose -f deploy/compose.yml up -d --build` |
+| Entfernen | `docker rm -f flimmer` (Einstellungen löschen: `docker volume rm flimmer-data`) |
+
+Für die automatische Geräte-Suche im Heimnetz (SSDP) statt `-p 8096:8096` besser `--network host` verwenden. Für Hardware-Transcoding auf Intel/AMD zusätzlich `--device /dev/dri:/dev/dri`.
+
+## Ohne Docker
+
+Voraussetzung ist ein Build aus dem Quellcode (siehe unten: Go, Node und ffmpeg). Danach:
+
+```sh
+./flimmer -media /pfad/zu/filmen
+```
+
+Automatisch mit dem Rechner starten: `flimmer install`, wieder entfernen mit `flimmer uninstall`. Dafür sind keine Admin-Rechte nötig. Unter Linux wird dabei eine systemd-User-Unit angelegt, unter macOS ein LaunchAgent, unter Windows ein Eintrag im Autostart. Unter Linux und macOS muss ffmpeg installiert sein, z. B. mit `sudo apt install ffmpeg` bzw. `brew install ffmpeg`.
 
 ### Als Systemdienst (Linux-Server)
 
@@ -53,6 +71,7 @@ Du brauchst Go 1.27+, Node 22 und ffmpeg.
 
 ```sh
 (cd web && npm ci && npm run build)   # UI nach web/dist bauen, wird in die Binary eingebettet
+go build -o flimmer ./cmd/server      # erzeugt die Datei ./flimmer
 go run ./cmd/server -media /pfad/zu/filmen
 go test ./...
 ```
