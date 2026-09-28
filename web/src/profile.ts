@@ -10,6 +10,8 @@ export interface Profile {
   audio: string[]
   nativeHls: boolean
   maxBitrate: number
+  // undefined = unbekannt (Server rechnet nichts um), [] = SDR, sonst Teilmenge von hdr10/hlg/hdr10+/dv
+  hdr?: string[]
 }
 
 const ua = navigator.userAgent
@@ -58,10 +60,56 @@ export function detectProfile(): Profile {
 }
 
 // Aktuelles Profil: Schicht 1+2 (detectProfile) plus gemessene Schicht 3 (Probe-Clips).
-export let profile = applyProbe(detectProfile(), loadProbe())
+// HDR: Displays und Decoder melden das nur asynchron. Bis die Antwort da ist, bleibt das Feld
+// weg (= unbekannt, altes Verhalten); danach gilt es für alle folgenden Anfragen.
+let hdr: string[] | undefined = staticHdr()
+
+function staticHdr(): string[] | undefined {
+  // Auf TVs lügen die Web-APIs oft – dort gelten feste Regeln.
+  if (isWebOS) return ['hdr10', 'hlg', 'dv']
+  if (isTizen) return ['hdr10', 'hlg', 'hdr10+']
+  if (!window.matchMedia) return undefined
+  if (matchMedia('(dynamic-range: high)').matches) return undefined // wird unten per MediaCapabilities bestimmt
+  return matchMedia('(dynamic-range: standard)').matches ? [] : undefined // weder noch: Browser kennt die Abfrage nicht
+}
+
+async function detectHdr(): Promise<string[] | undefined> {
+  const mc = (navigator as Navigator & { mediaCapabilities?: MediaCapabilities }).mediaCapabilities
+  if (!mc) return ['hdr10'] // Display kann HDR, Details unbekannt
+  const probe = (extra: Record<string, string>) =>
+    mc
+      .decodingInfo({
+        type: 'media-source',
+        video: { contentType: 'video/mp4; codecs="hvc1.2.4.L153.B0"', width: 3840, height: 2160, bitrate: 20e6, framerate: 24, colorGamut: 'rec2020', ...extra },
+      } as MediaDecodingConfiguration)
+      .then((r) => r.supported, () => false)
+  const [hdr10, hlg, hdr10plus] = await Promise.all([
+    probe({ transferFunction: 'pq', hdrMetadataType: 'smpteSt2086' }),
+    probe({ transferFunction: 'hlg' }),
+    probe({ transferFunction: 'pq', hdrMetadataType: 'smpteSt2094-40' }),
+  ])
+  const out: string[] = []
+  if (hdr10) out.push('hdr10')
+  if (hlg) out.push('hlg')
+  if (hdr10plus) out.push('hdr10+')
+  return out
+}
+
+function withHdr(p: Profile): Profile {
+  return hdr === undefined ? p : { ...p, hdr }
+}
+
+export let profile = withHdr(applyProbe(detectProfile(), loadProbe()))
+
+if (hdr === undefined && typeof window.matchMedia === 'function' && matchMedia('(dynamic-range: high)').matches) {
+  detectHdr().then((h) => {
+    hdr = h
+    profile = withHdr(profile)
+  })
+}
 
 export function setProbe(r: ProbeResult) {
-  profile = applyProbe(detectProfile(), r)
+  profile = withHdr(applyProbe(detectProfile(), r))
   // Server merkt sich die Messung pro Gerät (Diagnose, Neuinstallation der App). Fehler sind egal.
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (getToken()) headers.Authorization = 'Bearer ' + getToken()
