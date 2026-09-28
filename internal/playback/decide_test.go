@@ -62,7 +62,7 @@ func TestDecide(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := Decide(tt.m, tt.p)
+			got := Decide(tt.m, tt.p, 0)
 			if got.Method != tt.method || got.Light != tt.light || got.AudioCodec != tt.audio || got.VideoCodec != tt.video {
 				t.Fatalf("got %s/%s audio=%s video=%s (%v), want %s/%s audio=%s video=%s",
 					got.Method, got.Light, got.AudioCodec, got.VideoCodec, got.Reasons, tt.method, tt.light, tt.audio, tt.video)
@@ -74,14 +74,14 @@ func TestDecide(t *testing.T) {
 func TestBitrateLimitForcesTranscode(t *testing.T) {
 	p := lgTV
 	p.MaxBitrate = 4_000_000
-	got := Decide(media("mov,mp4", "h264", "yuv420p", "aac", 2), p)
+	got := Decide(media("mov,mp4", "h264", "yuv420p", "aac", 2), p, 0)
 	if got.Method != Transcode {
 		t.Fatalf("got %s", got.Method)
 	}
 }
 
 func TestSubtitlesNeverBurnedIn(t *testing.T) {
-	got := Decide(media("matroska", "h264", "yuv420p", "aac", 2, "subrip", "ass", "hdmv_pgs_subtitle", "dvd_subtitle"), lgTV)
+	got := Decide(media("matroska", "h264", "yuv420p", "aac", 2, "subrip", "ass", "hdmv_pgs_subtitle", "dvd_subtitle"), lgTV, 0)
 	if got.Method != DirectPlay {
 		t.Fatalf("Untertitel dürfen die Methode nicht verschlechtern, got %s", got.Method)
 	}
@@ -92,6 +92,29 @@ func TestSubtitlesNeverBurnedIn(t *testing.T) {
 	for i, f := range want {
 		if got.Subtitles[i].Format != f {
 			t.Fatalf("sub %d: got %s want %s", i, got.Subtitles[i].Format, f)
+		}
+	}
+}
+
+func TestTranscodeLightFollowsServerSpeed(t *testing.T) {
+	hd := media("matroska", "hevc", "yuv420p", "aac", 2)
+	hd.Streams[0].Width, hd.Streams[0].Height = 1920, 1080
+	uhd := media("matroska", "hevc", "yuv420p", "aac", 2)
+	uhd.Streams[0].Width, uhd.Streams[0].Height = 3840, 2160
+	tests := []struct {
+		m     *probe.Media
+		speed float64
+		want  Light
+	}{
+		{hd, 0, Red},      // Pi 5: kein HW-Encoder, nicht gemessen
+		{hd, 1.2, Red},    // zu knapp – würde ruckeln
+		{hd, 3.3, Yellow}, // VAAPI auf iGPU
+		{uhd, 3.3, Red},   // 4K braucht ~6×
+		{uhd, 8, Yellow},
+	}
+	for _, tt := range tests {
+		if got := Decide(tt.m, oldBrowser, tt.speed); got.Light != tt.want {
+			t.Errorf("%dx%d bei %.1fx: got %s want %s", tt.m.Streams[0].Width, tt.m.Streams[0].Height, tt.speed, got.Light, tt.want)
 		}
 	}
 }

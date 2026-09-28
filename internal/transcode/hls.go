@@ -5,6 +5,7 @@ package transcode
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -101,6 +102,7 @@ type Manager struct {
 
 	mu       sync.Mutex
 	sessions map[string]*session
+	swOnly   map[string]bool // Dateien, bei denen der HW-Pfad scheiterte (z. B. Codec nicht HW-dekodierbar)
 }
 
 const (
@@ -110,7 +112,7 @@ const (
 )
 
 func NewManager(tempDir string) *Manager {
-	m := &Manager{TempDir: tempDir, sessions: map[string]*session{}}
+	m := &Manager{TempDir: tempDir, sessions: map[string]*session{}, swOnly: map[string]bool{}}
 	go m.reaper()
 	return m
 }
@@ -152,6 +154,19 @@ func (m *Manager) Segment(ctx context.Context, job Job, n int) (string, error) {
 			return path, nil
 		}
 		if exited {
+			m.mu.Lock()
+			retry := len(s.job.InputArgs)+len(s.job.Encoder) > 0 && !m.swOnly[job.Input]
+			if retry {
+				// ponytail: fällt pro Datei dauerhaft (bis Neustart) auf Software zurück.
+				log.Printf("transcode: Hardware-Pfad für %s gescheitert, nutze Software", filepath.Base(job.Input))
+				m.swOnly[job.Input] = true
+				s.stop()
+				delete(m.sessions, key)
+			}
+			m.mu.Unlock()
+			if retry {
+				continue
+			}
 			return "", fmt.Errorf("ffmpeg beendet, Segment %d fehlt", n)
 		}
 		select {
@@ -167,6 +182,9 @@ func (m *Manager) start(job Job, first int) (*session, error) {
 	dir, err := os.MkdirTemp(m.TempDir, "hls-")
 	if err != nil {
 		return nil, err
+	}
+	if m.swOnly[job.Input] {
+		job.InputArgs, job.Encoder = nil, nil
 	}
 	s := &session{job: job, dir: dir, first: first, head: first - 1, cleaned: first, done: make(chan struct{}), lastUsed: time.Now()}
 	s.cmd = exec.Command("ffmpeg", args(job, first, dir)...)

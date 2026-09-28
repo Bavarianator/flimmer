@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/flimmer-media/flimmer/internal/api"
+	"github.com/flimmer-media/flimmer/internal/hwaccel"
 	"github.com/flimmer-media/flimmer/internal/scan"
 	"github.com/flimmer-media/flimmer/internal/transcode"
 	"github.com/flimmer-media/flimmer/web"
@@ -72,7 +73,15 @@ func main() {
 		go lib.Run(ctx, *every)
 	}
 	hls := transcode.NewManager(tmp)
-	srv := &http.Server{Handler: (&api.Server{Lib: lib, HLS: hls, CacheDir: *data, Web: web.FS(), FFmpeg: ffmpeg}).Handler()}
+	apiSrv := &api.Server{Lib: lib, HLS: hls, CacheDir: *data, Web: web.FS(), FFmpeg: ffmpeg}
+	if ffmpeg {
+		go func() {
+			a := hwaccel.Detect(ctx)
+			log.Printf("Transcoding: %s (%.1f× Echtzeit bei 1080p)", a.Name, a.Speed)
+			apiSrv.HW.Store(&a)
+		}()
+	}
+	srv := &http.Server{Handler: apiSrv.Handler()}
 	go func() {
 		if err := srv.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
 			log.Fatal(err)

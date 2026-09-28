@@ -77,7 +77,9 @@ func VideoKey(s *probe.Stream) string {
 	return s.Codec
 }
 
-func Decide(m *probe.Media, p Profile) Plan {
+// Decide wählt die Wiedergabeart. speed ist der gemessene Echtzeit-Faktor des Servers beim
+// 1080p-H.264-Encode (hwaccel.Accel.Speed, 0 = unbekannt) – daraus folgt Gelb oder Rot beim Transcoding.
+func Decide(m *probe.Media, p Profile, speed float64) Plan {
 	plan := Plan{AudioIndex: -1, AudioCodec: "copy", VideoCodec: "copy"}
 
 	v := m.First("video")
@@ -115,8 +117,12 @@ func Decide(m *probe.Media, p Profile) Plan {
 		plan.Method, plan.Light = TranscodeAudio, Yellow
 		plan.AudioCodec = targetAudio(a, p)
 	default:
-		// ponytail: immer Rot; mit HW-Erkennung + Speed-Messung wird daraus Gelb, wenn Echtzeit sicher ist.
 		plan.Method, plan.Light = Transcode, Red
+		if speed >= requiredSpeed(v) {
+			plan.Light = Yellow
+		} else {
+			plan.Reasons = append(plan.Reasons, "Server ist für Echtzeit-Transcoding zu langsam")
+		}
 		plan.VideoCodec = "h264"
 		if a != nil && !(audioOK && slices.Contains(tsAudio, a.Codec)) {
 			plan.AudioCodec = targetAudio(a, p)
@@ -136,6 +142,15 @@ func Decide(m *probe.Media, p Profile) Plan {
 		plan.Subtitles = append(plan.Subtitles, sub)
 	}
 	return plan
+}
+
+// requiredSpeed: 1,5× Reserve bei 1080p, größere Quellen kosten beim Dekodieren proportional mehr.
+func requiredSpeed(v *probe.Stream) float64 {
+	f := 1.5
+	if v != nil && v.Width*v.Height > 1920*1080 {
+		f *= float64(v.Width*v.Height) / (1920 * 1080)
+	}
+	return f
 }
 
 func defaultAudio(m *probe.Media) *probe.Stream {

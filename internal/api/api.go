@@ -10,7 +10,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"sync/atomic"
 
+	"github.com/flimmer-media/flimmer/internal/hwaccel"
 	"github.com/flimmer-media/flimmer/internal/playback"
 	"github.com/flimmer-media/flimmer/internal/scan"
 	"github.com/flimmer-media/flimmer/internal/transcode"
@@ -21,7 +23,15 @@ type Server struct {
 	HLS      *transcode.Manager
 	CacheDir string
 	Web      fs.FS
-	FFmpeg   bool // ffmpeg/ffprobe gefunden
+	FFmpeg   bool                          // ffmpeg/ffprobe gefunden
+	HW       atomic.Pointer[hwaccel.Accel] // gesetzt, sobald hwaccel.Detect fertig ist
+}
+
+func (s *Server) hw() hwaccel.Accel {
+	if a := s.HW.Load(); a != nil {
+		return *a
+	}
+	return hwaccel.Accel{}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -86,7 +96,7 @@ func (s *Server) library(w http.ResponseWriter, r *http.Request) {
 	}
 	var out []libraryItem
 	for _, it := range s.Lib.All() {
-		plan := playback.Decide(it.Media, p)
+		plan := playback.Decide(it.Media, p, s.hw().Speed)
 		out = append(out, libraryItem{Item: it, Duration: it.Media.Duration, Light: plan.Light, Method: plan.Method})
 	}
 	writeJSON(w, out)
@@ -109,7 +119,7 @@ func (s *Server) play(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Geräteprofil fehlt", http.StatusBadRequest)
 		return
 	}
-	plan := playback.Decide(it.Media, p)
+	plan := playback.Decide(it.Media, p, s.hw().Speed)
 	resp := playResponse{Plan: plan, Duration: it.Media.Duration, Title: it.Title}
 	base := "/api/items/" + it.ID
 	if plan.Method == playback.DirectPlay {
@@ -149,13 +159,18 @@ func (s *Server) job(w http.ResponseWriter, r *http.Request) (transcode.Job, boo
 		http.Error(w, "Datei konnte nicht gelesen werden", http.StatusInternalServerError)
 		return transcode.Job{}, false
 	}
-	return transcode.Job{
+	job := transcode.Job{
 		Input:      it.Path,
 		Segments:   transcode.Segments(kf, it.Media.Duration),
 		AudioIndex: audio,
 		AudioCodec: acodec,
 		VideoCodec: vcodec,
-	}, true
+	}
+	if vcodec == "h264" {
+		hw := s.hw()
+		job.InputArgs, job.Encoder = hw.Input, hw.Encode
+	}
+	return job, true
 }
 
 func (s *Server) playlist(w http.ResponseWriter, r *http.Request) {
