@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/flimmer-media/flimmer/internal/probe"
 )
 
 func TestSegmentsFollowKeyframes(t *testing.T) {
@@ -108,5 +110,51 @@ func TestArgsDownscaleOnlyInSoftware(t *testing.T) {
 	}
 	if v, h, ok := ParseVideo("h264-720"); !ok || v != "h264" || h != 720 {
 		t.Fatal("ParseVideo")
+	}
+}
+
+func TestParseVideo(t *testing.T) {
+	for _, tt := range []struct {
+		in    string
+		codec string
+		h     int
+		ok    bool
+	}{
+		{"copy", "copy", 0, true},
+		{"h264", "h264", 0, true},
+		{"h264-720", "h264", 720, true},
+		{"h264-1080", "h264", 1080, true},
+		{"h264-sdr", "h264-sdr", 0, true},
+		{"h264-1080-sdr", "h264-sdr", 1080, true},
+		{"h264-480", "", 0, false},
+		{"hevc", "", 0, false},
+		{"h264-sdr-720", "", 0, false},
+	} {
+		c, h, ok := ParseVideo(tt.in)
+		if c != tt.codec || h != tt.h || ok != tt.ok {
+			t.Errorf("%s: %s %d %v", tt.in, c, h, ok)
+		}
+	}
+}
+
+func TestVideoArgs(t *testing.T) {
+	vaapi := []string{"-vf", "scale_vaapi=format=nv12", "-c:v", "h264_vaapi", "-qp", "23"}
+	for _, tt := range []struct {
+		name string
+		got  []string
+		want string
+	}{
+		{"Software ohne Änderung", videoArgs(false, 0, false, nil), "-c:v libx264"},
+		{"VAAPI skaliert auf der GPU", videoArgs(false, 720, true, vaapi), `-vf scale_vaapi=w=-2:h=min(720\,ih):format=nv12 -c:v h264_vaapi`},
+		{"VAAPI ohne Höhe unverändert", videoArgs(false, 0, true, vaapi), "-vf scale_vaapi=format=nv12 -c:v h264_vaapi"},
+		{"HDR → SDR in Software, auch wenn VAAPI angeboten", VideoArgs(&probe.Stream{HDR: "hdr10"}, 1080, vaapi), `-vf scale=-2:min(1080\,ih),zscale=t=linear`},
+		{"SDR-Quelle: kein Tone-Mapping", VideoArgs(&probe.Stream{}, 1080, nil), `-vf scale=-2:min(1080\,ih) -c:v libx264`},
+	} {
+		if g := strings.Join(tt.got, " "); !strings.HasPrefix(g, tt.want) {
+			t.Errorf("%s:\n got %s\nwant %s…", tt.name, g, tt.want)
+		}
+	}
+	if g := strings.Join(VideoArgs(&probe.Stream{HDR: "hlg"}, 0, nil), " "); !strings.Contains(g, "tonemap=hable") || strings.Contains(g, "scale=-2") {
+		t.Errorf("HLG ohne Höhe: %s", g)
 	}
 }

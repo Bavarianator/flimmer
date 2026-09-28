@@ -11,10 +11,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/flimmer-media/flimmer/internal/probe"
 )
 
 type Segment struct{ Start, End float64 }
@@ -76,7 +79,7 @@ type Job struct {
 	Segments   []Segment
 	AudioIndex int      // -1 = kein Ton
 	AudioCodec string   // copy, aac, eac3
-	VideoCodec string   // copy, h264
+	VideoCodec string   // copy, h264, h264-sdr (mit Tone-Mapping)
 	Height     int      // >0: beim Transcoding auf diese Höhe verkleinern
 	InputArgs  []string // vor -i, z. B. Hardware-Decoding (hwaccel.Accel.Input)
 	Encoder    []string // Video-Encoder (hwaccel.Accel.Encode); leer = libx264
@@ -86,15 +89,76 @@ func (j Job) Key() string {
 	return fmt.Sprintf("%s|%d|%s|%s|%d", j.Input, j.AudioIndex, j.AudioCodec, j.VideoCodec, j.Height)
 }
 
-// ParseVideo zerlegt den Video-Teil der HLS-URL: "copy", "h264" oder "h264-720".
+// ParseVideo zerlegt den Video-Teil der HLS-URL: "copy" oder "h264[-720|-1080][-sdr]".
+// Die Höhe verkleinert (nie vergrößert), "-sdr" rechnet HDR per Tone-Mapping nach SDR um;
+// dann ist codec "h264-sdr" (Software-Pfad, siehe VideoArgs).
 func ParseVideo(v string) (codec string, height int, ok bool) {
-	switch v {
-	case "copy", "h264":
+	if v == "copy" {
 		return v, 0, true
-	case "h264-720":
-		return "h264", 720, true
 	}
-	return "", 0, false
+	rest, ok := strings.CutPrefix(v, "h264")
+	if !ok {
+		return "", 0, false
+	}
+	codec = "h264"
+	if r, sdr := strings.CutSuffix(rest, "-sdr"); sdr {
+		codec, rest = "h264-sdr", r
+	}
+	switch rest {
+	case "":
+	case "-720":
+		height = 720
+	case "-1080":
+		height = 1080
+	default:
+		return "", 0, false
+	}
+	return codec, height, true
+}
+
+// Standard-Encoder ohne Hardware.
+var software = []string{"-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p", "-profile:v", "high"}
+
+// toneMap rechnet HDR10/HLG (PQ/HLG, BT.2020) nach SDR BT.709 um: linearisieren, Farbraum wechseln,
+// Spitzlichter mit hable weich abrollen, zurück nach BT.709 8 bit. desat=0 behält die Farbsättigung.
+// ponytail: nur Software (zscale); tonemap_vaapi/opencl wären auf neuer Hardware schneller, i965 kann es nicht.
+const toneMap = "zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0," +
+	"zscale=t=bt709:m=bt709:r=tv,format=yuv420p"
+
+// VideoArgs liefert Filter und Encoder für eine H.264-Umwandlung: höchstens height Pixel hoch (0 = Originalhöhe,
+// nie hochskaliert), bei HDR-Quelle (v.HDR != "") mit Tone-Mapping nach SDR. encode sind Encoder-Args
+// (hwaccel.Accel.Encode oder eigene); nil = libx264. Tone-Mapping läuft in Software – Encoder, die Hardware-Frames
+// erwarten (mit eigenem -vf wie scale_vaapi), werden dann durch libx264 ersetzt.
+// Keine GOP-/Keyframe-Optionen: die setzt der Aufrufer (-force_key_frames bzw. Standard).
+func VideoArgs(v *probe.Stream, height int, encode []string) []string {
+	return videoArgs(v != nil && v.HDR != "", height, false, encode)
+}
+
+// hwInput: Hardware-Decoding ist aktiv (Frames evtl. im GPU-Speicher) – dann nie ein Software-Filter.
+func videoArgs(sdr bool, height int, hwInput bool, encode []string) []string {
+	enc := append([]string(nil), encode...)
+	hwFilter := slices.Index(enc, "-vf")
+	if len(enc) == 0 || sdr && hwFilter >= 0 {
+		enc, hwFilter = append([]string(nil), software...), -1
+	}
+	var chain []string
+	if hwFilter >= 0 { // Hardware-Frames: skalieren mit dem Filter des Backends (scale_vaapi=…, scale_cuda=…)
+		f := enc[hwFilter+1]
+		if name, opts, ok := strings.Cut(f, "="); ok && height > 0 && strings.HasPrefix(name, "scale_") {
+			f = name + "=w=-2:h=min(" + strconv.Itoa(height) + "\\,ih):" + opts
+		}
+		chain = append(chain, f)
+		enc = slices.Delete(enc, hwFilter, hwFilter+2)
+	} else if height > 0 && !hwInput {
+		chain = append(chain, "scale=-2:min("+strconv.Itoa(height)+"\\,ih)")
+	}
+	if sdr {
+		chain = append(chain, toneMap)
+	}
+	if len(chain) == 0 {
+		return enc
+	}
+	return append([]string{"-vf", strings.Join(chain, ",")}, enc...)
 }
 
 // Ein Session-Prozess erzeugt fortlaufend Segmente ab einem Startsegment – kontinuierlich,
@@ -259,23 +323,17 @@ func args(job Job, first int, dir string) []string {
 		a = append(a, "-c:v", "copy")
 	} else {
 		a = append(a, "-progress", "pipe:1", "-stats_period", "1")
-		reduce := job.Height > 0 && len(job.InputArgs) == 0
-		if reduce {
-			// Nie hochskalieren (SD-Quellen bleiben, wie sie sind).
-			// ponytail: Verkleinern nur im Software-Pfad; HW-Frames bräuchten scale_vaapi/scale_cuda/… je Backend.
-			a = append(a, "-vf", "scale=-2:min("+strconv.Itoa(job.Height)+"\\,ih)")
-		}
 		enc := job.Encoder
-		if len(enc) == 0 {
-			enc = []string{"-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p", "-profile:v", "high"}
-		}
-		enc = append([]string(nil), enc...)
-		for i := 0; reduce && i+1 < len(enc); i++ {
-			if enc[i] == "-preset" {
-				enc[i+1] = "ultrafast" // Herunterstufen soll auch bei SD-Quellen spürbar Rechenzeit sparen
+		if job.Height > 0 { // Herunterstufen soll auch bei SD-Quellen spürbar Rechenzeit sparen
+			enc = append([]string(nil), enc...)
+			if len(enc) == 0 {
+				enc = append(enc, software...)
+			}
+			if i := slices.Index(enc, "-preset"); i >= 0 && enc[i+1] == "veryfast" {
+				enc[i+1] = "ultrafast"
 			}
 		}
-		a = append(a, enc...)
+		a = append(a, videoArgs(job.VideoCodec == "h264-sdr", job.Height, len(job.InputArgs) > 0, enc)...)
 		if len(abs) > 0 {
 			a = append(a, "-force_key_frames", strings.Join(abs, ","))
 		}
