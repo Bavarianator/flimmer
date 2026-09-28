@@ -77,7 +77,7 @@ while IFS=$'\t' read -r id title; do
           ok "Segment $s: $codecs${dur}s (Playlist ${extinf[$s]}s)" || bad "Segment $s dauert ${dur}s, Playlist sagt ${extinf[$s]}s"
         # HDR-Quelle im SDR-Profil: Segmente müssen tone-gemappt (BT.709, 8 bit) sein, sonst sieht man Grauschleier
         if [[ $url == */h264*-sdr/* ]]; then
-          trc=$(ffprobe -v error -select_streams v -show_entries stream=color_transfer,pix_fmt -of csv=p=0 "$work/seg.ts" | head -1)
+          trc=$(ffprobe -v error -select_streams v -show_entries stream=color_transfer,pix_fmt -of csv=p=0 "$work/seg.ts" | sed -n 1p)
           [ "$trc" = "yuv420p,bt709" ] && ok "Segment $s tone-gemappt ($trc)" || bad "Segment $s nicht tone-gemappt ($trc)"
         fi
       else
@@ -87,7 +87,7 @@ while IFS=$'\t' read -r id title; do
   fi
 
   for sub in $(json '" ".join(str(s["index"]) for s in d.get("subtitles") or [] if s["format"]=="vtt")' <<<"$play"); do
-    curl -sf "$base/api/items/$id/subs/$sub.vtt" | head -1 | grep -q WEBVTT && ok "Untertitel $sub → WebVTT" || bad "Untertitel $sub"
+    curl -sf "$base/api/items/$id/subs/$sub.vtt" | sed -n 1p | grep -q WEBVTT && ok "Untertitel $sub → WebVTT" || bad "Untertitel $sub"
   done
 done < <(json '"\n".join(i["id"]+"\t"+i["title"] for i in d)' <<<"$lib")
 
