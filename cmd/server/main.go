@@ -49,6 +49,7 @@ func main() {
 	data := flag.String("data", "", "ein Ordner für alles (Einstellungen und Cache); Standard: Benutzerordner des Systems")
 	every := flag.Duration("rescan", 15*time.Minute, "Abstand zwischen automatischen Scans")
 	relayURL := flag.String("relay", "", "Rendezvous-Dienst für den Fernzugriff (leer = keine Prüfung von außen)")
+	httpsPort := flag.Int("https", 8443, "HTTPS-Port für den Fernzugriff (0 = aus); nur dieser Port wird im Router freigegeben")
 	flag.Parse()
 	ring := &api.LogRing{}
 	log.SetOutput(io.MultiWriter(os.Stderr, ring))
@@ -135,7 +136,20 @@ func main() {
 	lanURL := discovery.LANURL(port)
 	srv := &api.Server{Lib: lib, HLS: hls, DB: store, Meta: res, Images: img, CacheDir: cacheDir,
 		Web: web.FS(), Pages: setup.FS(), LANURL: lanURL, QR: discovery.QRHandler(port), Log: ring, Updates: &update.Checker{}}
-	if rem, err := remote.New(remote.Options{Port: port, KeyFile: filepath.Join(cfgDir, "remote.key"), RelayURL: *relayURL}); err != nil {
+	// HTTPS nur für den Fernzugriff: Passwörter gehen nie unverschlüsselt durchs Internet, HTTP bleibt im Heimnetz.
+	var tlsLn net.Listener
+	if *httpsPort > 0 {
+		if tlsLn, err = net.Listen("tcp", ":"+strconv.Itoa(*httpsPort)); err != nil {
+			log.Printf("HTTPS-Port %d nicht verfügbar, Fernzugriff nur per HTTP: %v", *httpsPort, err)
+			tlsLn = nil
+		}
+	}
+	tlsPort := 0
+	if tlsLn != nil {
+		tlsPort = tlsLn.Addr().(*net.TCPAddr).Port
+	}
+	if rem, err := remote.New(remote.Options{Port: port, KeyFile: filepath.Join(cfgDir, "remote.key"), RelayURL: *relayURL,
+		TLSPort: tlsPort, TLSDir: filepath.Join(cfgDir, "tls")}); err != nil {
 		log.Printf("Fernzugriff: %v", err)
 	} else {
 		srv.Remote = rem
@@ -187,7 +201,19 @@ func main() {
 		start()
 	}
 
-	httpSrv := &http.Server{Handler: srv.Handler()}
+	handler := srv.Handler()
+	httpSrv := &http.Server{Handler: handler}
+	var tlsSrv *http.Server
+	if tlsLn != nil && srv.Remote != nil {
+		tlsSrv = &http.Server{Handler: handler, TLSConfig: srv.Remote.TLSConfig()}
+		go func() {
+			if err := tlsSrv.ServeTLS(tlsLn, "", ""); !errors.Is(err, http.ErrServerClosed) {
+				log.Printf("HTTPS: %v", err)
+			}
+		}()
+	} else if tlsLn != nil {
+		tlsLn.Close()
+	}
 	go func() {
 		if err := httpSrv.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
 			log.Fatal(err)
@@ -219,6 +245,9 @@ func main() {
 	shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	httpSrv.Shutdown(shutdown)
+	if tlsSrv != nil {
+		tlsSrv.Shutdown(shutdown)
+	}
 	hls.Close() // falls während des Herunterfahrens noch ein Segment angefragt wurde
 }
 
