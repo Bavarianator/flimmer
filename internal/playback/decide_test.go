@@ -122,3 +122,37 @@ func TestTranscodeLightFollowsServerSpeed(t *testing.T) {
 		}
 	}
 }
+
+func TestAudioChoice(t *testing.T) {
+	m := &probe.Media{Container: "matroska,webm", Streams: []probe.Stream{
+		{Index: 0, Type: "video", Codec: "h264", PixFmt: "yuv420p"},
+		{Index: 1, Type: "audio", Codec: "eac3", Language: "ger", Channels: 6, Default: true},
+		{Index: 2, Type: "audio", Codec: "dts", Language: "eng", Channels: 6},
+		{Index: 3, Type: "audio", Codec: "aac", Language: "eng", Channels: 2},
+	}}
+	tests := []struct {
+		name   string
+		track  int
+		lang   string
+		method Method
+		audio  int
+		codec  string
+	}{
+		{"Standard", 0, "", DirectPlay, 1, "copy"},
+		{"Sprache = Standard bleibt Direct Play", 0, "ger", DirectPlay, 1, "copy"},
+		{"Englisch gemerkt → erste englische Spur, Ton neu", 0, "eng", TranscodeAudio, 2, "eac3"},
+		{"Spur explizit gewählt → Remux", 3, "", DirectStream, 3, "copy"},
+		{"unbekannte Sprache → Standard", 0, "fra", DirectPlay, 1, "copy"},
+	}
+	for _, tt := range tests {
+		p := lgTV
+		p.AudioTrack, p.AudioLang = tt.track, tt.lang
+		got := Decide(m, p, 0)
+		if got.Method != tt.method || got.AudioIndex != tt.audio || got.AudioCodec != tt.codec {
+			t.Errorf("%s: got %s/%d/%s want %s/%d/%s", tt.name, got.Method, got.AudioIndex, got.AudioCodec, tt.method, tt.audio, tt.codec)
+		}
+		if len(got.Audio) != 3 {
+			t.Errorf("%s: Tonspur-Liste %+v", tt.name, got.Audio)
+		}
+	}
+}

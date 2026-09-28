@@ -16,6 +16,20 @@ type Profile struct {
 	Audio      []string `json:"audio"`      // aac, ac3, eac3, mp3, opus, flac, dts, truehd
 	NativeHLS  bool     `json:"nativeHls"`
 	MaxBitrate int64    `json:"maxBitrate"` // 0 = unbegrenzt
+
+	// Wunsch für diese Wiedergabe (kein Geräte-Merkmal, reist aber im selben Body mit):
+	AudioTrack int    `json:"audioTrack,omitempty"` // Stream-Index der gewählten Tonspur, 0 = automatisch
+	AudioLang  string `json:"audioLang,omitempty"`  // bevorzugte Sprache (z. B. pro Serie gemerkt)
+}
+
+// AudioTrack beschreibt eine wählbare Tonspur.
+type AudioTrack struct {
+	Index    int    `json:"index"`
+	Language string `json:"language,omitempty"`
+	Title    string `json:"title,omitempty"`
+	Codec    string `json:"codec"`
+	Channels int    `json:"channels,omitempty"`
+	Default  bool   `json:"default,omitempty"`
 }
 
 type Method string
@@ -43,13 +57,14 @@ type Subtitle struct {
 }
 
 type Plan struct {
-	Method     Method     `json:"method"`
-	Light      Light      `json:"light"`
-	Reasons    []string   `json:"reasons,omitempty"`
-	AudioIndex int        `json:"audioIndex"`
-	AudioCodec string     `json:"audioCodec"` // Ziel-Codec, "copy" wenn unverändert
-	VideoCodec string     `json:"videoCodec"` // "copy", "h264" oder "h264-720"
-	Subtitles  []Subtitle `json:"subtitles"`
+	Method     Method       `json:"method"`
+	Light      Light        `json:"light"`
+	Reasons    []string     `json:"reasons,omitempty"`
+	AudioIndex int          `json:"audioIndex"`
+	AudioCodec string       `json:"audioCodec"` // Ziel-Codec, "copy" wenn unverändert
+	VideoCodec string       `json:"videoCodec"` // "copy", "h264" oder "h264-720"
+	Subtitles  []Subtitle   `json:"subtitles"`
+	Audio      []AudioTrack `json:"audio"`
 }
 
 // In MPEG-TS-Segmenten sauber transportierbare Audio-Codecs.
@@ -88,7 +103,9 @@ func Decide(m *probe.Media, p Profile, speed float64) Plan {
 		plan.Reasons = append(plan.Reasons, "Video-Codec "+VideoKey(v)+" wird vom Gerät nicht unterstützt")
 	}
 
-	a := defaultAudio(m)
+	a := chooseAudio(m, p)
+	// Eine andere als die Standard-Tonspur kann der native Player nicht zuverlässig wählen → Remux mit genau dieser Spur.
+	otherTrack := a != nil && a != defaultAudio(m)
 	audioOK := true
 	if a != nil {
 		plan.AudioIndex = a.Index
@@ -109,7 +126,7 @@ func Decide(m *probe.Media, p Profile, speed float64) Plan {
 	}
 
 	switch {
-	case videoOK && audioOK && containerOK && bitrateOK:
+	case videoOK && audioOK && containerOK && bitrateOK && !otherTrack:
 		plan.Method, plan.Light = DirectPlay, Green
 	case videoOK && bitrateOK && audioOK && (a == nil || slices.Contains(tsAudio, a.Codec)):
 		plan.Method, plan.Light = DirectStream, Green
@@ -147,6 +164,10 @@ func Decide(m *probe.Media, p Profile, speed float64) Plan {
 		}
 		plan.Subtitles = append(plan.Subtitles, sub)
 	}
+	for _, st := range m.All("audio") {
+		plan.Audio = append(plan.Audio, AudioTrack{Index: st.Index, Language: st.Language, Title: st.Title,
+			Codec: st.Codec, Channels: st.Channels, Default: st.Default})
+	}
 	return plan
 }
 
@@ -160,6 +181,26 @@ func requiredSpeed(v *probe.Stream) float64 {
 		f *= float64(v.Width*v.Height) / (1920 * 1080)
 	}
 	return f
+}
+
+func chooseAudio(m *probe.Media, p Profile) *probe.Stream {
+	var byLang *probe.Stream
+	for i := range m.Streams {
+		s := &m.Streams[i]
+		if s.Type != "audio" {
+			continue
+		}
+		if p.AudioTrack > 0 && s.Index == p.AudioTrack {
+			return s
+		}
+		if byLang == nil && p.AudioLang != "" && s.Language == p.AudioLang {
+			byLang = s
+		}
+	}
+	if d := defaultAudio(m); byLang != nil && (d == nil || d.Language != p.AudioLang) {
+		return byLang
+	}
+	return defaultAudio(m)
 }
 
 func defaultAudio(m *probe.Media) *probe.Stream {
