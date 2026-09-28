@@ -23,16 +23,16 @@
   </section>
 
   <div id="app" hidden>
-    <section class="card" id="updateCard" hidden style="border-color:var(--accent)">
+    <section class="card" id="updateCard" hidden style="box-shadow:inset 0 0 0 1px var(--accent)">
       <h3>Neue Version verfügbar</h3>
       <p class="lead" id="updateText"></p>
-      <a class="primary" id="updateLink" target="_blank" rel="noopener" style="display:inline-block;padding:10px 18px;border-radius:10px;text-decoration:none">Zur Download-Seite</a>
+      <a class="primary" id="updateLink" target="_blank" rel="noopener" style="display:inline-block;padding:10px 18px;border-radius:2px;text-decoration:none">Zur Download-Seite</a>
     </section>
     <section class="card">
       <h3>Status</h3>
       <div class="status"><span class="dot" id="sdot"></span><span id="stext">…</span></div>
       <div id="ffbox" hidden><p class="hint" id="ffhint"></p><button class="small" id="ffget" hidden>ffmpeg automatisch installieren</button></div>
-      <div class="row" id="lanRow" hidden style="margin-top:12px"><img id="qr" alt="" width="96" height="96" style="border-radius:8px;background:#fff"><div class="grow"><strong>Auf Handy oder Fernseher öffnen</strong><small id="lan"></small></div></div>
+      <div class="row" id="lanRow" hidden style="margin-top:12px"><img id="qr" alt="" width="96" height="96" style="border-radius:2px;background:#fff"><div class="grow"><strong>Auf Handy oder Fernseher öffnen</strong><small id="lan"></small></div></div>
     </section>
 
     <section class="card">
@@ -47,7 +47,7 @@
       </select>
       <label for="tmdb">Eigener TMDB-Schlüssel (optional)</label>
       <input id="tmdb" placeholder="leer lassen – Flimmer bringt einen mit" autocomplete="off">
-      <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="updateCheck" style="width:auto"> einmal täglich nach neuen Versionen schauen</label>
+      <label class="check"><input type="checkbox" id="updateCheck" style="width:auto"> einmal täglich nach neuen Versionen schauen</label>
       <div class="actions"><span class="hint">Ein neuer Schlüssel gilt nach dem nächsten Neustart.</span><button class="primary" id="saveGeneral">Speichern</button></div>
     </section>
 
@@ -67,7 +67,7 @@
       <div id="users"></div>
       <label>Neue Person</label>
       <div class="inline"><input id="nuName" placeholder="Name" maxlength="40"><input id="nuPass" type="password" placeholder="Passwort (optional)" autocomplete="new-password"></div>
-      <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="nuAdmin" style="width:auto"> darf Einstellungen ändern (Admin)</label>
+      <label class="check"><input type="checkbox" id="nuAdmin" style="width:auto"> darf Einstellungen ändern (Admin)</label>
       <div class="error" id="uerr"></div>
       <div class="actions"><span class="hint">Ohne Passwort genügt im Heimnetz ein Klick aufs Profil.</span><button class="primary" id="addUser">Hinzufügen</button></div>
     </section>
@@ -75,7 +75,7 @@
     <section class="card" id="remoteCard" hidden>
       <h3>Von unterwegs schauen</h3>
       <p class="lead">Flimmer gibt im Router einen Zugang frei (IPv6, UPnP, PCP oder NAT-PMP). Filme laufen direkt von hier zu dir – über keinen fremden Server.</p>
-      <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="remoteOn" style="width:auto"> Fernzugriff einschalten</label>
+      <label class="check"><input type="checkbox" id="remoteOn" style="width:auto"> Fernzugriff einschalten</label>
       <div id="remoteStatus" hidden>
         <div class="status" style="margin-top:12px"><span class="dot" id="rdot"></span><span id="rtext"></span></div>
         <p class="hint" id="rhint"></p>
@@ -95,7 +95,7 @@
       </div>
       <div class="error" id="inverr"></div>
       <div class="actions"><span></span><button class="primary" id="invCreate">Einladung erstellen</button></div>
-      <div class="row" id="invNew" hidden><img id="invQr" alt="" width="120" height="120" style="border-radius:8px;background:#fff"><div class="grow"><strong>Link zum Weitergeben</strong><small><code id="invUrl" style="word-break:break-all"></code></small><small id="invHint"></small><button class="small" id="invCopy" style="margin-top:6px">Link kopieren</button></div></div>
+      <div class="row" id="invNew" hidden><img id="invQr" alt="" width="120" height="120" style="border-radius:2px;background:#fff"><div class="grow"><strong>Link zum Weitergeben</strong><small><code id="invUrl" style="word-break:break-all"></code></small><small id="invHint"></small><button class="small" id="invCopy" style="margin-top:6px">Link kopieren</button></div></div>
       <div id="invList"></div>
     </section>
 
@@ -109,7 +109,7 @@
     <section class="card">
       <h3>Nachts vorbereiten</h3>
       <p class="lead">Titel, die ein Gerät nur mit Umwandeln abspielen kann (rote Ampel), bereitet Flimmer nachts als MP4 vor. Danach laufen sie direkt – ohne Last beim Schauen. Das Original bleibt unverändert.</p>
-      <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="optOn" style="width:auto"> einschalten</label>
+      <label class="check"><input type="checkbox" id="optOn" style="width:auto"> einschalten</label>
       <div class="inline" style="margin-top:8px">
         <div style="flex:1"><label for="optFrom">von</label><select id="optFrom"><option value="0">0 Uhr</option><option value="1">1 Uhr</option><option value="2">2 Uhr</option><option value="3">3 Uhr</option><option value="4">4 Uhr</option><option value="5">5 Uhr</option><option value="6">6 Uhr</option><option value="7">7 Uhr</option><option value="8">8 Uhr</option><option value="9">9 Uhr</option><option value="10">10 Uhr</option><option value="11">11 Uhr</option><option value="12">12 Uhr</option><option value="13">13 Uhr</option><option value="14">14 Uhr</option><option value="15">15 Uhr</option><option value="16">16 Uhr</option><option value="17">17 Uhr</option><option value="18">18 Uhr</option><option value="19">19 Uhr</option><option value="20">20 Uhr</option><option value="21">21 Uhr</option><option value="22">22 Uhr</option><option value="23">23 Uhr</option></select></div>
         <div style="flex:1"><label for="optTo">bis</label><select id="optTo"><option value="0">0 Uhr</option><option value="1">1 Uhr</option><option value="2">2 Uhr</option><option value="3">3 Uhr</option><option value="4">4 Uhr</option><option value="5">5 Uhr</option><option value="6">6 Uhr</option><option value="7">7 Uhr</option><option value="8">8 Uhr</option><option value="9">9 Uhr</option><option value="10">10 Uhr</option><option value="11">11 Uhr</option><option value="12">12 Uhr</option><option value="13">13 Uhr</option><option value="14">14 Uhr</option><option value="15">15 Uhr</option><option value="16">16 Uhr</option><option value="17">17 Uhr</option><option value="18">18 Uhr</option><option value="19">19 Uhr</option><option value="20">20 Uhr</option><option value="21">21 Uhr</option><option value="22">22 Uhr</option><option value="23">23 Uhr</option></select></div>
@@ -126,8 +126,8 @@
       <p class="lead">Jede Nacht legt Flimmer automatisch eine Sicherung an (die letzten 7 bleiben). Hier kannst du eine herunterladen oder zurückspielen.</p>
       <p class="hint" id="bkinfo"></p>
       <div class="actions">
-        <a class="small" href="/api/settings/backup" style="color:var(--text);text-decoration:none;padding:6px 12px;border-radius:10px;background:var(--surface2)">Sicherung herunterladen</a>
-        <label class="small" style="margin:0;cursor:pointer;padding:6px 12px;border-radius:10px;background:var(--surface2);color:var(--text)">Sicherung einspielen …<input type="file" id="restoreFile" accept=".db" hidden></label>
+        <a class="small" href="/api/settings/backup" style="color:var(--text);text-decoration:none;padding:6px 12px;border-radius:2px;background:var(--surface2)">Sicherung herunterladen</a>
+        <label class="small" style="margin:0;cursor:pointer;padding:6px 12px;border-radius:2px;background:var(--surface2);color:var(--text)">Sicherung einspielen …<input type="file" id="restoreFile" accept=".db" hidden></label>
       </div>
       <div class="error" id="bkerr"></div>
     </section>
@@ -137,7 +137,7 @@
       <div id="diag"></div>
       <div id="streams"></div>
       <details style="margin-top:12px"><summary class="hint" style="cursor:pointer">Protokoll (letzte 200 Zeilen)</summary>
-        <pre id="log" style="max-height:280px;overflow:auto;font-size:12px;background:var(--surface2);padding:12px;border-radius:10px;white-space:pre-wrap"></pre></details>
+        <pre id="log" style="max-height:280px;overflow:auto;font-size:12px;background:var(--surface2);padding:12px;border-radius:2px;white-space:pre-wrap"></pre></details>
       <div class="actions"><span class="hint">Für Fehlerberichte: kopiert Status und Protokoll.</span><button class="small" id="copyDiag">Diagnose kopieren</button></div>
     </section>
 
@@ -287,7 +287,7 @@ $('addUser').onclick = function () {
 // --- Einladungen ---
 function renderInvDirs(ds) {
   $('invDirs').innerHTML = ds.map(function (d, i) {
-    return '<label style="display:flex;align-items:center;gap:8px;margin:4px 0;color:var(--text)"><input type="checkbox" style="width:auto" value="' + esc(d) + '"' + (i === 0 ? ' checked' : '') + '> <code>' + esc(d) + '</code></label>';
+    return '<label class="check" style="margin:4px 0"><input type="checkbox" style="width:auto" value="' + esc(d) + '"' + (i === 0 ? ' checked' : '') + '> <code>' + esc(d) + '</code></label>';
   }).join('') || '<p class="hint">Erst einen Medienordner hinzufügen.</p>';
 }
 function loadInvites() {
