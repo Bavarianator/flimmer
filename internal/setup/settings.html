@@ -72,6 +72,18 @@
       <div class="actions"><span class="hint">Ohne Passwort genügt im Heimnetz ein Klick aufs Profil.</span><button class="primary" id="addUser">Hinzufügen</button></div>
     </section>
 
+    <section class="card" id="remoteCard" hidden>
+      <h3>Von unterwegs schauen</h3>
+      <p class="lead">Flimmer gibt im Router einen Zugang frei (IPv6, UPnP, PCP oder NAT-PMP). Filme laufen direkt von hier zu dir – über keinen fremden Server.</p>
+      <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="remoteOn" style="width:auto"> Fernzugriff einschalten</label>
+      <div id="remoteStatus" hidden>
+        <div class="status" style="margin-top:12px"><span class="dot" id="rdot"></span><span id="rtext"></span></div>
+        <p class="hint" id="rhint"></p>
+        <div class="actions"><button class="small" id="rpair">Code für die App erzeugen</button><button class="small" id="rcheck">Erreichbarkeit prüfen</button></div>
+        <p class="hint" id="rcode"></p>
+      </div>
+    </section>
+
     <section class="card">
       <h3>Fernseher koppeln</h3>
       <p class="lead">Öffne Flimmer auf dem Fernseher und wähle „Mit Code anmelden“. Gib hier den angezeigten Code ein.</p>
@@ -135,6 +147,9 @@ function load() {
     $('ffhint').textContent = s.ffmpeg.download.error ? 'Download fehlgeschlagen: ' + s.ffmpeg.download.error : s.ffmpeg.hint;
     $('ffget').hidden = !s.ffmpeg.canDownload;
     $('updateCheck').checked = s.updateCheck;
+    $('remoteCard').hidden = !s.remoteAvailable;
+    $('remoteOn').checked = s.remote;
+    if (s.remote) loadRemote();
     $('updateCard').hidden = !s.update;
     if (s.update) { $('updateText').textContent = 'Flimmer ' + s.update.version + ' ist erschienen (installiert: ' + s.version + ').'; $('updateLink').href = s.update.url }
     if (s.lanUrl) { $('lanRow').hidden = false; $('lan').textContent = s.lanUrl; $('qr').src = '/api/qr' }
@@ -267,6 +282,32 @@ function search(e, row) {
     row.after(box);
   }).catch(function (x) { toast(x.message) });
 }
+
+// --- Fernzugriff ---
+var methodName = { ipv6: 'IPv6', upnp: 'UPnP', pcp: 'PCP', 'nat-pmp': 'NAT-PMP', none: 'keine Freigabe' };
+function showRemote(r) {
+  $('remoteStatus').hidden = false;
+  $('rdot').className = 'dot ' + (r.reachable ? 'ok' : 'bad');
+  $('rtext').textContent = r.publicUrl ? (r.reachable ? 'Erreichbar unter ' : 'Freigegeben, noch nicht bestätigt: ') + r.publicUrl + ' (' + (methodName[r.method] || r.method) + ')' : 'Noch keine öffentliche Adresse';
+  $('rhint').textContent = r.hint || '';
+}
+function loadRemote() { api('GET', '/api/remote').then(showRemote).catch(function () {}) }
+$('remoteOn').onchange = function () {
+  var on = this.checked;
+  api('PUT', '/api/settings', { remote: on }).then(function () {
+    toast(on ? 'Fernzugriff eingeschaltet – Router wird eingerichtet …' : 'Fernzugriff ausgeschaltet');
+    $('remoteStatus').hidden = !on;
+    if (on) setTimeout(loadRemote, 3000);
+  }).catch(function (e) { toast(e.message) });
+};
+$('rcheck').onclick = function () {
+  var b = this; b.disabled = true; $('rtext').textContent = 'Prüfe von außen … (bis zu 30 Sekunden)';
+  api('POST', '/api/remote/check').then(showRemote).catch(function (e) { toast(e.message) }).then(function () { b.disabled = false });
+};
+$('rpair').onclick = function () {
+  api('POST', '/api/remote/pair').then(function (r) { $('rcode').textContent = 'Code: ' + r.code + ' – in der App unter „Server hinzufügen“ eingeben. Gilt bis ' + new Date(r.expires).toLocaleTimeString() + '.' })
+    .catch(function (e) { toast(e.message) });
+};
 
 // --- Diagnose ---
 var methodText = { 'direct-play': 'läuft direkt', 'direct-stream': 'nur umverpackt', 'transcode-audio': 'Ton wird umgewandelt', 'transcode': 'wird transkodiert' };

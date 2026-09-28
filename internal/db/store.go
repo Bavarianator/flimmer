@@ -18,6 +18,7 @@ type Settings struct {
 	Dirs       []string
 	TMDBKey    string // leer = eingebauter Projekt-Key
 	NoUpdates  bool   // Update-Hinweis abgeschaltet
+	Remote     bool   // Fernzugriff eingeschaltet (Portfreigabe im Router)
 	Secret     []byte // HMAC-Schlüssel für Medien-Tokens
 }
 
@@ -52,6 +53,8 @@ func settings(ctx context.Context, q querier) (Settings, error) {
 			s.TMDBKey = v
 		case "no_updates":
 			s.NoUpdates = v == "1"
+		case "remote":
+			s.Remote = v == "1"
 		case "secret":
 			s.Secret, _ = hex.DecodeString(v)
 		}
@@ -89,7 +92,7 @@ func (d *DB) UpdateSettings(ctx context.Context, f func(s *Settings)) error {
 
 func writeSettings(ctx context.Context, tx *sql.Tx, s Settings) error {
 	kv := map[string]string{"server_name": s.ServerName, "language": s.Language, "tmdb_key": s.TMDBKey,
-		"no_updates": fmt.Sprint(b2i(s.NoUpdates)), "secret": hex.EncodeToString(s.Secret)}
+		"no_updates": fmt.Sprint(b2i(s.NoUpdates)), "remote": fmt.Sprint(b2i(s.Remote)), "secret": hex.EncodeToString(s.Secret)}
 	for k, v := range kv {
 		if _, err := tx.ExecContext(ctx, "INSERT INTO settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", k, v); err != nil {
 			return err

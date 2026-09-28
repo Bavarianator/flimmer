@@ -103,7 +103,7 @@ func (s *Server) settings(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, map[string]any{"serverName": set.ServerName, "language": cmp(set.Language, "de"), "dirs": nonNil(set.Dirs),
 		"tmdbKey": set.TMDBKey != "", "suggestions": suggestions(), "ffmpeg": s.ffmpegInfo(), "lanUrl": s.LANURL,
-		"updateCheck": !set.NoUpdates, "update": s.availableUpdate(), "version": update.Version})
+		"updateCheck": !set.NoUpdates, "remote": set.Remote, "remoteAvailable": s.Remote != nil, "update": s.availableUpdate(), "version": update.Version})
 }
 
 func (s *Server) availableUpdate() *update.Release {
@@ -120,6 +120,7 @@ func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {
 		Dirs       []string `json:"dirs"`
 		TMDBKey    *string  `json:"tmdbKey"` // "" entfernt den eigenen Key
 		Update     *bool    `json:"updateCheck"`
+		Remote     *bool    `json:"remote"`
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -148,12 +149,18 @@ func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {
 		if req.Update != nil {
 			set.NoUpdates = !*req.Update
 		}
+		if req.Remote != nil {
+			set.Remote = *req.Remote
+		}
 	})
 	if writeErr(w, err) {
 		return
 	}
 	if req.Dirs != nil {
 		s.Lib.SetDirs(dirs)
+	}
+	if req.Remote != nil && s.RemoteToggle != nil {
+		s.RemoteToggle(*req.Remote)
 	}
 	s.settings(w, r)
 }

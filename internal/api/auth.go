@@ -38,6 +38,7 @@ var public = map[string]bool{
 	"POST /api/login":        true,
 	"POST /api/logout":       true,
 	"POST /api/pair":         true,
+	"GET /api/remote/ping":   true, // Erreichbarkeitstest des Relays
 	"GET /api/setup":         true, // Setup-Routen prüfen selbst: offen nur, solange kein Admin existiert
 	"GET /api/setup/dirs":    true,
 	"GET /api/setup/count":   true,
@@ -189,6 +190,15 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u := s.user(r.Context(), req.User)
+	if u == nil { // Skripte und API-Nutzer dürfen auch den Namen angeben
+		all, _ := s.DB.Users(r.Context())
+		for _, c := range all {
+			if strings.EqualFold(c.Name, strings.TrimSpace(req.User)) {
+				u = &c
+				break
+			}
+		}
+	}
 	ok := u != nil && ((u.PassHash == "" && !u.Admin && inLAN(r)) || (u.PassHash != "" && auth.CheckPassword(u.PassHash, req.Password)))
 	if !ok {
 		s.limiter.Fail(ip)

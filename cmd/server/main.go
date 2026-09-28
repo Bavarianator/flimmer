@@ -28,6 +28,7 @@ import (
 	"github.com/flimmer-media/flimmer/internal/hwaccel"
 	"github.com/flimmer-media/flimmer/internal/images"
 	"github.com/flimmer-media/flimmer/internal/meta"
+	"github.com/flimmer-media/flimmer/internal/remote"
 	"github.com/flimmer-media/flimmer/internal/scan"
 	"github.com/flimmer-media/flimmer/internal/service"
 	"github.com/flimmer-media/flimmer/internal/setup"
@@ -47,6 +48,7 @@ func main() {
 	media := flag.String("media", "", "Medienordner, mehrere mit Komma getrennt (sonst aus der Einrichtung)")
 	data := flag.String("data", "", "ein Ordner für alles (Einstellungen und Cache); Standard: Benutzerordner des Systems")
 	every := flag.Duration("rescan", 15*time.Minute, "Abstand zwischen automatischen Scans")
+	relayURL := flag.String("relay", "", "Rendezvous-Dienst für den Fernzugriff (leer = keine Prüfung von außen)")
 	flag.Parse()
 	ring := &api.LogRing{}
 	log.SetOutput(io.MultiWriter(os.Stderr, ring))
@@ -133,6 +135,29 @@ func main() {
 	lanURL := discovery.LANURL(port)
 	srv := &api.Server{Lib: lib, HLS: hls, DB: store, Meta: res, Images: img, CacheDir: cacheDir,
 		Web: web.FS(), Pages: setup.FS(), LANURL: lanURL, QR: discovery.QRHandler(port), Log: ring, Updates: &update.Checker{}}
+	if rem, err := remote.New(remote.Options{Port: port, KeyFile: filepath.Join(cfgDir, "remote.key"), RelayURL: *relayURL}); err != nil {
+		log.Printf("Fernzugriff: %v", err)
+	} else {
+		srv.Remote = rem
+		var mu sync.Mutex
+		var stopRemote context.CancelFunc
+		srv.RemoteToggle = func(on bool) {
+			mu.Lock()
+			defer mu.Unlock()
+			if stopRemote != nil { // Run gibt die Router-Freigaben beim Ende von ctx wieder frei
+				stopRemote()
+				stopRemote = nil
+			}
+			if on {
+				var rctx context.Context
+				rctx, stopRemote = context.WithCancel(ctx)
+				go rem.Run(rctx)
+			}
+		}
+		if set.Remote {
+			srv.RemoteToggle(true)
+		}
+	}
 	go srv.Updates.Run(ctx, func() bool {
 		s, err := store.Settings(ctx)
 		return err == nil && !s.NoUpdates

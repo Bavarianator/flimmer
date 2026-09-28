@@ -20,6 +20,7 @@ import (
 	"github.com/flimmer-media/flimmer/internal/hwaccel"
 	"github.com/flimmer-media/flimmer/internal/images"
 	"github.com/flimmer-media/flimmer/internal/meta"
+	"github.com/flimmer-media/flimmer/internal/remote"
 	"github.com/flimmer-media/flimmer/internal/scan"
 	"github.com/flimmer-media/flimmer/internal/transcode"
 	"github.com/flimmer-media/flimmer/internal/update"
@@ -34,13 +35,16 @@ type Server struct {
 	FF       *ffmpeg.Installer // nil = kein Download möglich
 	CacheDir string
 	Web      fs.FS
-	Pages    fs.FS                         // setup.html, settings.html
-	LANURL   string                        // z. B. http://192.168.1.20:8096, für QR-Code und Anzeige
-	QR       http.Handler                  // PNG mit LANURL
-	Log      *LogRing                      // letzte Log-Zeilen für die Diagnose, nil = keine
-	Updates  *update.Checker               // nil = keine Update-Prüfung
-	FFmpeg   atomic.Bool                   // ffmpeg/ffprobe gefunden
-	HW       atomic.Pointer[hwaccel.Accel] // gesetzt, sobald hwaccel.Detect fertig ist
+	Pages    fs.FS           // setup.html, settings.html
+	LANURL   string          // z. B. http://192.168.1.20:8096, für QR-Code und Anzeige
+	QR       http.Handler    // PNG mit LANURL
+	Log      *LogRing        // letzte Log-Zeilen für die Diagnose, nil = keine
+	Updates  *update.Checker // nil = keine Update-Prüfung
+	Remote   *remote.Remote  // nil = kein Fernzugriff möglich
+	// RemoteToggle startet bzw. stoppt die Portfreigabe, wenn der Admin den Fernzugriff umschaltet.
+	RemoteToggle func(on bool)
+	FFmpeg       atomic.Bool                   // ffmpeg/ffprobe gefunden
+	HW           atomic.Pointer[hwaccel.Accel] // gesetzt, sobald hwaccel.Detect fertig ist
 
 	pairing auth.Pairing
 	limiter auth.Limiter
@@ -82,6 +86,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/settings/review", adminOnly(s.review))
 	mux.HandleFunc("POST /api/rescan", adminOnly(s.rescan))
 	mux.HandleFunc("GET /api/diagnostics", adminOnly(s.diagnostics))
+	if s.Remote != nil {
+		mux.HandleFunc("GET /api/remote", adminOnly(s.Remote.StatusHandler))
+		mux.HandleFunc("POST /api/remote/check", adminOnly(s.Remote.CheckHandler))
+		mux.HandleFunc("POST /api/remote/pair", adminOnly(s.Remote.PairHandler))
+		mux.HandleFunc("GET /api/remote/ping", s.Remote.PingHandler) // ruft das Relay ohne Anmeldung zurück
+	}
 
 	// Bibliothek und Wiedergabe
 	mux.HandleFunc("POST /api/library", s.library)
