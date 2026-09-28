@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Erzeugt kurze Testclips (320x180, 10 s), die jeden Wiedergabe-Pfad abdecken.
+# Erzeugt kurze Testclips (320x180, 10–60 s), die jeden Wiedergabe-Pfad abdecken.
 # Aufruf: scripts/testmedia.sh [zielordner]   (Standard: testdata/media)
 # ponytail: kein PGS-Clip, ffmpeg hat keinen PGS-Encoder; bei Bedarf eine echte .sup-Probe einbinden.
 set -euo pipefail
@@ -23,13 +23,13 @@ Format: Layer, Start, End, Style, Text
 Dialogue: 0,0:00:01.00,0:00:04.00,Default,Hello world
 EOF
 
-ff() { ffmpeg -hide_banner -loglevel error -y -f lavfi -i testsrc2=size=320x180:rate=25:duration=10 -f lavfi -i sine=frequency=440:duration=10 "$@"; }
+ff() { ffmpeg -hide_banner -loglevel error -y -f lavfi -i testsrc2=size=320x180:rate=25:duration=${D:-10} -f lavfi -i sine=frequency=440:duration=${D:-10} "$@"; }
 h264=(-c:v libx264 -preset ultrafast -g 50 -pix_fmt yuv420p)
 
 # Direct Play: MP4 mit H.264 + AAC
 ff "${h264[@]}" -c:a aac -movflags +faststart "$out/Direkt (2020).mp4"
-# Direct Stream: MKV (Container passt nicht) + Text-Untertitel SRT und ASS
-ff -i "$tmp/de.srt" -i "$tmp/en.ass" -map 0 -map 1 -map 2 -map 3 "${h264[@]}" -c:a aac -c:s:0 srt -c:s:1 ass \
+# Direct Stream: MKV (Container passt nicht) + Text-Untertitel SRT und ASS; 60 s für den Seek-Test
+D=60 ff -i "$tmp/de.srt" -i "$tmp/en.ass" -map 0 -map 1 -map 2 -map 3 "${h264[@]}" -c:a aac -c:s:0 srt -c:s:1 ass \
   -metadata:s:s:0 language=ger -metadata:s:s:1 language=eng "$out/Remux (2021).mkv"
 # Nur Ton transkodieren: DTS 5.1
 ff "${h264[@]}" -c:a dca -strict -2 -ac 6 "$out/Tonwandel (2022).mkv"
