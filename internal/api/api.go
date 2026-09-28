@@ -220,7 +220,8 @@ func (s *Server) job(w http.ResponseWriter, r *http.Request) (transcode.Job, boo
 	audio, err := strconv.Atoi(r.PathValue("audio"))
 	acodec, vcodec := r.PathValue("acodec"), r.PathValue("vcodec")
 	vc, height, vok := transcode.ParseVideo(vcodec)
-	valid := err == nil && (acodec == "copy" || acodec == "aac" || acodec == "eac3") && vok
+	ac, night, aok := transcode.ParseAudio(acodec) // z. B. "aac-night" im Nachtmodus
+	valid := err == nil && aok && vok
 	if !valid {
 		http.Error(w, "ungültige Parameter", http.StatusBadRequest)
 		return transcode.Job{}, false
@@ -234,12 +235,14 @@ func (s *Server) job(w http.ResponseWriter, r *http.Request) (transcode.Job, boo
 		return transcode.Job{}, false
 	}
 	job := transcode.Job{
-		Input:      path,
-		Segments:   transcode.Segments(kf, media.Duration),
-		AudioIndex: audio,
-		AudioCodec: acodec,
-		VideoCodec: vc,
-		Height:     height,
+		Input:         path,
+		Segments:      transcode.Segments(kf, media.Duration),
+		AudioIndex:    audio,
+		AudioCodec:    ac,
+		Night:         night,
+		AudioChannels: channels(media, audio),
+		VideoCodec:    vc,
+		Height:        height,
 	}
 	if vc == "h264" {
 		hw := s.hw()
@@ -336,6 +339,16 @@ func (s *Server) item(w http.ResponseWriter, r *http.Request) *scan.Item {
 		http.NotFound(w, r)
 	}
 	return it
+}
+
+// channels liefert die Kanalzahl der Tonspur idx (0, wenn unbekannt) – für den Stereo-Downmix im Nachtmodus.
+func channels(m *probe.Media, idx int) int {
+	for _, st := range m.Streams {
+		if st.Index == idx {
+			return st.Channels
+		}
+	}
+	return 0
 }
 
 func hasStream(m *probe.Media, idx int, typ string) bool {

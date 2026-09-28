@@ -109,6 +109,9 @@ func TestEndToEnd(t *testing.T) {
 	if n := strings.Count(string(b), ".ts"); res.StatusCode != 200 || n < 2 {
 		t.Fatalf("playlist ohne Cookie: %d mit %d Segmenten\n%s", res.StatusCode, n, b)
 	}
+	if res, _ := call(anon, "GET", strings.Replace(play.URL, "/copy/copy/", "/aac-night/copy/", 1), nil); res.StatusCode != 200 {
+		t.Fatalf("Nachtmodus-Playlist: %d", res.StatusCode)
+	}
 	if res, _ := call(anon, "GET", strings.Replace(play.URL, "/items/", "x/items/", 1), nil); res.StatusCode != 401 {
 		t.Fatalf("manipuliertes Token: %d", res.StatusCode)
 	}

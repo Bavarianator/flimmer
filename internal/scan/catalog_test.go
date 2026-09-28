@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/flimmer-media/flimmer/internal/db"
@@ -49,6 +50,19 @@ func TestCatalog(t *testing.T) {
 	}
 	if kf2, ok := loadKeyframes(ctx, store.DB, it.ID, it.Size, mtime(t, clip)); !ok || len(kf2) != len(kf) {
 		t.Fatalf("Keyframes nicht aus der DB: %v", kf2)
+	}
+
+	// Bibliotheksordner als Symlink (NAS: /srv/media → /mnt/disk1): Titel werden gefunden, Pfad bleibt unter dem Link.
+	link := filepath.Join(t.TempDir(), "medien")
+	if err := os.Symlink(media, link); err != nil {
+		t.Fatal(err)
+	}
+	libLink := NewLibrary(store.DB, []string{link})
+	if err := libLink.Scan(ctx); err != nil || len(libLink.All()) != 1 || !strings.HasPrefix(libLink.All()[0].Path, link) {
+		t.Fatalf("Symlink-Ordner: %v %d", err, len(libLink.All()))
+	}
+	if err := lib2.Scan(ctx); err != nil { // wieder unter dem Originalpfad
+		t.Fatal(err)
 	}
 
 	// Ordner weg (NAS aus): Titel bleiben.

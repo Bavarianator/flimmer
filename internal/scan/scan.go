@@ -315,7 +315,17 @@ func (l *Library) Scan(ctx context.Context) error {
 			offline = append(offline, dir)
 			continue
 		}
-		err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		// WalkDir betritt keine Symlink-Wurzel (NAS: /srv/media → /mnt/disk1) – dann gäbe es 0 Funde und alle
+		// Titel des Ordners würden gelöscht. Deshalb das Ziel durchlaufen, Pfade aber unter dem Ordnernamen führen,
+		// den der Admin gewählt hat (stabile IDs).
+		root, err := filepath.EvalSymlinks(dir)
+		if err != nil {
+			root = dir
+		}
+		err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+			if root != dir {
+				path = filepath.Join(dir, strings.TrimPrefix(path, root))
+			}
 			if err != nil {
 				log.Printf("scan: %v", err)
 				return nil
