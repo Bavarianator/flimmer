@@ -259,13 +259,21 @@ func args(job Job, first int, dir string) []string {
 		a = append(a, "-c:v", "copy")
 	} else {
 		a = append(a, "-progress", "pipe:1", "-stats_period", "1")
-		if job.Height > 0 && len(job.InputArgs) == 0 {
+		reduce := job.Height > 0 && len(job.InputArgs) == 0
+		if reduce {
+			// Nie hochskalieren (SD-Quellen bleiben, wie sie sind).
 			// ponytail: Verkleinern nur im Software-Pfad; HW-Frames bräuchten scale_vaapi/scale_cuda/… je Backend.
-			a = append(a, "-vf", "scale=-2:"+strconv.Itoa(job.Height))
+			a = append(a, "-vf", "scale=-2:min("+strconv.Itoa(job.Height)+"\\,ih)")
 		}
 		enc := job.Encoder
 		if len(enc) == 0 {
 			enc = []string{"-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p", "-profile:v", "high"}
+		}
+		enc = append([]string(nil), enc...)
+		for i := 0; reduce && i+1 < len(enc); i++ {
+			if enc[i] == "-preset" {
+				enc[i+1] = "ultrafast" // Herunterstufen soll auch bei SD-Quellen spürbar Rechenzeit sparen
+			}
 		}
 		a = append(a, enc...)
 		if len(abs) > 0 {

@@ -99,7 +99,7 @@ func TestWatchDowngradesSlowTranscode(t *testing.T) {
 
 func TestArgsDownscaleOnlyInSoftware(t *testing.T) {
 	job := Job{Input: "x.mkv", Segments: Segments(nil, 30), AudioIndex: -1, AudioCodec: "aac", VideoCodec: "h264", Height: 720}
-	if a := strings.Join(args(job, 0, "/tmp/x"), " "); !strings.Contains(a, "-vf scale=-2:720") || !strings.Contains(a, "-progress pipe:1") {
+	if a := strings.Join(args(job, 0, "/tmp/x"), " "); !strings.Contains(a, `-vf scale=-2:min(720\,ih)`) || !strings.Contains(a, "-preset ultrafast") || !strings.Contains(a, "-progress pipe:1") {
 		t.Fatalf("Software: %s", a)
 	}
 	job.InputArgs = []string{"-hwaccel", "vaapi"}
