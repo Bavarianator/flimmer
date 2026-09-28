@@ -18,9 +18,9 @@ import (
 	"net/netip"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/flimmer-media/flimmer/internal/ratelimit"
 	"github.com/flimmer-media/flimmer/internal/remote"
 	_ "github.com/ncruces/go-sqlite3/driver"
 )
@@ -69,7 +69,7 @@ type relay struct {
 	dns          DNS
 	allowPrivate bool
 	trusted      netip.Prefix // Reverse-Proxy, dem X-Forwarded-For geglaubt wird
-	limiter      limiter
+	limiter      ratelimit.Limiter
 	now          func() time.Time
 }
 
@@ -95,63 +95,15 @@ func (rl *relay) routes() http.Handler {
 	mux.HandleFunc("POST /v1/pair", rl.pair)
 	mux.HandleFunc("GET /v1/pair/{code}", rl.resolve)
 	mux.HandleFunc("POST /v1/acme", rl.acme)
+	// 20 Anfragen am Stück, dann 1 pro Sekunde – bremst auch das Raten von Pairing-Codes.
 	return http.MaxBytesHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !rl.limiter.allow(rl.clientIP(r), rl.clock()) {
+		if !rl.limiter.Allow(rl.clientIP(r), rl.clock()) {
 			w.Header().Set("Retry-After", "10")
 			fail(w, http.StatusTooManyRequests, "zu viele Anfragen, bitte kurz warten")
 			return
 		}
 		mux.ServeHTTP(w, r)
 	}), 8<<10)
-}
-
-// limiter ist ein Token-Bucket pro Absender (IPv4-Adresse bzw. IPv6-/64): 20 Anfragen am Stück, dann 1 pro Sekunde.
-// Das bremst auch das Raten von Pairing-Codes.
-type limiter struct {
-	mu sync.Mutex
-	m  map[netip.Addr]*bucket
-}
-
-type bucket struct {
-	tokens float64
-	last   time.Time
-}
-
-const (
-	burst = 20
-	rate  = 1.0 // pro Sekunde
-)
-
-func (l *limiter) allow(ip net.IP, now time.Time) bool {
-	a, _ := netip.AddrFromSlice(ip)
-	a = a.Unmap()
-	if a.Is6() {
-		a = netip.PrefixFrom(a, 64).Masked().Addr()
-	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.m == nil {
-		l.m = map[netip.Addr]*bucket{}
-	}
-	if len(l.m) > 100_000 { // volle Buckets vergessen; ponytail: O(n) Aufräumen, das nur unter Last läuft
-		for k, b := range l.m {
-			if now.Sub(b.last).Seconds()*rate >= burst {
-				delete(l.m, k)
-			}
-		}
-	}
-	b := l.m[a]
-	if b == nil {
-		b = &bucket{tokens: burst, last: now}
-		l.m[a] = b
-	}
-	b.tokens = min(burst, b.tokens+now.Sub(b.last).Seconds()*rate)
-	b.last = now
-	if b.tokens < 1 {
-		return false
-	}
-	b.tokens--
-	return true
 }
 
 func (rl *relay) clock() time.Time {
