@@ -95,3 +95,16 @@ Ergebnis: Das Software-Transcoding ist rund **12× langsamer** als VAAPI. Echtze
 scripts/deploy-nas.sh              # baut HEAD, deployt, startet (Port 8097)
 scripts/deploy-nas.sh stop|remove  # stoppen bzw. ~/flimmer auf dem NAS entfernen
 ```
+
+## Nachtrag: Hintergrund-Optimierung mit VAAPI
+
+Testclip `~/flimmer/testmedia/Rot (2025).ts`, außerhalb der Jellyfin-Bibliothek. Es ist eine DVB-typische Aufnahme: 60 s MPEG-2 1080p mit 12 Mbit/s und MP2-Ton. Für einen H.264/AAC-Browser ist das 🔴.
+
+| Lauf | Dauer | Echtzeit-Faktor | Ergebnis |
+|---|---|---|---|
+| VAAPI (hwaccel.Detect: 1,89×) | 37 s | 1,6× | MP4 H.264 1080p, danach 🟢 Direct Play |
+| GPU absichtlich kaputt (Render-Node existiert nicht) | 194 s | 0,31× | Rückfall auf Software greift, ebenfalls 🟢 |
+
+Die Dauer enthält Start, Probe und `nice`/`ionice`. Mit VAAPI schafft das NAS nachts rund 1,6 Stunden Film pro Stunde, in Software nur 0,3.
+
+Nebenbefund: `Status().Done` blieb nach dem fertigen Job 0, obwohl `Lookup` die Version findet. Das ist an vault-b8 gemeldet.
