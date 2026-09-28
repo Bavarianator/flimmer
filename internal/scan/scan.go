@@ -126,6 +126,14 @@ func (l *Library) Run(ctx context.Context, every time.Duration) {
 	}
 }
 
+// SetDirs ersetzt die Medienordner (Setup, Einstellungen) und scannt neu.
+func (l *Library) SetDirs(dirs []string) {
+	l.mu.Lock()
+	l.Dirs = slices.Clone(dirs)
+	l.mu.Unlock()
+	l.Rescan()
+}
+
 // Rescan stößt einen Scan an, ohne zu warten; mehrfaches Drücken ergibt einen Scan.
 func (l *Library) Rescan() {
 	select {
@@ -196,11 +204,12 @@ func (l *Library) Scan(ctx context.Context) error {
 	if l.items == nil {
 		l.items = map[string]*Item{}
 	}
+	dirs := slices.Clone(l.Dirs)
 	l.mu.Unlock()
 
 	items := map[string]*Item{}
 	newCache := map[string]cacheEntry{}
-	for _, dir := range l.Dirs {
+	for _, dir := range dirs {
 		err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				log.Printf("scan: %v", err)
