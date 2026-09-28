@@ -112,10 +112,12 @@ type Library struct {
 	scanning atomic.Bool
 	found    atomic.Int64
 	wake     chan struct{}
+	scanned  chan struct{} // geschlossen nach dem ersten vollständigen Scan
+	once     sync.Once
 }
 
 func NewLibrary(db *sql.DB, dirs []string) *Library {
-	return &Library{Dirs: dirs, DB: db, wake: make(chan struct{}, 1)}
+	return &Library{Dirs: dirs, DB: db, wake: make(chan struct{}, 1), scanned: make(chan struct{})}
 }
 
 // Load füllt die Bibliothek aus der Datenbank – sie ist damit sofort nach dem Start da, noch vor dem ersten Scan.
@@ -153,6 +155,7 @@ func (l *Library) Run(ctx context.Context, every time.Duration) {
 			log.Printf("scan: %d Titel", len(l.All()))
 		}
 		l.resolveMeta(ctx)
+		l.once.Do(func() { close(l.scanned) })
 		l.Prefetch(ctx)
 		select {
 		case <-ctx.Done():
@@ -162,6 +165,10 @@ func (l *Library) Run(ctx context.Context, every time.Duration) {
 		}
 	}
 }
+
+// Scanned ist geschlossen, sobald der erste Scan samt Metadaten durch ist – danach ist die Maschine ruhiger
+// (z. B. für die Hardware-Messung, die sonst mit dem Scan um die CPU konkurriert).
+func (l *Library) Scanned() <-chan struct{} { return l.scanned }
 
 // SetDirs ersetzt die Medienordner (Setup, Einstellungen) und scannt neu.
 func (l *Library) SetDirs(dirs []string) {

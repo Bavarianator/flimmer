@@ -184,10 +184,27 @@ func main() {
 	start := func() {
 		startMedia.Do(func() {
 			go lib.Run(ctx, *every)
+			// Erst nach dem ersten Scan messen: Parallel zum Scan misst ein 2-Kern-NAS 0,9× statt 5×,
+			// und Titel landen fälschlich auf Rot. Bis dahin gilt Speed 0 = unbekannt.
 			go func() {
-				a := hwaccel.Detect(ctx)
-				log.Printf("Transcoding: %s (%.1f× Echtzeit bei 1080p)", a.Name, a.Speed)
-				srv.HW.Store(&a)
+				select {
+				case <-lib.Scanned():
+				case <-ctx.Done():
+					return
+				}
+				for try := 0; try < 2; try++ {
+					a := hwaccel.Detect(ctx)
+					log.Printf("Transcoding: %s (%.1f× Echtzeit bei 1080p)", a.Name, a.Speed)
+					srv.HW.Store(&a)
+					if a.Speed >= 1.5 {
+						return
+					}
+					select { // langsam gemessen – vielleicht war die Maschine nur beschäftigt
+					case <-time.After(10 * time.Minute):
+					case <-ctx.Done():
+						return
+					}
+				}
 			}()
 		})
 	}
