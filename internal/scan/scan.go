@@ -256,7 +256,7 @@ func (l *Library) Scan(ctx context.Context) error {
 				return nil
 			}
 			var it *Item
-			if c := cat[path]; c != nil && c.size == info.Size() && c.mtime == info.ModTime().UnixNano() {
+			if c := cat[path]; c != nil && c.size == info.Size() && c.mtime == info.ModTime().UnixNano() && c.probeVersion == ProbeVersion {
 				it = c.item()
 			} else {
 				m, err := probe.File(ctx, path)

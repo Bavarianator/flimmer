@@ -152,3 +152,35 @@ func TestImportState(t *testing.T) {
 		t.Fatal("state.json nicht umbenannt")
 	}
 }
+
+// Eine bestehende Datenbank auf älterem Stand wird hochmigriert – vorher entsteht flimmer.db.bak.
+func TestMigrateExisting(t *testing.T) {
+	d, dir := open(t)
+	d.CreateUser(ctx, User{ID: "u", Name: "U"})
+	for _, q := range []string{"ALTER TABLE items DROP COLUMN probe_version", "ALTER TABLE streams DROP COLUMN hdr",
+		"ALTER TABLE streams DROP COLUMN dv_profile", "ALTER TABLE streams DROP COLUMN dv_compat", "PRAGMA user_version = 1"} {
+		if _, err := d.Exec(q); err != nil {
+			t.Fatal(q, err)
+		}
+	}
+	d.Close()
+	d2, err := Open(filepath.Join(dir, "flimmer.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d2.Close()
+	var v int
+	d2.QueryRow("PRAGMA user_version").Scan(&v)
+	if v != latestVersion() {
+		t.Fatalf("user_version %d", v)
+	}
+	if _, err := d2.Exec("SELECT probe_version FROM items; SELECT hdr FROM streams"); err != nil {
+		t.Fatal(err)
+	}
+	if u, _ := d2.User(ctx, "u"); u == nil {
+		t.Fatal("Daten bei Migration verloren")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "flimmer.db.bak")); err != nil {
+		t.Fatal("kein Backup vor der Migration")
+	}
+}

@@ -9,27 +9,32 @@ import (
 	"github.com/flimmer-media/flimmer/internal/probe"
 )
 
-// cached ist, was die Datenbank über eine Datei weiß; Size/MTime entscheiden, ob neu geprobt wird.
+// ProbeVersion erhöhen, wenn probe neue Felder liefert: Dann wird jeder Titel beim nächsten Scan neu geprobt
+// (nur der schnelle Header-Probe; der Keyframe-Index bleibt). Neue Felder brauchen Spalten in streams (Migration).
+const ProbeVersion = 2
+
+// cached ist, was die Datenbank über eine Datei weiß; Size/MTime/ProbeVersion entscheiden, ob neu geprobt wird.
 type cached struct {
-	id, path string
-	size     int64
-	mtime    int64 // Nanosekunden
-	added    int64
-	media    *probe.Media
+	id, path     string
+	size         int64
+	mtime        int64 // Nanosekunden
+	added        int64
+	probeVersion int
+	media        *probe.Media
 }
 
 // loadCatalog liest alle Titel samt Streams mit zwei Abfragen.
 func loadCatalog(ctx context.Context, db *sql.DB) (map[string]*cached, error) {
 	out := map[string]*cached{}
 	byID := map[string]*cached{}
-	rows, err := db.QueryContext(ctx, "SELECT id, path, size, mtime, added_at, container, duration, bitrate FROM items")
+	rows, err := db.QueryContext(ctx, "SELECT id, path, size, mtime, added_at, probe_version, container, duration, bitrate FROM items")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		c := &cached{media: &probe.Media{}}
-		if err := rows.Scan(&c.id, &c.path, &c.size, &c.mtime, &c.added, &c.media.Container, &c.media.Duration, &c.media.Bitrate); err != nil {
+		if err := rows.Scan(&c.id, &c.path, &c.size, &c.mtime, &c.added, &c.probeVersion, &c.media.Container, &c.media.Duration, &c.media.Bitrate); err != nil {
 			return nil, err
 		}
 		out[c.path], byID[c.id] = c, c
@@ -37,7 +42,7 @@ func loadCatalog(ctx context.Context, db *sql.DB) (map[string]*cached, error) {
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	srows, err := db.QueryContext(ctx, "SELECT item_id, idx, type, codec, profile, pix_fmt, width, height, channels, language, title, is_default FROM streams ORDER BY item_id, idx")
+	srows, err := db.QueryContext(ctx, "SELECT item_id, idx, type, codec, profile, pix_fmt, width, height, channels, language, title, is_default, hdr, dv_profile, dv_compat FROM streams ORDER BY item_id, idx")
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +50,7 @@ func loadCatalog(ctx context.Context, db *sql.DB) (map[string]*cached, error) {
 	for srows.Next() {
 		var id string
 		var s probe.Stream
-		if err := srows.Scan(&id, &s.Index, &s.Type, &s.Codec, &s.Profile, &s.PixFmt, &s.Width, &s.Height, &s.Channels, &s.Language, &s.Title, &s.Default); err != nil {
+		if err := srows.Scan(&id, &s.Index, &s.Type, &s.Codec, &s.Profile, &s.PixFmt, &s.Width, &s.Height, &s.Channels, &s.Language, &s.Title, &s.Default, &s.HDR, &s.DVProfile, &s.DVCompat); err != nil {
 			return nil, err
 		}
 		if c := byID[id]; c != nil {
@@ -67,13 +72,13 @@ func saveItem(ctx context.Context, db *sql.DB, it *Item, mtime int64) error {
 		kind = "episode"
 	}
 	m := it.Media
-	_, err = tx.ExecContext(ctx, `INSERT INTO items(id, path, size, mtime, added_at, kind, title, year, series, season, episode, container, duration, bitrate)
-		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(id) DO UPDATE SET size = excluded.size, mtime = excluded.mtime, kind = excluded.kind, title = excluded.title,
+	_, err = tx.ExecContext(ctx, `INSERT INTO items(id, path, size, mtime, added_at, kind, title, year, series, season, episode, container, duration, bitrate, probe_version)
+		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET size = excluded.size, mtime = excluded.mtime, probe_version = excluded.probe_version, kind = excluded.kind, title = excluded.title,
 			year = excluded.year, series = excluded.series, season = excluded.season, episode = excluded.episode,
 			container = excluded.container, duration = excluded.duration, bitrate = excluded.bitrate`,
 		it.ID, it.Path, it.Size, mtime, it.Added.UnixMilli(), kind, it.Title, it.Year, it.Series, it.Season, it.Episode,
-		m.Container, m.Duration, m.Bitrate)
+		m.Container, m.Duration, m.Bitrate, ProbeVersion)
 	if err != nil {
 		return err
 	}
@@ -83,9 +88,9 @@ func saveItem(ctx context.Context, db *sql.DB, it *Item, mtime int64) error {
 		}
 	}
 	for _, s := range m.Streams {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO streams(item_id, idx, type, codec, profile, pix_fmt, width, height, channels, language, title, is_default)
-			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			it.ID, s.Index, s.Type, s.Codec, s.Profile, s.PixFmt, s.Width, s.Height, s.Channels, s.Language, s.Title, s.Default); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO streams(item_id, idx, type, codec, profile, pix_fmt, width, height, channels, language, title, is_default, hdr, dv_profile, dv_compat)
+			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			it.ID, s.Index, s.Type, s.Codec, s.Profile, s.PixFmt, s.Width, s.Height, s.Channels, s.Language, s.Title, s.Default, s.HDR, s.DVProfile, s.DVCompat); err != nil {
 			return err
 		}
 	}
