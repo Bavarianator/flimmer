@@ -1,6 +1,7 @@
 package probe
 
 import (
+	"os"
 	"reflect"
 	"testing"
 )
@@ -11,5 +12,34 @@ func TestParseKeyframes(t *testing.T) {
 	want := []float64{0, 2.002, 4.004}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+// Fixtures: hdr10/hlg sind echte ffprobe-Ausgaben von x265-Clips; DV-Dateien lassen sich mit ffmpeg nicht
+// erzeugen (kein Konfigurationsrecord beim Muxen), daher dieselbe Ausgabe mit dem dokumentierten DOVI-Record.
+func TestHDR(t *testing.T) {
+	for _, tt := range []struct {
+		file            string
+		hdr             string
+		profile, compat int
+	}{
+		{"hdr10", "hdr10", 0, 0},
+		{"hlg", "hlg", 0, 0},
+		{"dv81", "dv", 8, 1},
+		{"dv5", "dv", 5, 0},
+		{"dv7", "dv", 7, 6},
+	} {
+		b, err := os.ReadFile("testdata/" + tt.file + ".json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		m, err := parse(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		v := m.First("video")
+		if v.HDR != tt.hdr || v.DVProfile != tt.profile || v.DVCompat != tt.compat || v.PixFmt != "yuv420p10le" {
+			t.Errorf("%s: HDR=%q DV=%d/%d PixFmt=%s", tt.file, v.HDR, v.DVProfile, v.DVCompat, v.PixFmt)
+		}
 	}
 }

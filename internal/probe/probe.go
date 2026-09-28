@@ -25,13 +25,17 @@ type Stream struct {
 	Language string `json:"language,omitempty"`
 	Title    string `json:"title,omitempty"`
 	Default  bool   `json:"default,omitempty"`
+	// HDR: "", "hdr10", "hdr10+", "hlg" oder "dv" (Dolby Vision; die Basisschicht steht in DVCompat).
+	HDR       string `json:"hdr,omitempty"`
+	DVProfile int    `json:"dvProfile,omitempty"` // 5, 7, 8 …
+	DVCompat  int    `json:"dvCompat,omitempty"`  // Basisschicht laut bl_signal_compatibility_id: 1 HDR10, 2 SDR, 4 HLG, 0 keine (Profil 5)
 }
 
 type Media struct {
-	Container string    `json:"container"` // ffprobe format_name, z. B. "matroska,webm" oder "mov,mp4,m4a,3gp,3g2,mj2"
-	Duration  float64   `json:"duration"`
-	Bitrate   int64     `json:"bitrate"`
-	Streams   []Stream  `json:"streams"`
+	Container string   `json:"container"` // ffprobe format_name, z. B. "matroska,webm" oder "mov,mp4,m4a,3gp,3g2,mj2"
+	Duration  float64  `json:"duration"`
+	Bitrate   int64    `json:"bitrate"`
+	Streams   []Stream `json:"streams"`
 }
 
 func (m *Media) First(typ string) *Stream {
@@ -60,14 +64,20 @@ type ffprobeOut struct {
 		BitRate    string `json:"bit_rate"`
 	} `json:"format"`
 	Streams []struct {
-		Index       int    `json:"index"`
-		CodecType   string `json:"codec_type"`
-		CodecName   string `json:"codec_name"`
-		Profile     string `json:"profile"`
-		PixFmt      string `json:"pix_fmt"`
-		Width       int    `json:"width"`
-		Height      int    `json:"height"`
-		Channels    int    `json:"channels"`
+		Index         int    `json:"index"`
+		CodecType     string `json:"codec_type"`
+		CodecName     string `json:"codec_name"`
+		Profile       string `json:"profile"`
+		PixFmt        string `json:"pix_fmt"`
+		Width         int    `json:"width"`
+		Height        int    `json:"height"`
+		Channels      int    `json:"channels"`
+		ColorTransfer string `json:"color_transfer"`
+		SideData      []struct {
+			Type      string `json:"side_data_type"`
+			DVProfile int    `json:"dv_profile"`
+			DVCompat  int    `json:"dv_bl_signal_compatibility_id"`
+		} `json:"side_data_list"`
 		Disposition struct {
 			Default int `json:"default"`
 		} `json:"disposition"`
@@ -82,6 +92,17 @@ func File(ctx context.Context, path string) (*Media, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ffprobe %s: %w", path, err)
 	}
+	m, err := parse(out)
+	if err != nil {
+		return nil, err
+	}
+	if v := m.First("video"); v != nil && v.HDR == "hdr10" && hdr10Plus(ctx, path, v.Index) {
+		v.HDR = "hdr10+"
+	}
+	return m, nil
+}
+
+func parse(out []byte) (*Media, error) {
 	var p ffprobeOut
 	if err := json.Unmarshal(out, &p); err != nil {
 		return nil, err
@@ -96,13 +117,32 @@ func File(ctx context.Context, path string) (*Media, error) {
 		if s.CodecType == "video" && s.CodecName == "mjpeg" { // eingebettete Cover
 			continue
 		}
-		m.Streams = append(m.Streams, Stream{
+		st := Stream{
 			Index: s.Index, Type: s.CodecType, Codec: s.CodecName, Profile: s.Profile, PixFmt: s.PixFmt,
 			Width: s.Width, Height: s.Height, Channels: s.Channels,
 			Language: s.Tags["language"], Title: s.Tags["title"], Default: s.Disposition.Default == 1,
-		})
+		}
+		switch s.ColorTransfer {
+		case "smpte2084":
+			st.HDR = "hdr10"
+		case "arib-std-b67":
+			st.HDR = "hlg"
+		}
+		for _, sd := range s.SideData {
+			if sd.Type == "DOVI configuration record" {
+				st.HDR, st.DVProfile, st.DVCompat = "dv", sd.DVProfile, sd.DVCompat
+			}
+		}
+		m.Streams = append(m.Streams, st)
 	}
 	return m, nil
+}
+
+// hdr10Plus: HDR10+ steht nur als dynamische Metadaten in den Frames; der erste Frame reicht als Nachweis.
+func hdr10Plus(ctx context.Context, path string, stream int) bool {
+	out, err := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-select_streams", strconv.Itoa(stream),
+		"-read_intervals", "%+#1", "-show_entries", "frame=side_data_list", "-of", "json", path).Output()
+	return err == nil && bytes.Contains(out, []byte("SMPTE2094-40"))
 }
 
 // Keyframes liest nur die Pakete (kein Decoding) und sammelt die Zeitstempel der Keyframes (Sekunden),
