@@ -235,3 +235,57 @@ func TestBetter(t *testing.T) {
 		t.Error("Better")
 	}
 }
+
+func TestSchritt8(t *testing.T) {
+	// MP4-Tags („deu“), Nutzer schreibt „de“: früher kein Treffer.
+	m := media("matroska", "h264", "yuv420p", "", 0)
+	m.Streams = append(m.Streams,
+		probe.Stream{Index: 1, Type: "audio", Codec: "eac3", Channels: 6, Language: "eng", Default: true},
+		probe.Stream{Index: 2, Type: "audio", Codec: "aac", Channels: 2, Language: "deu"},
+		probe.Stream{Index: 3, Type: "subtitle", Codec: "subrip", Language: "ger"},
+		probe.Stream{Index: 4, Type: "subtitle", Codec: "subrip", Language: "ger", Forced: true},
+		probe.Stream{Index: 5, Type: "subtitle", Codec: "subrip", Language: "eng", HearingImpaired: true},
+	)
+	de := lgTV
+	de.AudioLangs = []string{"de", "en"}
+	if got := Decide(m, de, 0); got.AudioIndex != 2 || got.SubtitleIndex != 4 {
+		t.Errorf("de-Nutzer: Ton %d (will 2 deu), Untertitel %d (will 4 forced ger)", got.AudioIndex, got.SubtitleIndex)
+	}
+
+	fr := lgTV
+	fr.AudioLangs = []string{"fr", "de"} // Französisch fehlt → Deutsch
+	if got := Decide(m, fr, 0); got.AudioIndex != 2 {
+		t.Errorf("Fallback-Kette: Ton %d, will 2", got.AudioIndex)
+	}
+
+	// Nur Englisch-Ton, deutscher Nutzer versteht ihn nicht → volle deutsche Untertitel (nicht forced, nicht SDH)
+	en := lgTV
+	en.AudioLangs = []string{"de"}
+	en.AudioTrack = 1
+	if got := Decide(m, en, 0); got.SubtitleIndex != 3 {
+		t.Errorf("Englischer Ton für de-Nutzer: Untertitel %d, will 3", got.SubtitleIndex)
+	}
+	en.SubtitleMode = "off"
+	if got := Decide(m, en, 0); got.SubtitleIndex != -1 {
+		t.Errorf("Modus off: Untertitel %d, will -1 (kein Forced in Englisch)", got.SubtitleIndex)
+	}
+
+	// Ohne Sprachangaben bleibt alles wie bisher: Standardspur, keine Untertitel.
+	if got := Decide(m, lgTV, 0); got.AudioIndex != 1 || got.SubtitleIndex != -1 {
+		t.Errorf("ohne Kette: Ton %d Untertitel %d", got.AudioIndex, got.SubtitleIndex)
+	}
+}
+
+func TestNachtmodus(t *testing.T) {
+	p := lgTV
+	p.Night = true
+	if got := Decide(media("mov,mp4", "h264", "yuv420p", "aac", 2), p, 0); got.Method != TranscodeAudio || got.AudioCodec != "aac-night" {
+		t.Errorf("Stereo: %s %s", got.Method, got.AudioCodec)
+	}
+	if got := Decide(media("matroska", "hevc", "yuv420p", "eac3", 6), p, 0); got.Method != TranscodeAudio || got.AudioCodec != "eac3-night" {
+		t.Errorf("5.1 auf EAC3-Gerät: %s %s", got.Method, got.AudioCodec)
+	}
+	if got := Decide(media("matroska", "hevc", "yuv420p", "", 0), p, 0); got.Method != DirectPlay {
+		t.Errorf("ohne Ton kein Nachtmodus: %s", got.Method)
+	}
+}

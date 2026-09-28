@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/flimmer-media/flimmer/internal/audio"
 	"github.com/flimmer-media/flimmer/internal/probe"
 )
 
@@ -75,18 +76,20 @@ func Playlist(segs []Segment) string {
 
 // Job beschreibt, was ffmpeg tun soll.
 type Job struct {
-	Input      string
-	Segments   []Segment
-	AudioIndex int      // -1 = kein Ton
-	AudioCodec string   // copy, aac, eac3
-	VideoCodec string   // copy, h264, h264-sdr (mit Tone-Mapping)
-	Height     int      // >0: beim Transcoding auf diese Höhe verkleinern
-	InputArgs  []string // vor -i, z. B. Hardware-Decoding (hwaccel.Accel.Input)
-	Encoder    []string // Video-Encoder (hwaccel.Accel.Encode); leer = libx264
+	Input         string
+	Segments      []Segment
+	AudioIndex    int      // -1 = kein Ton
+	AudioCodec    string   // copy, aac, eac3
+	AudioChannels int      // Kanäle der Quellspur (für den Stereo-Downmix mit lauter Sprache), 0 = unbekannt
+	Night         bool     // Nachtmodus: Dynamik komprimieren (nur beim Neukodieren)
+	VideoCodec    string   // copy, h264, h264-sdr (mit Tone-Mapping)
+	Height        int      // >0: beim Transcoding auf diese Höhe verkleinern
+	InputArgs     []string // vor -i, z. B. Hardware-Decoding (hwaccel.Accel.Input)
+	Encoder       []string // Video-Encoder (hwaccel.Accel.Encode); leer = libx264
 }
 
 func (j Job) Key() string {
-	return fmt.Sprintf("%s|%d|%s|%s|%d", j.Input, j.AudioIndex, j.AudioCodec, j.VideoCodec, j.Height)
+	return fmt.Sprintf("%s|%d|%s|%s|%d|%v", j.Input, j.AudioIndex, j.AudioCodec, j.VideoCodec, j.Height, j.Night)
 }
 
 // ParseVideo zerlegt den Video-Teil der HLS-URL: "copy" oder "h264[-720|-1080][-sdr]".
@@ -114,6 +117,19 @@ func ParseVideo(v string) (codec string, height int, ok bool) {
 		return "", 0, false
 	}
 	return codec, height, true
+}
+
+// ParseAudio zerlegt den Ton-Teil der HLS-URL: "copy", "aac" oder "eac3", die beiden letzten optional mit
+// "-night" (Nachtmodus). Kopierter Ton kann keinen Nachtmodus haben.
+func ParseAudio(a string) (codec string, night bool, ok bool) {
+	codec, night = strings.CutSuffix(a, "-night")
+	switch {
+	case codec == "aac", codec == "eac3":
+		return codec, night, true
+	case codec == "copy" && !night:
+		return codec, false, true
+	}
+	return "", false, false
 }
 
 // Standard-Encoder ohne Hardware.
@@ -342,9 +358,9 @@ func args(job Job, first int, dir string) []string {
 	case "copy":
 		a = append(a, "-c:a", "copy")
 	case "eac3":
-		a = append(a, "-c:a", "eac3", "-b:a", "640k", "-ac", "6")
+		a = append(a, audioArgs(job, 6, "-c:a", "eac3", "-b:a", "640k")...)
 	default:
-		a = append(a, "-c:a", "aac", "-b:a", "192k", "-ac", "2")
+		a = append(a, audioArgs(job, 2, "-c:a", "aac", "-b:a", "192k")...)
 	}
 	a = append(a, "-muxdelay", "0", "-muxpreload", "0",
 		"-f", "segment", "-segment_format", "mpegts", "-segment_start_number", strconv.Itoa(first))
@@ -354,6 +370,15 @@ func args(job Job, first int, dir string) []string {
 		a = append(a, "-segment_time", "100000")
 	}
 	return append(a, "-avoid_negative_ts", "disabled", filepath.Join(dir, "%d.ts"))
+}
+
+// audioArgs: Stereo-Downmix mit angehobenem Center (Sprache verständlich) und Nachtmodus per audio.Filter;
+// -ac bleibt als Absicherung, falls die Kanalzahl der Quelle unbekannt ist.
+func audioArgs(job Job, out int, enc ...string) []string {
+	if f := audio.Filter(job.AudioChannels, out, job.Night); f != "" {
+		enc = append(enc, "-af", f)
+	}
+	return append(enc, "-ac", strconv.Itoa(out))
 }
 
 func ftoa(f float64) string { return strconv.FormatFloat(f, 'f', 6, 64) }

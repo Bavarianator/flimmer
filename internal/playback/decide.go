@@ -7,7 +7,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/flimmer-media/flimmer/internal/lang"
 	"github.com/flimmer-media/flimmer/internal/probe"
+	"github.com/flimmer-media/flimmer/internal/subs"
 )
 
 // Profile beschreibt, was ein Gerät nachweislich abspielen kann.
@@ -25,6 +27,10 @@ type Profile struct {
 	// Wunsch für diese Wiedergabe (kein Geräte-Merkmal, reist aber im selben Body mit):
 	AudioTrack int    `json:"audioTrack,omitempty"` // Stream-Index der gewählten Tonspur, 0 = automatisch
 	AudioLang  string `json:"audioLang,omitempty"`  // bevorzugte Sprache (z. B. pro Serie gemerkt)
+	// Sprachkette des Benutzers („de“, „ger“, „deu“ – egal, wird normalisiert), z. B. ["de", "en"].
+	AudioLangs   []string `json:"audioLangs,omitempty"`
+	SubtitleMode string   `json:"subtitleMode,omitempty"` // "" automatisch, "always", "off" (siehe subs.Mode)
+	Night        bool     `json:"night,omitempty"`        // Nachtmodus: Dynamik komprimieren, erzwingt Ton-Transcode
 }
 
 // AudioTrack beschreibt eine wählbare Tonspur.
@@ -59,6 +65,8 @@ type Subtitle struct {
 	Language string `json:"language,omitempty"`
 	Title    string `json:"title,omitempty"`
 	Format   string `json:"format"` // vtt (Server konvertiert) oder pgs (Client-Overlay)
+	Forced   bool   `json:"forced,omitempty"`
+	SDH      bool   `json:"sdh,omitempty"`
 }
 
 type Plan struct {
@@ -70,7 +78,10 @@ type Plan struct {
 	VideoCodec string       `json:"videoCodec"` // "copy" oder "h264[-720|-1080][-sdr]" (siehe transcode.ParseVideo)
 	Subtitles  []Subtitle   `json:"subtitles"`
 	Audio      []AudioTrack `json:"audio"`
-	Notes      []string     `json:"notes,omitempty"` // Hinweise ohne Einfluss auf die Methode (z. B. WLAN bei 4K-Remux)
+	// SubtitleIndex ist die vorgeschlagene Untertitelspur (Stream-Index) oder -1: volle Untertitel nur,
+	// wenn der Benutzer die Tonsprache nicht versteht, sonst höchstens Forced (siehe subs.Choose).
+	SubtitleIndex int      `json:"subtitleIndex"`
+	Notes         []string `json:"notes,omitempty"` // Hinweise ohne Einfluss auf die Methode (z. B. WLAN bei 4K-Remux)
 }
 
 // Better meldet, ob a für den Zuschauer besser ist als b: erst die Ampel, dann weniger Umwandlung.
@@ -141,7 +152,7 @@ func VideoKey(s *probe.Stream) string {
 // Decide wählt die Wiedergabeart. speed ist der gemessene Echtzeit-Faktor des Servers beim
 // 1080p-H.264-Encode (hwaccel.Accel.Speed, 0 = unbekannt) – daraus folgt Gelb oder Rot beim Transcoding.
 func Decide(m *probe.Media, p Profile, speed float64) Plan {
-	plan := Plan{AudioIndex: -1, AudioCodec: "copy", VideoCodec: "copy"}
+	plan := Plan{AudioIndex: -1, AudioCodec: "copy", VideoCodec: "copy", SubtitleIndex: -1}
 
 	v := m.First("video")
 	codecOK := v != nil && slices.Contains(p.Video, VideoKey(v))
@@ -155,6 +166,7 @@ func Decide(m *probe.Media, p Profile, speed float64) Plan {
 	videoOK := codecOK && !toneMap
 
 	a := chooseAudio(m, p)
+	night := p.Night && a != nil
 	// Eine andere als die Standard-Tonspur kann der native Player nicht zuverlässig wählen → Remux mit genau dieser Spur.
 	otherTrack := a != nil && a != defaultAudio(m)
 	audioOK := true
@@ -177,9 +189,9 @@ func Decide(m *probe.Media, p Profile, speed float64) Plan {
 	}
 
 	switch {
-	case videoOK && audioOK && containerOK && bitrateOK && !otherTrack:
+	case videoOK && audioOK && containerOK && bitrateOK && !otherTrack && !night:
 		plan.Method, plan.Light = DirectPlay, Green
-	case videoOK && bitrateOK && audioOK && (a == nil || slices.Contains(tsAudio, a.Codec)):
+	case videoOK && bitrateOK && audioOK && !night && (a == nil || slices.Contains(tsAudio, a.Codec)):
 		plan.Method, plan.Light = DirectStream, Green
 	case videoOK && bitrateOK:
 		plan.Method, plan.Light = TranscodeAudio, Yellow
@@ -219,9 +231,13 @@ func Decide(m *probe.Media, p Profile, speed float64) Plan {
 		if sdr {
 			plan.VideoCodec += "-sdr"
 		}
-		if a != nil && !(audioOK && slices.Contains(tsAudio, a.Codec)) {
+		if a != nil && (night || !(audioOK && slices.Contains(tsAudio, a.Codec))) {
 			plan.AudioCodec = targetAudio(a, p)
 		}
+	}
+	if night && plan.AudioCodec != "copy" {
+		plan.AudioCodec += "-night" // transcode.ParseAudio; eigener Cache-Key, eigene Segmente
+		plan.Reasons = append(plan.Reasons, "Nachtmodus: Ton wird leiser/lauter ausgeglichen")
 	}
 
 	if (plan.Method == DirectPlay || plan.Method == DirectStream) && m.Bitrate > wifiLimit {
@@ -229,7 +245,7 @@ func Decide(m *probe.Media, p Profile, speed float64) Plan {
 	}
 
 	for _, s := range m.All("subtitle") {
-		sub := Subtitle{Index: s.Index, Language: s.Language, Title: s.Title}
+		sub := Subtitle{Index: s.Index, Language: s.Language, Title: s.Title, Forced: s.Forced, SDH: s.HearingImpaired}
 		switch {
 		case slices.Contains(textSubs, s.Codec):
 			sub.Format = "vtt"
@@ -239,6 +255,15 @@ func Decide(m *probe.Media, p Profile, speed float64) Plan {
 			continue // z. B. dvd_subtitle – wird nie eingebrannt, lieber weglassen als ruckeln
 		}
 		plan.Subtitles = append(plan.Subtitles, sub)
+	}
+	var tracks []subs.Track
+	for _, s := range plan.Subtitles {
+		tracks = append(tracks, subs.Track{Language: s.Language, Forced: s.Forced, SDH: s.SDH})
+	}
+	if a != nil {
+		if i := subs.Choose(tracks, a.Language, prefs(p), subs.Mode(p.SubtitleMode)); i >= 0 {
+			plan.SubtitleIndex = plan.Subtitles[i].Index
+		}
 	}
 	for _, st := range m.All("audio") {
 		plan.Audio = append(plan.Audio, AudioTrack{Index: st.Index, Language: st.Language, Title: st.Title,
@@ -266,8 +291,19 @@ func requiredSpeed(v *probe.Stream) float64 {
 	return f
 }
 
+// prefs ist die Sprachkette: die pro Serie gemerkte Sprache vor der allgemeinen des Benutzers.
+func prefs(p Profile) []string {
+	if p.AudioLang == "" {
+		return p.AudioLangs
+	}
+	return append([]string{p.AudioLang}, p.AudioLangs...)
+}
+
+// chooseAudio: ausdrücklich gewählte Spur, sonst die erste Sprache der Kette, die es gibt (Sprachkennungen
+// normalisiert: „ger“ = „deu“ = „de“), bei gleicher Sprache bevorzugt die Standardspur; sonst die Standardspur.
 func chooseAudio(m *probe.Media, p Profile) *probe.Stream {
-	var byLang *probe.Stream
+	var all []*probe.Stream
+	var langs []string
 	for i := range m.Streams {
 		s := &m.Streams[i]
 		if s.Type != "audio" {
@@ -276,14 +312,14 @@ func chooseAudio(m *probe.Media, p Profile) *probe.Stream {
 		if p.AudioTrack > 0 && s.Index == p.AudioTrack {
 			return s
 		}
-		if byLang == nil && p.AudioLang != "" && s.Language == p.AudioLang {
-			byLang = s
-		}
+		all, langs = append(all, s), append(langs, s.Language)
 	}
-	if d := defaultAudio(m); byLang != nil && (d == nil || d.Language != p.AudioLang) {
-		return byLang
+	d := defaultAudio(m)
+	i := lang.Pick(langs, prefs(p))
+	if i < 0 || d != nil && lang.Normalize(d.Language) == lang.Normalize(all[i].Language) {
+		return d
 	}
-	return defaultAudio(m)
+	return all[i]
 }
 
 func defaultAudio(m *probe.Media) *probe.Stream {

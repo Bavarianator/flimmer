@@ -43,3 +43,18 @@ func TestHDR(t *testing.T) {
 		}
 	}
 }
+
+func TestForcedUndSDH(t *testing.T) {
+	b, err := os.ReadFile("testdata/subs.json") // echte ffprobe-Ausgabe: Spur 1 forced (ger), Spur 2 SDH (eng)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := parse(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := m.All("subtitle")
+	if len(s) != 2 || !s[0].Forced || s[0].HearingImpaired || s[0].Language != "ger" || s[1].Forced || !s[1].HearingImpaired {
+		t.Errorf("%+v", s)
+	}
+}

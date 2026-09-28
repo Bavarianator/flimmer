@@ -14,17 +14,19 @@ import (
 )
 
 type Stream struct {
-	Index    int    `json:"index"`
-	Type     string `json:"type"` // video, audio, subtitle
-	Codec    string `json:"codec"`
-	Profile  string `json:"profile,omitempty"`
-	PixFmt   string `json:"pixFmt,omitempty"`
-	Width    int    `json:"width,omitempty"`
-	Height   int    `json:"height,omitempty"`
-	Channels int    `json:"channels,omitempty"`
-	Language string `json:"language,omitempty"`
-	Title    string `json:"title,omitempty"`
-	Default  bool   `json:"default,omitempty"`
+	Index           int    `json:"index"`
+	Type            string `json:"type"` // video, audio, subtitle
+	Codec           string `json:"codec"`
+	Profile         string `json:"profile,omitempty"`
+	PixFmt          string `json:"pixFmt,omitempty"`
+	Width           int    `json:"width,omitempty"`
+	Height          int    `json:"height,omitempty"`
+	Channels        int    `json:"channels,omitempty"`
+	Language        string `json:"language,omitempty"`
+	Title           string `json:"title,omitempty"`
+	Default         bool   `json:"default,omitempty"`
+	Forced          bool   `json:"forced,omitempty"`          // Untertitel nur für fremdsprachige Stellen
+	HearingImpaired bool   `json:"hearingImpaired,omitempty"` // SDH: mit Geräuschbeschreibungen
 	// HDR: "", "hdr10", "hdr10+", "hlg" oder "dv" (Dolby Vision; die Basisschicht steht in DVCompat).
 	HDR       string `json:"hdr,omitempty"`
 	DVProfile int    `json:"dvProfile,omitempty"` // 5, 7, 8 …
@@ -79,7 +81,9 @@ type ffprobeOut struct {
 			DVCompat  int    `json:"dv_bl_signal_compatibility_id"`
 		} `json:"side_data_list"`
 		Disposition struct {
-			Default int `json:"default"`
+			Default         int `json:"default"`
+			Forced          int `json:"forced"`
+			HearingImpaired int `json:"hearing_impaired"`
 		} `json:"disposition"`
 		Tags map[string]string `json:"tags"`
 	} `json:"streams"`
@@ -121,6 +125,7 @@ func parse(out []byte) (*Media, error) {
 			Index: s.Index, Type: s.CodecType, Codec: s.CodecName, Profile: s.Profile, PixFmt: s.PixFmt,
 			Width: s.Width, Height: s.Height, Channels: s.Channels,
 			Language: s.Tags["language"], Title: s.Tags["title"], Default: s.Disposition.Default == 1,
+			Forced: s.Disposition.Forced == 1, HearingImpaired: s.Disposition.HearingImpaired == 1,
 		}
 		switch s.ColorTransfer {
 		case "smpte2084":

@@ -158,3 +158,28 @@ func TestVideoArgs(t *testing.T) {
 		t.Errorf("HLG ohne Höhe: %s", g)
 	}
 }
+
+func TestParseAudio(t *testing.T) {
+	for in, want := range map[string]string{"copy": "copy/false", "aac": "aac/false", "eac3-night": "eac3/true", "aac-night": "aac/true", "copy-night": "", "dts": ""} {
+		c, n, ok := ParseAudio(in)
+		if got := fmt.Sprintf("%s/%v", c, n); ok != (want != "") || ok && got != want {
+			t.Errorf("%s: %s %v", in, got, ok)
+		}
+	}
+}
+
+func TestAudioFilter(t *testing.T) {
+	job := Job{Input: "x.mkv", Segments: Segments(nil, 30), AudioIndex: 1, AudioCodec: "aac", VideoCodec: "copy", AudioChannels: 6}
+	a := strings.Join(args(job, 0, "/tmp/x"), " ")
+	if !strings.Contains(a, "-af aformat=channel_layouts=5.1,pan=stereo") || !strings.Contains(a, "-ac 2") {
+		t.Errorf("5.1 → Stereo ohne Center-Downmix: %s", a)
+	}
+	job.AudioCodec, job.Night = "eac3", true
+	a = strings.Join(args(job, 0, "/tmp/x"), " ")
+	if !strings.Contains(a, "-af acompressor") || strings.Contains(a, "pan=stereo") {
+		t.Errorf("EAC3 5.1 Nachtmodus: %s", a)
+	}
+	if k1, k2 := job.Key(), (Job{Input: job.Input, AudioIndex: 1, AudioCodec: "eac3", VideoCodec: "copy"}).Key(); k1 == k2 {
+		t.Error("Nachtmodus braucht einen eigenen Cache-Key")
+	}
+}
