@@ -6,6 +6,7 @@ package meta
 import (
 	"context"
 	"crypto/sha1"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -16,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type Meta struct {
@@ -48,26 +50,58 @@ type Query struct {
 var DefaultTMDBKey string
 
 type Resolver struct {
-	CacheDir string // Metadaten unter meta/, Bilder unter img/
+	DB       *sql.DB // Tabelle meta (Migration in internal/db)
+	CacheDir string  // Bilder unter img/
 	TMDB     *TMDB
 }
 
 // New nimmt den Schlüssel aus den Einstellungen; leer → FLIMMER_TMDB_KEY → DefaultTMDBKey.
 // Ohne jeden Schlüssel gibt es nur NFO und Dateinamen.
-func New(cacheDir, key string) *Resolver {
+// Ein alter JSON-Cache (<cacheDir>/meta/*.json) wird einmalig in die DB übernommen und danach umbenannt.
+func New(db *sql.DB, cacheDir, key string) (*Resolver, error) {
 	key = cmp(key, cmp(os.Getenv("FLIMMER_TMDB_KEY"), DefaultTMDBKey))
-	return &Resolver{CacheDir: cacheDir, TMDB: NewTMDB(key)}
+	r := &Resolver{DB: db, CacheDir: cacheDir, TMDB: NewTMDB(key)}
+	return r, r.importJSON(context.Background())
+}
+
+// importJSON übernimmt den Datei-Cache aus der Zeit vor SQLite. Vorhandene DB-Zeilen gewinnen (INSERT OR IGNORE).
+func (r *Resolver) importJSON(ctx context.Context) error {
+	dir := filepath.Join(r.CacheDir, "meta")
+	files, _ := filepath.Glob(filepath.Join(dir, "*.json"))
+	if len(files) == 0 {
+		return nil
+	}
+	tx, err := r.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		var m Meta
+		if err != nil || json.Unmarshal(b, &m) != nil {
+			continue // kaputte Datei: wird beim nächsten Scan neu geholt
+		}
+		id := strings.TrimSuffix(filepath.Base(f), ".json")
+		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO meta(item_id, source, json, uncertain, updated_at) VALUES(?,?,?,?,?)`,
+			id, m.Source, string(b), m.Uncertain, time.Now().UnixMilli()); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	log.Printf("meta: %d Einträge aus dem alten JSON-Cache übernommen", len(files))
+	return os.Rename(dir, dir+".importiert")
 }
 
 // ImgDir enthält die Originalbilder (Poster w500, Hintergrund w1280, lokale Kopien).
 func (r *Resolver) ImgDir() string { return filepath.Join(r.CacheDir, "img") }
 
-func (r *Resolver) cacheFile(id string) string { return filepath.Join(r.CacheDir, "meta", id+".json") }
-
 // Resolve liefert immer Metadaten, notfalls aus dem Dateinamen. Fehler nur bei Netzproblemen mit TMDB;
 // dann taugt das Ergebnis trotzdem (Source "filename") und der nächste Scan versucht es erneut.
 func (r *Resolver) Resolve(ctx context.Context, q Query) (*Meta, error) {
-	cached := r.readCache(q.ID)
+	cached := r.cached(ctx, q.ID)
 	if cached != nil && cached.Source == "manual" {
 		return cached, nil
 	}
@@ -91,10 +125,10 @@ func (r *Resolver) Resolve(ctx context.Context, q Query) (*Meta, error) {
 	}
 	if m == nil {
 		// ponytail: „nicht gefunden“ bleibt gecacht, bis die Datei umbenannt oder per Identify korrigiert wird.
-		return fromFilename(q), writeJSON(r.cacheFile(q.ID), Meta{Source: "filename"})
+		return fromFilename(q), r.store(ctx, q.ID, &Meta{Source: "filename"})
 	}
 	r.images(ctx, q.ID, m)
-	return m, writeJSON(r.cacheFile(q.ID), m)
+	return m, r.store(ctx, q.ID, m)
 }
 
 // Identify legt einen Titel manuell auf eine TMDB-ID fest („Falsch erkannt?“). Das schlägt jede andere Quelle.
@@ -112,19 +146,30 @@ func (r *Resolver) Identify(ctx context.Context, q Query, tmdbID int) (*Meta, er
 	}
 	m.Source, m.Uncertain = "manual", false
 	r.images(ctx, q.ID, m)
-	return m, writeJSON(r.cacheFile(q.ID), m)
+	return m, r.store(ctx, q.ID, m)
 }
 
-func (r *Resolver) readCache(id string) *Meta {
-	b, err := os.ReadFile(r.cacheFile(id))
-	if err != nil {
-		return nil
+func (r *Resolver) cached(ctx context.Context, id string) *Meta {
+	var b string
+	if r.DB.QueryRowContext(ctx, `SELECT json FROM meta WHERE item_id = ?`, id).Scan(&b) != nil {
+		return nil // auch sql.ErrNoRows
 	}
 	var m Meta
-	if json.Unmarshal(b, &m) != nil {
+	if json.Unmarshal([]byte(b), &m) != nil {
 		return nil
 	}
 	return &m
+}
+
+func (r *Resolver) store(ctx context.Context, id string, m *Meta) error {
+	b, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	_, err = r.DB.ExecContext(ctx, `INSERT INTO meta(item_id, source, json, uncertain, updated_at) VALUES(?,?,?,?,?)
+		ON CONFLICT(item_id) DO UPDATE SET source=excluded.source, json=excluded.json, uncertain=excluded.uncertain, updated_at=excluded.updated_at`,
+		id, m.Source, string(b), m.Uncertain, time.Now().UnixMilli())
+	return err
 }
 
 func fromFilename(q Query) *Meta {
@@ -229,14 +274,6 @@ func (r *Resolver) save(ctx context.Context, src, dst string) error {
 		return err
 	}
 	return writeAtomic(dst, b)
-}
-
-func writeJSON(path string, v any) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-	return writeAtomic(path, b)
 }
 
 func writeAtomic(path string, b []byte) error {

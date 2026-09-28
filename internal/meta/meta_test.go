@@ -2,6 +2,7 @@ package meta
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/flimmer-media/flimmer/internal/db"
 )
 
 func TestParseNFO(t *testing.T) {
@@ -86,7 +89,7 @@ func fakeTMDB(t *testing.T) (*TMDB, *atomic.Int32) {
 
 func TestResolveMovieTMDB(t *testing.T) {
 	tm, calls := fakeTMDB(t)
-	r := &Resolver{CacheDir: t.TempDir(), TMDB: tm}
+	r := resolver(t, tm)
 	q := Query{ID: "abc", Path: filepath.Join(t.TempDir(), "Matrix (2001).mkv"), Title: "Matrix", Year: 2001}
 
 	m, err := r.Resolve(context.Background(), q)
@@ -118,7 +121,7 @@ func TestResolveMovieTMDB(t *testing.T) {
 
 func TestResolveEpisodeFallbackEnglisch(t *testing.T) {
 	tm, _ := fakeTMDB(t)
-	r := &Resolver{CacheDir: t.TempDir(), TMDB: tm}
+	r := resolver(t, tm)
 	m, err := r.Resolve(context.Background(), Query{ID: "ep", Path: "/nirgends/Dark/Staffel 1/S01E02.mkv", Series: "Dark", Season: 1, Episode: 2})
 	if err != nil || m == nil {
 		t.Fatalf("Resolve: %v, %v", m, err)
@@ -139,7 +142,7 @@ func TestResolveNFOGewinnt(t *testing.T) {
 	os.WriteFile(strings.TrimSuffix(video, ".mkv")+".nfo", []byte(strings.NewReplacer("https://example.org/poster.jpg", "", "https://example.org/fanart.jpg", "").Replace(string(nfo))), 0o644)
 	os.WriteFile(filepath.Join(dir, "poster.jpg"), []byte("LOKAL"), 0o644)
 
-	r := &Resolver{CacheDir: t.TempDir(), TMDB: tm}
+	r := resolver(t, tm)
 	m, err := r.Resolve(context.Background(), Query{ID: "br", Path: video, Title: "Blade Runner 2049", Year: 2017})
 	if err != nil {
 		t.Fatal(err)
@@ -156,7 +159,7 @@ func TestResolveURLNFONutztTMDBID(t *testing.T) {
 	tm, _ := fakeTMDB(t)
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "movie.nfo"), []byte("https://www.themoviedb.org/movie/603\n"), 0o644)
-	r := &Resolver{CacheDir: t.TempDir(), TMDB: tm}
+	r := resolver(t, tm)
 	// Titel ist absichtlich falsch: gesucht wird nicht, die ID aus der NFO zählt.
 	m, err := r.Resolve(context.Background(), Query{ID: "x", Path: filepath.Join(dir, "film.mkv"), Title: "Unsinn"})
 	if err != nil || m == nil || m.TMDBID != 603 {
@@ -165,19 +168,21 @@ func TestResolveURLNFONutztTMDBID(t *testing.T) {
 }
 
 func TestOhneSchluessel(t *testing.T) {
-	r := &Resolver{CacheDir: t.TempDir(), TMDB: NewTMDB("")}
+	r := resolver(t, NewTMDB(""))
 	m, err := r.Resolve(context.Background(), Query{ID: "x", Path: "/nirgends/film.mkv", Title: "Matrix"})
 	if err != nil || m.Source != "filename" || m.Title != "Matrix" {
 		t.Errorf("ohne Schlüssel: %+v, %v", m, err)
 	}
-	if _, err := os.Stat(filepath.Join(r.CacheDir, "meta", "x.json")); err == nil {
+	var n int
+	r.DB.QueryRow(`SELECT count(*) FROM meta`).Scan(&n)
+	if n != 0 {
 		t.Error("ohne Schlüssel darf nichts gecacht werden")
 	}
 }
 
 func TestNichtGefundenWirdGecacht(t *testing.T) {
 	tm, calls := fakeTMDB(t)
-	r := &Resolver{CacheDir: t.TempDir(), TMDB: tm}
+	r := resolver(t, tm)
 	q := Query{ID: "nf", Path: "/nirgends/x.mkv", Title: "Gibt es nicht"}
 	for range 2 {
 		if m, err := r.Resolve(context.Background(), q); err != nil || m.Source != "filename" || m.Title != "Gibt es nicht" {
@@ -203,7 +208,7 @@ func TestIdentifySchlaegtNFO(t *testing.T) {
 	dir := t.TempDir()
 	video := filepath.Join(dir, "film.mkv")
 	os.WriteFile(filepath.Join(dir, "film.nfo"), []byte("<movie><title>Falscher Film</title></movie>"), 0o644)
-	r := &Resolver{CacheDir: t.TempDir(), TMDB: tm}
+	r := resolver(t, tm)
 	q := Query{ID: "f", Path: video, Title: "film"}
 
 	if m, _ := r.Resolve(context.Background(), q); m.Title != "Falscher Film" {
@@ -220,7 +225,7 @@ func TestIdentifySchlaegtNFO(t *testing.T) {
 
 func TestHandler(t *testing.T) {
 	tm, _ := fakeTMDB(t)
-	r := &Resolver{CacheDir: t.TempDir(), TMDB: tm}
+	r := resolver(t, tm)
 	lookup := func(id string) (Query, bool) {
 		return Query{ID: id, Path: "/nirgends/x.mkv", Title: "The Matrix"}, id == "x"
 	}
@@ -250,5 +255,54 @@ func TestHandler(t *testing.T) {
 		if rec.Code < 400 {
 			t.Errorf("%s %s: %d, erwartet Fehler", req.Method, req.URL, rec.Code)
 		}
+	}
+}
+
+func resolver(t *testing.T, tm *TMDB) *Resolver {
+	t.Helper()
+	d, err := db.Open(filepath.Join(t.TempDir(), "flimmer.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { d.Close() })
+	return &Resolver{DB: d.DB, CacheDir: t.TempDir(), TMDB: tm}
+}
+
+// Alter Datei-Cache wird einmal übernommen, danach umbenannt; manuelle Korrekturen bleiben manuell.
+func TestImportJSON(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "flimmer.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	cache := t.TempDir()
+	os.MkdirAll(filepath.Join(cache, "meta"), 0o755)
+	for id, m := range map[string]Meta{
+		"a": {Title: "Matrix", TMDBID: 603, Source: "manual"},
+		"b": {Title: "Unsicher", Source: "tmdb", Uncertain: true},
+	} {
+		b, _ := json.Marshal(m)
+		os.WriteFile(filepath.Join(cache, "meta", id+".json"), b, 0o644)
+	}
+	os.WriteFile(filepath.Join(cache, "meta", "kaputt.json"), []byte("{"), 0o644)
+
+	r, err := New(d.DB, cache, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, _ := r.Resolve(context.Background(), Query{ID: "a", Path: "/nirgends/x.mkv", Title: "x"})
+	if m.Source != "manual" || m.Title != "Matrix" {
+		t.Errorf("Import: %+v", m)
+	}
+	var uncertain int
+	d.QueryRow(`SELECT uncertain FROM meta WHERE item_id = 'b'`).Scan(&uncertain)
+	if uncertain != 1 {
+		t.Error("uncertain nicht übernommen")
+	}
+	if _, err := os.Stat(filepath.Join(cache, "meta")); err == nil {
+		t.Error("alter Cache-Ordner nicht umbenannt → Import liefe bei jedem Start")
+	}
+	if _, err := New(d.DB, cache, ""); err != nil { // zweiter Start: nichts mehr zu tun
+		t.Fatal(err)
 	}
 }
