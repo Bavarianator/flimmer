@@ -4,8 +4,8 @@ package scan
 import (
 	"context"
 	"crypto/sha1"
+	"database/sql"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"io/fs"
 	"log"
@@ -88,13 +88,12 @@ func ID(path string) string {
 	return hex.EncodeToString(h[:6])
 }
 
-// Library hält alle Einträge im Speicher; Probe-Ergebnisse landen in einer JSON-Cache-Datei,
-// Keyframe-Indizes (groß, nur für HLS nötig) als eigene Datei pro Titel.
-// ponytail: JSON-Cache statt DB; SQLite erst, wenn Messungen es verlangen.
+// Library hält alle Einträge im Speicher (schnelle Listen) und den Katalog in SQLite:
+// Probe-Ergebnisse (items/streams) und Keyframe-Indizes überleben so einen Neustart.
 type Library struct {
-	Dirs     []string
-	CacheDir string
-	Meta     *meta.Resolver // nil = keine Metadaten
+	Dirs []string
+	DB   *sql.DB
+	Meta *meta.Resolver // nil = keine Metadaten
 	// Colorize ermittelt die Platzhalterfarbe ("#rrggbb") direkt nach den Metadaten, nicht erst beim Abruf.
 	Colorize func(ctx context.Context, it *Item, m *meta.Meta) string
 
@@ -112,8 +111,31 @@ type Library struct {
 	wake     chan struct{}
 }
 
-func NewLibrary(dirs []string, cacheDir string) *Library {
-	return &Library{Dirs: dirs, CacheDir: cacheDir, wake: make(chan struct{}, 1)}
+func NewLibrary(db *sql.DB, dirs []string) *Library {
+	return &Library{Dirs: dirs, DB: db, wake: make(chan struct{}, 1)}
+}
+
+// Load füllt die Bibliothek aus der Datenbank – sie ist damit sofort nach dem Start da, noch vor dem ersten Scan.
+func (l *Library) Load(ctx context.Context) error {
+	cat, err := loadCatalog(ctx, l.DB)
+	if err != nil {
+		return err
+	}
+	items := map[string]*Item{}
+	for _, c := range cat {
+		it := c.item()
+		items[it.ID] = it
+	}
+	l.mu.Lock()
+	l.items = items
+	l.mu.Unlock()
+	return nil
+}
+
+func (c *cached) item() *Item {
+	it := Parse(c.path)
+	it.ID, it.Path, it.Size, it.Added, it.Media = c.id, c.path, c.size, time.UnixMilli(c.added), c.media
+	return &it
 }
 
 // Run scannt sofort, dann alle every und auf Rescan hin; dazwischen misst Prefetch die Keyframes.
@@ -151,12 +173,6 @@ func (l *Library) Rescan() {
 	case l.wake <- struct{}{}:
 	default:
 	}
-}
-
-type cacheEntry struct {
-	Size  int64        `json:"size"`
-	MTime time.Time    `json:"mtime"`
-	Media *probe.Media `json:"media"`
 }
 
 type Status struct {
@@ -206,10 +222,9 @@ func (l *Library) Scan(ctx context.Context) error {
 	defer l.scanning.Store(false)
 	l.found.Store(0)
 
-	cacheFile := filepath.Join(l.CacheDir, "probe-cache.json")
-	cache := map[string]cacheEntry{}
-	if b, err := os.ReadFile(cacheFile); err == nil {
-		_ = json.Unmarshal(b, &cache)
+	cat, err := loadCatalog(ctx, l.DB)
+	if err != nil {
+		return err
 	}
 	l.mu.Lock()
 	if l.items == nil {
@@ -219,8 +234,14 @@ func (l *Library) Scan(ctx context.Context) error {
 	l.mu.Unlock()
 
 	items := map[string]*Item{}
-	newCache := map[string]cacheEntry{}
+	var offline []string
 	for _, dir := range dirs {
+		// Ein nicht erreichbarer Ordner (NAS aus, USB-Platte ab) darf keine Titel löschen.
+		if entries, err := os.ReadDir(dir); err != nil || len(entries) == 0 {
+			log.Printf("scan: %s ist nicht erreichbar oder leer – vorhandene Titel bleiben erhalten", dir)
+			offline = append(offline, dir)
+			continue
+		}
 		err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				log.Printf("scan: %v", err)
@@ -233,22 +254,29 @@ func (l *Library) Scan(ctx context.Context) error {
 			if err != nil {
 				return nil
 			}
-			c, ok := cache[path]
-			if !ok || c.Size != info.Size() || !c.MTime.Equal(info.ModTime()) {
+			var it *Item
+			if c := cat[path]; c != nil && c.size == info.Size() && c.mtime == info.ModTime().UnixNano() {
+				it = c.item()
+			} else {
 				m, err := probe.File(ctx, path)
 				if err != nil {
 					log.Printf("scan: %v", err)
 					return ctx.Err()
 				}
 				log.Printf("scan: %s neu", filepath.Base(path))
-				c = cacheEntry{Size: info.Size(), MTime: info.ModTime(), Media: m}
+				p := Parse(path)
+				p.ID, p.Path, p.Size, p.Added, p.Media = ID(path), path, info.Size(), info.ModTime(), m
+				if c := cat[path]; c != nil {
+					p.Added = time.UnixMilli(c.added) // „Neu hinzugefügt“ bleibt beim ersten Auftauchen
+				}
+				if err := saveItem(ctx, l.DB, &p, info.ModTime().UnixNano()); err != nil {
+					return err
+				}
+				it = &p
 			}
-			newCache[path] = c
-			it := Parse(path)
-			it.ID, it.Path, it.Size, it.Added, it.Media = ID(path), path, info.Size(), info.ModTime(), c.Media
-			items[it.ID] = &it
+			items[it.ID] = it
 			l.mu.Lock()
-			l.items[it.ID] = &it
+			l.items[it.ID] = it
 			l.mu.Unlock()
 			l.found.Add(1)
 			return ctx.Err()
@@ -257,15 +285,26 @@ func (l *Library) Scan(ctx context.Context) error {
 			return err
 		}
 	}
+
+	var gone []string
+	for path, c := range cat {
+		if items[c.id] != nil {
+			continue
+		}
+		if slices.ContainsFunc(offline, func(dir string) bool { return strings.HasPrefix(path, filepath.Clean(dir)+string(filepath.Separator)) }) {
+			items[c.id] = c.item()
+			continue
+		}
+		gone = append(gone, c.id)
+	}
+	if err := deleteItems(ctx, l.DB, gone); err != nil {
+		return err
+	}
 	l.mu.Lock()
 	l.items = items
 	l.kf = nil // Dateien können sich geändert haben
 	l.mu.Unlock()
-	b, err := json.Marshal(newCache)
-	if err != nil {
-		return err
-	}
-	return writeAtomic(cacheFile, b)
+	return nil
 }
 
 // Keyframes liefert den Keyframe-Index eines Titels. Er wird beim ersten Bedarf per ffprobe gelesen
@@ -310,12 +349,6 @@ func (l *Library) Keyframes(ctx context.Context, it *Item) ([]float64, error) {
 	}
 }
 
-type kfEntry struct {
-	Size      int64     `json:"size"`
-	MTime     time.Time `json:"mtime"`
-	Keyframes []float64 `json:"keyframes"`
-}
-
 // keyframeFile liest den Index aus dem Cache oder misst ihn neu, wenn die Datei sich geändert hat.
 func (l *Library) keyframeFile(ctx context.Context, it *Item) ([]float64, error) {
 	v := it.Media.First("video")
@@ -326,11 +359,8 @@ func (l *Library) keyframeFile(ctx context.Context, it *Item) ([]float64, error)
 	if err != nil {
 		return nil, err
 	}
-	path := filepath.Join(l.CacheDir, "keyframes", it.ID+".json")
-	var e kfEntry
-	if b, err := os.ReadFile(path); err == nil && json.Unmarshal(b, &e) == nil &&
-		e.Size == info.Size() && e.MTime.Equal(info.ModTime()) {
-		return e.Keyframes, nil
+	if kf, ok := loadKeyframes(ctx, l.DB, it.ID, info.Size(), info.ModTime().UnixNano()); ok {
+		return kf, nil
 	}
 	start := time.Now()
 	kf, err := probe.Keyframes(ctx, it.Path, v.Index)
@@ -338,9 +368,7 @@ func (l *Library) keyframeFile(ctx context.Context, it *Item) ([]float64, error)
 		return nil, err
 	}
 	log.Printf("scan: Keyframes %s (%s)", filepath.Base(it.Path), time.Since(start).Round(time.Millisecond))
-	b, _ := json.Marshal(kfEntry{Size: info.Size(), MTime: info.ModTime(), Keyframes: kf})
-	os.MkdirAll(filepath.Dir(path), 0o755)
-	return kf, writeAtomic(path, b)
+	return kf, saveKeyframes(ctx, l.DB, it.ID, info.Size(), info.ModTime().UnixNano(), kf)
 }
 
 // MetaFor liefert Metadaten eines Titels, nil solange noch nicht aufgelöst.
@@ -423,22 +451,4 @@ func (l *Library) Prefetch(ctx context.Context) {
 			log.Printf("scan: %v", err)
 		}
 	}
-}
-
-// writeAtomic schreibt erst in eine Temp-Datei und benennt dann um – nie eine halbe Datei nach Absturz.
-func writeAtomic(path string, b []byte) error {
-	f, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*")
-	if err != nil {
-		return err
-	}
-	if _, err := f.Write(b); err != nil {
-		f.Close()
-		os.Remove(f.Name())
-		return err
-	}
-	if err := f.Close(); err != nil {
-		os.Remove(f.Name())
-		return err
-	}
-	return os.Rename(f.Name(), path)
 }

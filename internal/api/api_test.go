@@ -15,9 +15,9 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/flimmer-media/flimmer/internal/db"
 	"github.com/flimmer-media/flimmer/internal/scan"
 	"github.com/flimmer-media/flimmer/internal/setup"
-	"github.com/flimmer-media/flimmer/internal/state"
 	"github.com/flimmer-media/flimmer/internal/transcode"
 )
 
@@ -32,12 +32,13 @@ func TestEndToEnd(t *testing.T) {
 		"-g", "25", "-c:v", "libx264", clip).CombinedOutput(); err != nil {
 		t.Fatalf("testclip: %v %s", err, b)
 	}
-	st, err := state.Open(filepath.Join(data, "state.json"))
+	store, err := db.Open(filepath.Join(data, "flimmer.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	lib := scan.NewLibrary(nil, data)
-	s := &Server{Lib: lib, HLS: transcode.NewManager(t.TempDir()), State: st, CacheDir: data,
+	defer store.Close()
+	lib := scan.NewLibrary(store.DB, nil)
+	s := &Server{Lib: lib, HLS: transcode.NewManager(t.TempDir()), DB: store, CacheDir: data,
 		Web: fstest.MapFS{"index.html": {Data: []byte("ui")}}, Pages: setup.FS()}
 	s.FFmpeg.Store(true)
 	srv := httptest.NewServer(s.Handler())
@@ -150,7 +151,7 @@ func TestHomeRows(t *testing.T) {
 	now := time.Now()
 	ep := func(id string, e int) *scan.Item { return &scan.Item{ID: id, Series: "Dark", Season: 1, Episode: e} }
 	all := []*scan.Item{ep("e1", 1), ep("e2", 2), ep("e3", 3), {ID: "film", Title: "Heat", Added: now}}
-	prog := map[string]state.Progress{
+	prog := map[string]db.Progress{
 		"e1":   {Watched: true, Updated: now.Add(-time.Hour)},
 		"film": {Pos: 600, Updated: now},
 	}

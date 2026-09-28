@@ -15,12 +15,12 @@ import (
 	"time"
 
 	"github.com/flimmer-media/flimmer/internal/auth"
+	"github.com/flimmer-media/flimmer/internal/db"
 	"github.com/flimmer-media/flimmer/internal/ffmpeg"
 	"github.com/flimmer-media/flimmer/internal/hwaccel"
 	"github.com/flimmer-media/flimmer/internal/images"
 	"github.com/flimmer-media/flimmer/internal/meta"
 	"github.com/flimmer-media/flimmer/internal/scan"
-	"github.com/flimmer-media/flimmer/internal/state"
 	"github.com/flimmer-media/flimmer/internal/transcode"
 	"github.com/flimmer-media/flimmer/internal/update"
 )
@@ -28,7 +28,7 @@ import (
 type Server struct {
 	Lib      *scan.Library
 	HLS      *transcode.Manager
-	State    *state.Store
+	DB       *db.DB
 	Meta     *meta.Resolver    // nil = keine Metadaten
 	Images   *images.Store     // nil = keine Bilder
 	FF       *ffmpeg.Installer // nil = kein Download möglich

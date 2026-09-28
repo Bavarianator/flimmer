@@ -11,16 +11,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/flimmer-media/flimmer/internal/db"
 	"github.com/flimmer-media/flimmer/internal/ffmpeg"
 	"github.com/flimmer-media/flimmer/internal/scan"
-	"github.com/flimmer-media/flimmer/internal/state"
 	"github.com/flimmer-media/flimmer/internal/update"
 )
 
-func (s *Server) setupDone() (done bool) {
-	s.State.View(func(d *state.Data) { done = d.SetupDone() })
-	return done
-}
+func (s *Server) setupDone() bool { return s.DB.SetupDone(context.Background()) }
 
 // setupAllowed: Ordner durchsuchen und ffmpeg laden darf jeder, solange es keinen Admin gibt – danach nur Admins.
 func (s *Server) setupAllowed(w http.ResponseWriter, r *http.Request) bool {
@@ -50,8 +47,10 @@ func (s *Server) setupInfo(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]bool{"done": true})
 		return
 	}
-	var set state.Settings
-	s.State.View(func(d *state.Data) { set = d.Settings })
+	set, err := s.DB.Settings(r.Context())
+	if writeErr(w, err) {
+		return
+	}
 	name := set.ServerName
 	if name == "" {
 		name, _ = os.Hostname()
@@ -76,35 +75,32 @@ func (s *Server) setup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	admin := state.User{ID: state.NewID(), Color: 220}
+	admin := db.User{ID: newID(), Color: 220}
 	if err := applyUser(&admin, userReq{Name: &req.Name, Password: &req.Password, Admin: ptr(true)}); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	err = s.State.Update(func(d *state.Data) error {
-		if d.SetupDone() { // zweiter Tab oder zweites Gerät war schneller
-			return errMsg("Flimmer ist bereits eingerichtet")
-		}
-		d.Users = append(d.Users, admin)
-		d.Settings.ServerName = strings.TrimSpace(req.ServerName)
-		d.Settings.Language = cmp(req.Language, "de")
-		d.Settings.Dirs = dirs
-		return nil
+	// Atomar: Ein zweiter Tab oder ein zweites Gerät kann nicht auch Admin werden.
+	err = s.DB.Setup(r.Context(), admin, func(set *db.Settings) {
+		set.ServerName = strings.TrimSpace(req.ServerName)
+		set.Language = cmp(req.Language, "de")
+		set.Dirs = dirs
 	})
 	if writeErr(w, err) {
 		return
 	}
-	if err := s.State.Flush(); err != nil {
-		http.Error(w, "Einstellungen konnten nicht gespeichert werden: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
 	s.Lib.SetDirs(dirs)
-	writeJSON(w, withToken{toPublic(admin), s.newSession(w, r, admin.ID, "Einrichtung")})
+	tok, err := s.newSession(w, r, admin.ID, "Einrichtung")
+	if !writeErr(w, err) {
+		writeJSON(w, withToken{toPublic(admin), tok})
+	}
 }
 
 func (s *Server) settings(w http.ResponseWriter, r *http.Request) {
-	var set state.Settings
-	s.State.View(func(d *state.Data) { set = d.Settings })
+	set, err := s.DB.Settings(r.Context())
+	if writeErr(w, err) {
+		return
+	}
 	writeJSON(w, map[string]any{"serverName": set.ServerName, "language": cmp(set.Language, "de"), "dirs": nonNil(set.Dirs),
 		"tmdbKey": set.TMDBKey != "", "suggestions": suggestions(), "ffmpeg": s.ffmpegInfo(), "lanUrl": s.LANURL,
 		"updateCheck": !set.NoUpdates, "update": s.availableUpdate(), "version": update.Version})
@@ -136,25 +132,26 @@ func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	s.State.Update(func(d *state.Data) error {
+	err := s.DB.UpdateSettings(r.Context(), func(set *db.Settings) {
 		if req.ServerName != nil {
-			d.Settings.ServerName = strings.TrimSpace(*req.ServerName)
+			set.ServerName = strings.TrimSpace(*req.ServerName)
 		}
 		if req.Language != nil {
-			d.Settings.Language = *req.Language
+			set.Language = *req.Language
 		}
 		if req.TMDBKey != nil {
-			d.Settings.TMDBKey = strings.TrimSpace(*req.TMDBKey)
+			set.TMDBKey = strings.TrimSpace(*req.TMDBKey)
 		}
 		if req.Dirs != nil {
-			d.Settings.Dirs = dirs
+			set.Dirs = dirs
 		}
 		if req.Update != nil {
-			d.Settings.NoUpdates = !*req.Update
+			set.NoUpdates = !*req.Update
 		}
-		return nil
 	})
-	s.State.Flush()
+	if writeErr(w, err) {
+		return
+	}
 	if req.Dirs != nil {
 		s.Lib.SetDirs(dirs)
 	}

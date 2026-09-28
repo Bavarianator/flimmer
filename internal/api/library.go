@@ -14,11 +14,11 @@ import (
 	"time"
 
 	"github.com/flimmer-media/flimmer/internal/auth"
+	"github.com/flimmer-media/flimmer/internal/db"
 	"github.com/flimmer-media/flimmer/internal/images"
 	"github.com/flimmer-media/flimmer/internal/meta"
 	"github.com/flimmer-media/flimmer/internal/playback"
 	"github.com/flimmer-media/flimmer/internal/scan"
-	"github.com/flimmer-media/flimmer/internal/state"
 )
 
 type libraryItem struct {
@@ -45,8 +45,10 @@ func readProfile(w http.ResponseWriter, r *http.Request) (playback.Profile, bool
 
 // items reichert Titel für den angemeldeten Benutzer und das anfragende Gerät an.
 func (s *Server) items(r *http.Request, p playback.Profile, list []*scan.Item) []libraryItem {
-	var prog map[string]state.Progress
-	s.State.View(func(d *state.Data) { prog = maps(d.Progress[userFrom(r).ID]) })
+	prog, err := s.DB.Progress(r.Context(), userFrom(r).ID)
+	if err != nil {
+		log.Printf("Fortschritt lesen: %v", err)
+	}
 	speed := s.hw().Speed
 	out := make([]libraryItem, 0, len(list))
 	for _, it := range list {
@@ -63,14 +65,6 @@ func (s *Server) items(r *http.Request, p playback.Profile, list []*scan.Item) [
 			li.Backdrop = "/api/images/" + it.ID + "/still?w=780" // Standbild aus der Episode
 		}
 		out = append(out, li)
-	}
-	return out
-}
-
-func maps(m map[string]state.Progress) map[string]state.Progress {
-	out := make(map[string]state.Progress, len(m))
-	for k, v := range m {
-		out[k] = v
 	}
 	return out
 }
@@ -95,8 +89,10 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var prog map[string]state.Progress
-	s.State.View(func(d *state.Data) { prog = maps(d.Progress[userFrom(r).ID]) })
+	prog, err := s.DB.Progress(r.Context(), userFrom(r).ID)
+	if writeErr(w, err) {
+		return
+	}
 	cont, next, recent := homeRows(s.Lib.All(), prog)
 	rows := []homeRow{}
 	for _, row := range []homeRow{{ID: "continue", Title: "Weiterschauen"}, {ID: "nextup", Title: "Als Nächstes"}, {ID: "recent", Title: "Neu hinzugefügt"}} {
@@ -112,7 +108,7 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 const rowMax = 20
 
 // homeRows ist rein (ohne Server), damit die Regeln testbar sind. all ist nach Serie/Staffel/Episode sortiert.
-func homeRows(all []*scan.Item, prog map[string]state.Progress) (cont, next, recent []*scan.Item) {
+func homeRows(all []*scan.Item, prog map[string]db.Progress) (cont, next, recent []*scan.Item) {
 	type hit struct {
 		it *scan.Item
 		t  time.Time
@@ -183,12 +179,12 @@ type subtitleOut struct {
 
 type playResponse struct {
 	playback.Plan
-	Subtitles []subtitleOut   `json:"subtitles"` // überdeckt Plan.Subtitles, ergänzt um fertige URLs
-	URL       string          `json:"url"`
-	Duration  float64         `json:"duration"`
-	Title     string          `json:"title"`
-	Resume    float64         `json:"resume"` // Sekunden, 0 = von vorn
-	Prefs     state.TrackPref `json:"prefs"`  // zuletzt gewählte Sprachen dieser Serie
+	Subtitles []subtitleOut `json:"subtitles"` // überdeckt Plan.Subtitles, ergänzt um fertige URLs
+	URL       string        `json:"url"`
+	Duration  float64       `json:"duration"`
+	Title     string        `json:"title"`
+	Resume    float64       `json:"resume"` // Sekunden, 0 = von vorn
+	Prefs     db.TrackPref  `json:"prefs"`  // zuletzt gewählte Sprachen dieser Serie
 }
 
 func (s *Server) play(w http.ResponseWriter, r *http.Request) {
@@ -201,14 +197,11 @@ func (s *Server) play(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u := userFrom(r)
-	var resume float64
-	var prefs state.TrackPref
-	s.State.View(func(d *state.Data) {
-		resume = d.Progress[u.ID][it.ID].Pos
-		if it.Series != "" {
-			prefs = d.Prefs[u.ID][it.Series]
-		}
-	})
+	resume := s.DB.ProgressOf(r.Context(), u.ID, it.ID).Pos
+	var prefs db.TrackPref
+	if it.Series != "" {
+		prefs = s.DB.Pref(r.Context(), u.ID, it.Series)
+	}
 	if p.AudioLang == "" {
 		p.AudioLang = prefs.Audio // zuletzt gewählte Tonsprache der Serie
 	}
@@ -264,24 +257,15 @@ func (s *Server) progress(w http.ResponseWriter, r *http.Request) {
 		dur = req.Duration
 	}
 	uid := userFrom(r).ID
-	var out state.Progress
-	s.State.Update(func(d *state.Data) error {
-		out = d.SetProgress(uid, it.ID, max(req.Pos, 0), dur)
-		if it.Series != "" && (req.Audio != "" || req.Subtitle != "") {
-			if d.Prefs[uid] == nil {
-				d.Prefs[uid] = map[string]state.TrackPref{}
-			}
-			pref := d.Prefs[uid][it.Series]
-			if req.Audio != "" {
-				pref.Audio = req.Audio
-			}
-			if req.Subtitle != "" {
-				pref.Subtitle = req.Subtitle
-			}
-			d.Prefs[uid][it.Series] = pref
+	out, err := s.DB.SetProgress(r.Context(), uid, it.ID, max(req.Pos, 0), dur)
+	if writeErr(w, err) {
+		return
+	}
+	if it.Series != "" && (req.Audio != "" || req.Subtitle != "") {
+		if err := s.DB.SetPref(r.Context(), uid, it.Series, db.TrackPref{Audio: req.Audio, Subtitle: req.Subtitle}); err != nil {
+			log.Printf("Sprachwahl speichern: %v", err)
 		}
-		return nil
-	})
+	}
 	writeJSON(w, out)
 }
 
@@ -297,15 +281,15 @@ func (s *Server) watched(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	uid := userFrom(r).ID
-	s.State.Update(func(d *state.Data) error {
-		if req.Watched {
-			d.SetProgress(uid, it.ID, it.Media.Duration, it.Media.Duration)
-		} else {
-			delete(d.Progress[uid], it.ID)
-		}
-		return nil
-	})
-	w.WriteHeader(http.StatusNoContent)
+	var err error
+	if req.Watched {
+		_, err = s.DB.SetProgress(r.Context(), uid, it.ID, it.Media.Duration, it.Media.Duration)
+	} else {
+		err = s.DB.DeleteProgress(r.Context(), uid, it.ID)
+	}
+	if !writeErr(w, err) {
+		w.WriteHeader(http.StatusNoContent)
+	}
 }
 
 var reDevice = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
@@ -318,8 +302,7 @@ func (s *Server) deviceProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == http.MethodGet {
-		var b json.RawMessage
-		s.State.View(func(d *state.Data) { b = d.Devices[id] })
+		b := s.DB.Device(r.Context(), id)
 		if b == nil {
 			http.NotFound(w, r)
 			return
@@ -332,8 +315,9 @@ func (s *Server) deviceProfile(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &b) {
 		return
 	}
-	s.State.Update(func(d *state.Data) error { d.Devices[id] = b; return nil })
-	w.WriteHeader(http.StatusNoContent)
+	if !writeErr(w, s.DB.SetDevice(r.Context(), id, b)) {
+		w.WriteHeader(http.StatusNoContent)
+	}
 }
 
 // ImageSource sagt internal/images, woraus ein Bild entsteht (auch für die Platzhalterfarbe im Scan).

@@ -2,7 +2,11 @@ package api
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"log"
 	"net"
 	"net/http"
 	"regexp"
@@ -10,7 +14,7 @@ import (
 	"time"
 
 	"github.com/flimmer-media/flimmer/internal/auth"
-	"github.com/flimmer-media/flimmer/internal/state"
+	"github.com/flimmer-media/flimmer/internal/db"
 )
 
 const (
@@ -22,8 +26,8 @@ const (
 type ctxKey struct{}
 
 // userFrom liefert den angemeldeten Benutzer (Kopie) oder nil.
-func userFrom(r *http.Request) *state.User {
-	u, _ := r.Context().Value(ctxKey{}).(*state.User)
+func userFrom(r *http.Request) *db.User {
+	u, _ := r.Context().Value(ctxKey{}).(*db.User)
 	return u
 }
 
@@ -49,7 +53,7 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 		if rest, ok := strings.CutPrefix(r.URL.Path, "/api/m/"); ok {
 			tok, path, _ := strings.Cut(rest, "/")
 			uid, ok := auth.CheckMediaToken(s.secret(), tok)
-			u := s.user(uid)
+			u := s.user(r.Context(), uid)
 			if !ok || u == nil || r.Method != http.MethodGet || !strings.HasPrefix(path, "items/") {
 				http.Error(w, "Link abgelaufen – bitte neu starten", http.StatusUnauthorized)
 				return
@@ -71,31 +75,30 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		var setup bool
-		s.State.View(func(d *state.Data) { setup = !d.SetupDone() })
+		setup := !s.setupDone()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(map[string]any{"error": "login", "setup": setup})
 	})
 }
 
-func (s *Server) secret() (b []byte) {
-	s.State.View(func(d *state.Data) { b = d.Settings.Secret })
-	return b
+func (s *Server) secret() []byte {
+	set, err := s.DB.Settings(context.Background())
+	if err != nil {
+		log.Printf("Einstellungen lesen: %v", err)
+	}
+	return set.Secret
 }
 
-func (s *Server) user(id string) *state.User {
-	var out *state.User
-	s.State.View(func(d *state.Data) {
-		if u := d.User(id); u != nil {
-			c := *u
-			out = &c
-		}
-	})
-	return out
+func (s *Server) user(ctx context.Context, id string) *db.User {
+	u, err := s.DB.User(ctx, id)
+	if err != nil {
+		log.Printf("Benutzer lesen: %v", err)
+	}
+	return u
 }
 
-func (s *Server) sessionUser(r *http.Request) *state.User {
+func (s *Server) sessionUser(r *http.Request) *db.User {
 	tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if tok == "" {
 		if c, err := r.Cookie(cookieName); err == nil {
@@ -105,47 +108,22 @@ func (s *Server) sessionUser(r *http.Request) *state.User {
 	if tok == "" {
 		return nil
 	}
-	h := auth.HashToken(tok)
-	var out *state.User
-	touch := false
-	s.State.View(func(d *state.Data) {
-		sess, ok := d.Sessions[h]
-		if !ok || time.Since(sess.LastSeen) > sessionTTL {
-			return
-		}
-		if u := d.User(sess.UserID); u != nil {
-			c := *u
-			out = &c
-			touch = time.Since(sess.LastSeen) > time.Hour // nicht bei jedem Segment schreiben
-		}
-	})
-	if touch {
-		s.State.Update(func(d *state.Data) error {
-			if sess, ok := d.Sessions[h]; ok {
-				sess.LastSeen = time.Now()
-				d.Sessions[h] = sess
-			}
-			return nil
-		})
+	u, err := s.DB.SessionUser(r.Context(), auth.HashToken(tok), sessionTTL)
+	if err != nil {
+		log.Printf("Session prüfen: %v", err)
 	}
-	return out
+	return u
 }
 
 // newSession legt eine Session an; im Browser zusätzlich als Cookie.
-func (s *Server) newSession(w http.ResponseWriter, r *http.Request, userID, device string) string {
+func (s *Server) newSession(w http.ResponseWriter, r *http.Request, userID, device string) (string, error) {
 	tok, h := auth.NewToken()
-	s.State.Update(func(d *state.Data) error {
-		for k, sess := range d.Sessions { // aufräumen, sonst wächst state.json mit jedem Login
-			if time.Since(sess.LastSeen) > sessionTTL {
-				delete(d.Sessions, k)
-			}
-		}
-		d.Sessions[h] = state.Session{UserID: userID, Device: device, LastSeen: time.Now()}
-		return nil
-	})
+	if err := s.DB.CreateSession(r.Context(), h, userID, device, sessionTTL); err != nil {
+		return "", err
+	}
 	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: tok, Path: "/", MaxAge: int(sessionTTL.Seconds()),
 		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil})
-	return tok
+	return tok, nil
 }
 
 type withToken struct {
@@ -161,18 +139,20 @@ type publicUser struct {
 	HasPassword bool   `json:"hasPassword"`
 }
 
-func toPublic(u state.User) publicUser {
+func toPublic(u db.User) publicUser {
 	return publicUser{ID: u.ID, Name: u.Name, Color: u.Color, Admin: u.Admin, HasPassword: u.PassHash != ""}
 }
 
 // users: Profilauswahl vor dem Login (Netflix-Stil).
 func (s *Server) users(w http.ResponseWriter, r *http.Request) {
+	all, err := s.DB.Users(r.Context())
+	if writeErr(w, err) {
+		return
+	}
 	out := []publicUser{}
-	s.State.View(func(d *state.Data) {
-		for _, u := range d.Users {
-			out = append(out, toPublic(u))
-		}
-	})
+	for _, u := range all {
+		out = append(out, toPublic(u))
+	}
 	writeJSON(w, out)
 }
 
@@ -208,24 +188,25 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Zu viele Versuche – bitte eine Minute warten", http.StatusTooManyRequests)
 		return
 	}
-	u := s.user(req.User)
+	u := s.user(r.Context(), req.User)
 	ok := u != nil && ((u.PassHash == "" && !u.Admin && inLAN(r)) || (u.PassHash != "" && auth.CheckPassword(u.PassHash, req.Password)))
 	if !ok {
 		s.limiter.Fail(ip)
 		http.Error(w, "Name oder Passwort falsch", http.StatusUnauthorized)
 		return
 	}
-	writeJSON(w, withToken{toPublic(*u), s.newSession(w, r, u.ID, req.Device)})
+	tok, err := s.newSession(w, r, u.ID, req.Device)
+	if !writeErr(w, err) {
+		writeJSON(w, withToken{toPublic(*u), tok})
+	}
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie(cookieName); err == nil {
-		h := auth.HashToken(c.Value)
-		s.State.Update(func(d *state.Data) error { delete(d.Sessions, h); return nil })
+		s.DB.DeleteSession(r.Context(), auth.HashToken(c.Value))
 	}
 	if tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
-		h := auth.HashToken(tok)
-		s.State.Update(func(d *state.Data) error { delete(d.Sessions, h); return nil })
+		s.DB.DeleteSession(r.Context(), auth.HashToken(tok))
 	}
 	http.SetCookie(w, &http.Cookie{Name: cookieName, Path: "/", MaxAge: -1})
 	w.WriteHeader(http.StatusNoContent)
@@ -260,13 +241,14 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	u := state.User{ID: state.NewID()}
+	u := db.User{ID: newID()}
 	if err := applyUser(&u, req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	s.State.Update(func(d *state.Data) error { d.Users = append(d.Users, u); return nil })
-	writeJSON(w, toPublic(u))
+	if !writeErr(w, s.DB.CreateUser(r.Context(), u)) {
+		writeJSON(w, toPublic(u))
+	}
 }
 
 func (s *Server) updateUser(w http.ResponseWriter, r *http.Request) {
@@ -274,20 +256,14 @@ func (s *Server) updateUser(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	var out state.User
-	err := s.State.Update(func(d *state.Data) error {
-		u := d.User(r.PathValue("id"))
-		if u == nil {
-			return errNotFound
-		}
-		c := *u
-		if err := applyUser(&c, req); err != nil {
+	out, err := s.DB.UpdateUser(r.Context(), r.PathValue("id"), func(u *db.User, admins int) error {
+		wasAdmin := u.Admin
+		if err := applyUser(u, req); err != nil {
 			return err
 		}
-		if u.Admin && !c.Admin && admins(d) == 1 {
+		if wasAdmin && !u.Admin && admins == 1 {
 			return errMsg("Der letzte Admin kann nicht herabgestuft werden")
 		}
-		*u, out = c, c
 		return nil
 	})
 	if !writeErr(w, err) {
@@ -295,23 +271,11 @@ func (s *Server) updateUser(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// deleteUser löscht samt Sessions, Fortschritt und Sprachwahl (Fremdschlüssel mit CASCADE).
 func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	err := s.State.Update(func(d *state.Data) error {
-		u := d.User(id)
-		if u == nil {
-			return errNotFound
-		}
-		if u.Admin && admins(d) == 1 {
+	err := s.DB.DeleteUser(r.Context(), r.PathValue("id"), func(u db.User, admins int) error {
+		if u.Admin && admins == 1 {
 			return errMsg("Der letzte Admin kann nicht gelöscht werden")
-		}
-		d.Users = slicesDelete(d.Users, id)
-		delete(d.Progress, id)
-		delete(d.Prefs, id)
-		for k, sess := range d.Sessions {
-			if sess.UserID == id {
-				delete(d.Sessions, k)
-			}
 		}
 		return nil
 	})
@@ -320,7 +284,7 @@ func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func applyUser(u *state.User, req userReq) error {
+func applyUser(u *db.User, req userReq) error {
 	if req.Name != nil {
 		u.Name = strings.TrimSpace(*req.Name)
 	}
@@ -349,24 +313,10 @@ func applyUser(u *state.User, req userReq) error {
 	return nil
 }
 
-func admins(d *state.Data) int {
-	n := 0
-	for _, u := range d.Users {
-		if u.Admin {
-			n++
-		}
-	}
-	return n
-}
-
-func slicesDelete(users []state.User, id string) []state.User {
-	out := users[:0]
-	for _, u := range users {
-		if u.ID != id {
-			out = append(out, u)
-		}
-	}
-	return out
+func newID() string {
+	b := make([]byte, 8)
+	rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 // --- TV-Kopplung ---
@@ -390,12 +340,15 @@ func (s *Server) pairPoll(w http.ResponseWriter, r *http.Request) {
 	case !done:
 		w.WriteHeader(http.StatusAccepted)
 	default:
-		u := s.user(uid)
+		u := s.user(r.Context(), uid)
 		if u == nil {
 			http.Error(w, "Benutzer existiert nicht mehr", http.StatusNotFound)
 			return
 		}
-		writeJSON(w, map[string]any{"token": s.newSession(w, r, uid, device), "user": toPublic(*u)})
+		tok, err := s.newSession(w, r, uid, device)
+		if !writeErr(w, err) {
+			writeJSON(w, map[string]any{"token": tok, "user": toPublic(*u)})
+		}
 	}
 }
 
@@ -427,6 +380,12 @@ var errNotFound = errMsg("nicht gefunden")
 
 // writeErr schreibt err passend (404/400/500) und meldet, ob es einen Fehler gab.
 func writeErr(w http.ResponseWriter, err error) bool {
+	if errors.Is(err, db.ErrNotFound) {
+		err = errNotFound
+	}
+	if errors.Is(err, db.ErrSetupDone) {
+		err = errMsg(err.Error())
+	}
 	switch e := err.(type) {
 	case nil:
 		return false

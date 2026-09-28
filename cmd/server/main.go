@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/flimmer-media/flimmer/internal/api"
+	"github.com/flimmer-media/flimmer/internal/db"
 	"github.com/flimmer-media/flimmer/internal/discovery"
 	"github.com/flimmer-media/flimmer/internal/ffmpeg"
 	"github.com/flimmer-media/flimmer/internal/hwaccel"
@@ -30,7 +31,6 @@ import (
 	"github.com/flimmer-media/flimmer/internal/scan"
 	"github.com/flimmer-media/flimmer/internal/service"
 	"github.com/flimmer-media/flimmer/internal/setup"
-	"github.com/flimmer-media/flimmer/internal/state"
 	"github.com/flimmer-media/flimmer/internal/transcode"
 	"github.com/flimmer-media/flimmer/internal/update"
 	"github.com/flimmer-media/flimmer/web"
@@ -54,18 +54,33 @@ func main() {
 	flag.Visit(func(f *flag.Flag) { addrSet = addrSet || f.Name == "addr" })
 
 	cfgDir, cacheDir := dataDirs(*data)
+	// Caches der Vorversion (vor SQLite) – der Katalog liegt jetzt in flimmer.db.
+	os.Remove(filepath.Join(cacheDir, "probe-cache.json"))
+	os.RemoveAll(filepath.Join(cacheDir, "keyframes"))
 	tmp := filepath.Join(cacheDir, "transcode")
 	os.RemoveAll(tmp) // Reste vom letzten Lauf
 	if err := os.MkdirAll(tmp, 0o755); err != nil {
 		log.Fatal(err)
 	}
-	st, err := state.Open(filepath.Join(cfgDir, "state.json"))
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		log.Fatal(err)
+	}
+	store, err := db.Open(filepath.Join(cfgDir, "flimmer.db"))
 	if err != nil {
 		log.Fatal(err)
 	}
-	var set state.Settings
-	var setupDone bool
-	st.View(func(d *state.Data) { set, setupDone = d.Settings, d.SetupDone() })
+	defer store.Close()
+	bg := context.Background()
+	if ok, err := store.ImportState(bg, filepath.Join(cfgDir, "state.json")); err != nil {
+		log.Fatalf("state.json übernehmen: %v", err)
+	} else if ok {
+		log.Print("Einstellungen aus state.json in die Datenbank übernommen (state.json.migrated bleibt als Sicherung)")
+	}
+	set, err := store.Settings(bg)
+	if err != nil {
+		log.Fatal(err)
+	}
+	setupDone := store.SetupDone(bg)
 
 	// -media gewinnt (z. B. aus systemd/Docker) und wird übernommen, sonst gilt die Einrichtung.
 	dirs := set.Dirs
@@ -76,7 +91,9 @@ func main() {
 				dirs = append(dirs, d)
 			}
 		}
-		st.Update(func(d *state.Data) error { d.Settings.Dirs = dirs; return nil })
+		if err := store.UpdateSettings(bg, func(s *db.Settings) { s.Dirs = dirs }); err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	ffDir := filepath.Join(cfgDir, "bin")
@@ -94,9 +111,15 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	res := meta.New(cacheDir, set.TMDBKey)
+	res, err := meta.New(store.DB, cacheDir, set.TMDBKey)
+	if err != nil {
+		log.Fatal(err)
+	}
 	img := images.New(filepath.Join(cacheDir, "thumbs"))
-	lib := scan.NewLibrary(dirs, cacheDir)
+	lib := scan.NewLibrary(store.DB, dirs)
+	if err := lib.Load(bg); err != nil {
+		log.Fatal(err)
+	}
 	lib.Meta = res
 	lib.Colorize = func(ctx context.Context, it *scan.Item, m *meta.Meta) string {
 		src, ok := api.ImageSource(it, m, res.ImgDir(), "poster")
@@ -108,11 +131,11 @@ func main() {
 	}
 	hls := transcode.NewManager(tmp)
 	lanURL := discovery.LANURL(port)
-	srv := &api.Server{Lib: lib, HLS: hls, State: st, Meta: res, Images: img, CacheDir: cacheDir,
+	srv := &api.Server{Lib: lib, HLS: hls, DB: store, Meta: res, Images: img, CacheDir: cacheDir,
 		Web: web.FS(), Pages: setup.FS(), LANURL: lanURL, QR: discovery.QRHandler(port), Log: ring, Updates: &update.Checker{}}
-	go srv.Updates.Run(ctx, func() (on bool) {
-		st.View(func(d *state.Data) { on = !d.Settings.NoUpdates })
-		return on
+	go srv.Updates.Run(ctx, func() bool {
+		s, err := store.Settings(ctx)
+		return err == nil && !s.NoUpdates
 	})
 	srv.FFmpeg.Store(hasFF)
 
@@ -172,9 +195,6 @@ func main() {
 	defer cancel()
 	httpSrv.Shutdown(shutdown)
 	hls.Close() // falls während des Herunterfahrens noch ein Segment angefragt wurde
-	if err := st.Flush(); err != nil {
-		log.Printf("Einstellungen speichern: %v", err)
-	}
 }
 
 // dataDirs: Einstellungen in den Konfig-Ordner (wird nicht „aufgeräumt“), Caches in den Cache-Ordner.
@@ -209,7 +229,7 @@ func serviceCmd(cmd string, args []string) {
 				data = args[i+1]
 			}
 		}
-		cfg, _ := dataDirs(data) // der Dienst findet so dieselbe state.json wie der Start per Doppelklick
+		cfg, _ := dataDirs(data) // der Dienst findet so dieselbe flimmer.db wie der Start per Doppelklick
 		msg, err = service.Install(exe, cfg, args...)
 	} else {
 		msg, err = service.Uninstall()
