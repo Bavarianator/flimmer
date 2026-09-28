@@ -220,9 +220,11 @@ func defaultAudio(m *probe.Media) *probe.Stream {
 	return first
 }
 
-// Mehrkanal bleibt Mehrkanal, wenn das Gerät EAC3 kann; sonst Stereo-AAC (kann jedes Gerät).
+// targetAudio wählt, wohin umgewandelt wird: Mehrkanal bleibt Mehrkanal (EAC3), sonst AAC –
+// jeweils nur, wenn das Gerät es kann. Kann es keins von beiden, bleibt AAC als letzter Versuch.
 func targetAudio(a *probe.Stream, p Profile) string {
-	if a != nil && a.Channels > 2 && slices.Contains(p.Audio, "eac3") {
+	eac3, aac := slices.Contains(p.Audio, "eac3"), slices.Contains(p.Audio, "aac")
+	if eac3 && (a != nil && a.Channels > 2 || !aac) {
 		return "eac3"
 	}
 	return "aac"

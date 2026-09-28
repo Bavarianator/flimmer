@@ -156,3 +156,15 @@ func TestAudioChoice(t *testing.T) {
 		}
 	}
 }
+
+func TestTargetAudioOnlyWhatDeviceCan(t *testing.T) {
+	m := media("matroska", "h264", "yuv420p", "dts", 2)
+	p := Profile{Containers: []string{"mkv"}, Video: []string{"h264"}, Audio: []string{"eac3"}}
+	if got := Decide(m, p, 0); got.AudioCodec != "eac3" {
+		t.Fatalf("Gerät ohne AAC: got %s", got.AudioCodec)
+	}
+	p.Audio = []string{"aac", "eac3"}
+	if got := Decide(m, p, 0); got.AudioCodec != "aac" {
+		t.Fatalf("Stereo mit AAC: got %s", got.AudioCodec)
+	}
+}
