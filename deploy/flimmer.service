@@ -1,0 +1,36 @@
+# Installation:
+#   sudo install -m755 flimmer /usr/local/bin/flimmer
+#   sudo useradd --system --no-create-home --shell /usr/sbin/nologin flimmer
+#   sudo cp flimmer.service /etc/systemd/system/ && sudo systemctl daemon-reload
+#   sudo systemctl edit flimmer   # Medienpfad anpassen (ExecStart= leeren, dann neu setzen)
+#   sudo systemctl enable --now flimmer
+
+[Unit]
+Description=Flimmer Medienserver
+Documentation=https://github.com/flimmer-media/flimmer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=flimmer
+Group=flimmer
+# Zugriff auf /dev/dri für Hardware-Transcoding (VAAPI/QSV)
+SupplementaryGroups=video render
+StateDirectory=flimmer
+ExecStart=/usr/local/bin/flimmer -media /srv/media -data /var/lib/flimmer
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target
