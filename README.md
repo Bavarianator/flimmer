@@ -103,6 +103,15 @@ Die App in `apps/webos` fragt nur nach der Server-Adresse und lädt die Oberflä
    ```
 3. In der App die Server-Adresse eingeben, z. B. `192.168.178.20`. Der Port 8096 wird automatisch ergänzt.
 
+### Passwort vergessen
+
+Das Passwort lässt sich per Befehl neu setzen, auch bei laufendem Server (ohne `-user` ist der erste Admin gemeint):
+
+```sh
+./flimmer resetpw -data /pfad/zum/datenordner NEUES-PASSWORT          # ohne Docker
+docker exec flimmer flimmer resetpw -data /data NEUES-PASSWORT        # Docker
+```
+
 ## Tests
 
 ```sh

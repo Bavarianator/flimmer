@@ -48,6 +48,10 @@ func main() {
 		serviceCmd(os.Args[1], os.Args[2:])
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "resetpw" {
+		resetpwCmd(os.Args[2:])
+		return
+	}
 	addr := flag.String("addr", ":"+strconv.Itoa(defaultPort), "Adresse, auf der der Server lauscht")
 	media := flag.String("media", "", "Medienordner, mehrere mit Komma getrennt (sonst aus der Einrichtung)")
 	data := flag.String("data", "", "ein Ordner für alles (Einstellungen und Cache); Standard: Benutzerordner des Systems")
