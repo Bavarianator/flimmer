@@ -157,7 +157,8 @@ func TestImportState(t *testing.T) {
 func TestMigrateExisting(t *testing.T) {
 	d, dir := open(t)
 	d.CreateUser(ctx, User{ID: "u", Name: "U"})
-	for _, q := range []string{"ALTER TABLE items DROP COLUMN probe_version", "ALTER TABLE streams DROP COLUMN hdr",
+	for _, q := range []string{"ALTER TABLE streams DROP COLUMN forced", "ALTER TABLE streams DROP COLUMN hearing_impaired",
+		"ALTER TABLE items DROP COLUMN probe_version", "ALTER TABLE streams DROP COLUMN hdr",
 		"ALTER TABLE streams DROP COLUMN dv_profile", "ALTER TABLE streams DROP COLUMN dv_compat", "PRAGMA user_version = 1"} {
 		if _, err := d.Exec(q); err != nil {
 			t.Fatal(q, err)

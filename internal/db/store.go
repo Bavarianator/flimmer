@@ -450,6 +450,8 @@ func (d *DB) SetDevice(ctx context.Context, id string, profile []byte) error {
 
 // tx führt f in einer Transaktion aus (BEGIN IMMEDIATE, siehe _txlock in Open).
 func (d *DB) tx(ctx context.Context, f func(tx *sql.Tx) error) error {
+	d.writeMu.Lock()
+	defer d.writeMu.Unlock()
 	tx, err := d.BeginTx(ctx, nil)
 	if err != nil {
 		return err

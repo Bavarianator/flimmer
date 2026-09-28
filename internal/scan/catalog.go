@@ -11,7 +11,7 @@ import (
 
 // ProbeVersion erhöhen, wenn probe neue Felder liefert: Dann wird jeder Titel beim nächsten Scan neu geprobt
 // (nur der schnelle Header-Probe; der Keyframe-Index bleibt). Neue Felder brauchen Spalten in streams (Migration).
-const ProbeVersion = 2
+const ProbeVersion = 3
 
 // cached ist, was die Datenbank über eine Datei weiß; Size/MTime/ProbeVersion entscheiden, ob neu geprobt wird.
 type cached struct {
@@ -42,7 +42,7 @@ func loadCatalog(ctx context.Context, db *sql.DB) (map[string]*cached, error) {
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	srows, err := db.QueryContext(ctx, "SELECT item_id, idx, type, codec, profile, pix_fmt, width, height, channels, language, title, is_default, hdr, dv_profile, dv_compat FROM streams ORDER BY item_id, idx")
+	srows, err := db.QueryContext(ctx, "SELECT item_id, idx, type, codec, profile, pix_fmt, width, height, channels, language, title, is_default, hdr, dv_profile, dv_compat, forced, hearing_impaired FROM streams ORDER BY item_id, idx")
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +50,7 @@ func loadCatalog(ctx context.Context, db *sql.DB) (map[string]*cached, error) {
 	for srows.Next() {
 		var id string
 		var s probe.Stream
-		if err := srows.Scan(&id, &s.Index, &s.Type, &s.Codec, &s.Profile, &s.PixFmt, &s.Width, &s.Height, &s.Channels, &s.Language, &s.Title, &s.Default, &s.HDR, &s.DVProfile, &s.DVCompat); err != nil {
+		if err := srows.Scan(&id, &s.Index, &s.Type, &s.Codec, &s.Profile, &s.PixFmt, &s.Width, &s.Height, &s.Channels, &s.Language, &s.Title, &s.Default, &s.HDR, &s.DVProfile, &s.DVCompat, &s.Forced, &s.HearingImpaired); err != nil {
 			return nil, err
 		}
 		if c := byID[id]; c != nil {
@@ -88,9 +88,9 @@ func saveItem(ctx context.Context, db *sql.DB, it *Item, mtime int64) error {
 		}
 	}
 	for _, s := range m.Streams {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO streams(item_id, idx, type, codec, profile, pix_fmt, width, height, channels, language, title, is_default, hdr, dv_profile, dv_compat)
-			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			it.ID, s.Index, s.Type, s.Codec, s.Profile, s.PixFmt, s.Width, s.Height, s.Channels, s.Language, s.Title, s.Default, s.HDR, s.DVProfile, s.DVCompat); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO streams(item_id, idx, type, codec, profile, pix_fmt, width, height, channels, language, title, is_default, hdr, dv_profile, dv_compat, forced, hearing_impaired)
+			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			it.ID, s.Index, s.Type, s.Codec, s.Profile, s.PixFmt, s.Width, s.Height, s.Channels, s.Language, s.Title, s.Default, s.HDR, s.DVProfile, s.DVCompat, s.Forced, s.HearingImpaired); err != nil {
 			return err
 		}
 	}

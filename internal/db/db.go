@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	_ "github.com/ncruces/go-sqlite3/driver"
@@ -24,6 +25,10 @@ var migrations embed.FS
 type DB struct {
 	*sql.DB
 	path string
+	// writeMu reiht Schreib-Transaktionen in Go ein. SQLites Busy-Handler wartet mit wachsenden Pausen und
+	// ist nicht fair: Unter Last konnte ein Schreiber wiederholt verlieren, bis nach 10 s „database is locked“
+	// kam. Go-Mutexe schützen vor Aushungern; SQLite wartet für diese Transaktionen gar nicht mehr.
+	writeMu sync.Mutex
 }
 
 // Open öffnet (oder erzeugt) die Datenbank und migriert sie.
