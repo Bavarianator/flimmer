@@ -14,6 +14,7 @@ import (
 	"github.com/flimmer-media/flimmer/internal/ffmpeg"
 	"github.com/flimmer-media/flimmer/internal/scan"
 	"github.com/flimmer-media/flimmer/internal/state"
+	"github.com/flimmer-media/flimmer/internal/update"
 )
 
 func (s *Server) setupDone() (done bool) {
@@ -105,7 +106,15 @@ func (s *Server) settings(w http.ResponseWriter, r *http.Request) {
 	var set state.Settings
 	s.State.View(func(d *state.Data) { set = d.Settings })
 	writeJSON(w, map[string]any{"serverName": set.ServerName, "language": cmp(set.Language, "de"), "dirs": nonNil(set.Dirs),
-		"tmdbKey": set.TMDBKey != "", "suggestions": suggestions(), "ffmpeg": s.ffmpegInfo(), "lanUrl": s.LANURL})
+		"tmdbKey": set.TMDBKey != "", "suggestions": suggestions(), "ffmpeg": s.ffmpegInfo(), "lanUrl": s.LANURL,
+		"updateCheck": !set.NoUpdates, "update": s.availableUpdate(), "version": update.Version})
+}
+
+func (s *Server) availableUpdate() *update.Release {
+	if s.Updates == nil {
+		return nil
+	}
+	return s.Updates.Available()
 }
 
 func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {
@@ -114,6 +123,7 @@ func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {
 		Language   *string  `json:"language"`
 		Dirs       []string `json:"dirs"`
 		TMDBKey    *string  `json:"tmdbKey"` // "" entfernt den eigenen Key
+		Update     *bool    `json:"updateCheck"`
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -138,6 +148,9 @@ func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Dirs != nil {
 			d.Settings.Dirs = dirs
+		}
+		if req.Update != nil {
+			d.Settings.NoUpdates = !*req.Update
 		}
 		return nil
 	})

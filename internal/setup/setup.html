@@ -164,7 +164,7 @@ function pollFFmpeg() {
     if (r.done) return;
     var f = r.ffmpeg, d = f.download;
     $('ffdot').className = 'dot ' + (f.ok ? 'ok' : 'bad');
-    $('fftext').textContent = f.ok ? 'ffmpeg ist installiert.' : d.running ? 'ffmpeg wird heruntergeladen … ' + d.percent + ' %' : 'ffmpeg fehlt noch.';
+    $('fftext').textContent = f.ok ? 'ffmpeg ist installiert.' : d.running ? (d.percent < 100 ? 'ffmpeg wird heruntergeladen … ' + d.percent + ' %' : 'ffmpeg wird entpackt …') : 'ffmpeg fehlt noch.';
     $('ffmissing').hidden = f.ok;
     $('ffhint').textContent = d.error ? 'Das hat nicht geklappt: ' + d.error : f.hint;
     $('ffget').hidden = !f.canDownload || d.running;

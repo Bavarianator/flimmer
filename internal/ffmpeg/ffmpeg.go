@@ -1,5 +1,9 @@
-// Package ffmpeg findet ffmpeg/ffprobe und lädt sie unter Windows bei Bedarf herunter.
-// Linux/macOS: Paketmanager bzw. Docker-Image bringen ffmpeg mit, dort zeigt die Einrichtung eine Anleitung.
+// Package ffmpeg findet ffmpeg/ffprobe und lädt statische Builds bei Bedarf herunter – jeweils mit SHA-256-Prüfung.
+//
+//   - Windows x64, Linux x64/arm64: BtbN-Builds (GitHub), Prüfsumme aus checksums.sha256 desselben Releases
+//     (BtbN baut rollierend, feste Hashes würden nach wenigen Tagen veralten).
+//   - macOS arm64/x64: osxexperts.net, Prüfsummen der Binaries fest eingebaut; ändert sich die Datei, bricht
+//     der Download sicher ab und die Einrichtung zeigt „brew install ffmpeg“.
 package ffmpeg
 
 import (
@@ -46,18 +50,54 @@ func Find(dir string) bool {
 	return e1 == nil && e2 == nil
 }
 
-// CanDownload: nur für Windows x64 gibt es verlässliche statische Builds (BtbN).
-func CanDownload() bool { return runtime.GOOS == "windows" && runtime.GOARCH == "amd64" }
+// btbn: Plattformname in den BtbN-Dateinamen.
+var btbn = map[string]string{"windows/amd64": "win64", "linux/amd64": "linux64", "linux/arm64": "linuxarm64"}
 
-// Hint erklärt, wie man ffmpeg auf diesem System installiert.
+type pinned struct{ url, file, sha string }
+
+var mac = map[string][]pinned{
+	"darwin/arm64": {
+		{"https://www.osxexperts.net/ffmpeg9arm.zip", "ffmpeg", "591260c945d0eef150e3bf82b0ef988bd36a9cecc18ff05d6679617159f0a95e"},
+		{"https://www.osxexperts.net/ffprobe9arm.zip", "ffprobe", "e11c17e8200b3ee4c4c186d245e2b4053f01d56957336c1817fca0b997469106"},
+	},
+	"darwin/amd64": {
+		{"https://www.osxexperts.net/ffmpeg80intel.zip", "ffmpeg", "df3f1e3facdc1ae0ad0bd898cdfb072fbc9641bf47b11f172844525a05db8d11"},
+		{"https://www.osxexperts.net/ffprobe80intel.zip", "ffprobe", "5228e651e2bd67bb55819b27f6138351587b16d2b87446007bf35b7cf930d891"},
+	},
+}
+
+func platform() string { return runtime.GOOS + "/" + runtime.GOARCH }
+
+// CanDownload: Gibt es für dieses System einen geprüften Build? Linux braucht zum Entpacken tar und xz.
+func CanDownload() bool {
+	p := platform()
+	if mac[p] != nil {
+		return true
+	}
+	if btbn[p] == "" {
+		return false // z. B. 32-bit-Raspberry-Pi: dort per apt
+	}
+	if runtime.GOOS == "linux" {
+		_, e1 := exec.LookPath("tar")
+		_, e2 := exec.LookPath("xz")
+		return e1 == nil && e2 == nil
+	}
+	return true
+}
+
+// Hint erklärt, wie man ffmpeg auf diesem System bekommt.
 func Hint() string {
+	auto := ""
+	if CanDownload() {
+		auto = "Auf „Automatisch installieren“ klicken – oder selbst: "
+	}
 	switch runtime.GOOS {
 	case "darwin":
-		return "Im Terminal: brew install ffmpeg – danach Flimmer neu starten."
+		return auto + "im Terminal brew install ffmpeg, danach Flimmer neu starten."
 	case "windows":
-		return "Auf „Automatisch installieren“ klicken oder im Terminal: winget install ffmpeg"
+		return auto + "im Terminal winget install ffmpeg, danach Flimmer neu starten."
 	default:
-		return "Im Terminal: sudo apt install ffmpeg (bzw. dnf/pacman) – danach Flimmer neu starten. Oder das Docker-Image nutzen, dort ist ffmpeg dabei."
+		return auto + "im Terminal sudo apt install ffmpeg (bzw. dnf/pacman), danach Flimmer neu starten. Im Docker-Image ist ffmpeg schon dabei."
 	}
 }
 
@@ -65,7 +105,7 @@ const release = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/
 
 // Installer lädt ffmpeg im Hintergrund herunter und meldet den Fortschritt.
 type Installer struct {
-	Dir    string // Ziel, z. B. <data>/bin
+	Dir    string // Ziel, z. B. <config>/bin
 	OnDone func()
 
 	mu          sync.Mutex
@@ -85,7 +125,7 @@ func (i *Installer) Status() Status {
 	defer i.mu.Unlock()
 	s := Status{Running: i.running, Error: i.err}
 	if i.total > 0 {
-		s.Percent = int(i.read * 100 / i.total)
+		s.Percent = int(min(i.read*100/i.total, 100))
 	}
 	return s
 }
@@ -113,32 +153,76 @@ func (i *Installer) Start(ctx context.Context) {
 }
 
 func (i *Installer) install(ctx context.Context) error {
-	sums, err := get(ctx, release+"checksums.sha256", nil)
+	if !CanDownload() {
+		return errors.New("für dieses System gibt es keinen automatischen Download")
+	}
+	if err := os.MkdirAll(i.Dir, 0o755); err != nil {
+		return err
+	}
+	if pins := mac[platform()]; pins != nil {
+		for _, p := range pins {
+			if err := i.installPinned(ctx, p); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	sums, err := get(ctx, release+"checksums.sha256", nil, nil)
 	if err != nil {
 		return err
 	}
-	name, want, err := pickAsset(sums)
+	name, want, err := pickAsset(sums, btbn[platform()])
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp("", "ffmpeg-*.zip")
+	archive, err := i.download(ctx, release+name, want)
 	if err != nil {
 		return err
 	}
-	defer os.Remove(tmp.Name())
-	defer tmp.Close()
-	h := sha256.New()
-	if _, err := get(ctx, release+name, io.MultiWriter(tmp, h, (*counter)(i))); err != nil {
-		return err
+	defer os.Remove(archive)
+	if strings.HasSuffix(name, ".zip") {
+		for _, bin := range []string{"ffmpeg.exe", "ffprobe.exe"} {
+			if err := extractZip(archive, bin, filepath.Join(i.Dir, bin), ""); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
-	if got := hex.EncodeToString(h.Sum(nil)); got != want {
-		return fmt.Errorf("Prüfsumme von %s stimmt nicht – Download abgebrochen", name)
-	}
-	return extract(tmp.Name(), i.Dir)
+	return extractTarXZ(ctx, archive, i.Dir)
 }
 
-// get lädt url; mit w wird gestreamt, sonst der Inhalt zurückgegeben.
-func get(ctx context.Context, url string, w io.Writer) ([]byte, error) {
+// installPinned lädt ein ZIP, holt die Binary heraus und prüft deren fest eingebauten Hash.
+func (i *Installer) installPinned(ctx context.Context, p pinned) error {
+	archive, err := i.download(ctx, p.url, "")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(archive)
+	return extractZip(archive, p.file, filepath.Join(i.Dir, p.file), p.sha)
+}
+
+// download speichert url in eine Temp-Datei; mit want wird die SHA-256 der Datei geprüft.
+func (i *Installer) download(ctx context.Context, url, want string) (string, error) {
+	tmp, err := os.CreateTemp("", "ffmpeg-dl-*")
+	if err != nil {
+		return "", err
+	}
+	defer tmp.Close()
+	h := sha256.New()
+	if _, err := get(ctx, url, io.MultiWriter(tmp, h, (*counter)(i)), (*counter)(i)); err != nil {
+		os.Remove(tmp.Name())
+		return "", err
+	}
+	if want != "" && hex.EncodeToString(h.Sum(nil)) != want {
+		os.Remove(tmp.Name())
+		return "", fmt.Errorf("Prüfsumme von %s stimmt nicht – Download abgebrochen", filepath.Base(url))
+	}
+	return tmp.Name(), nil
+}
+
+// get lädt url; mit w wird gestreamt (c erfährt die Gesamtgröße), sonst der Inhalt zurückgegeben.
+func get(ctx context.Context, url string, w io.Writer, c *counter) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -154,21 +238,20 @@ func get(ctx context.Context, url string, w io.Writer) ([]byte, error) {
 	if w == nil {
 		return io.ReadAll(io.LimitReader(res.Body, 1<<20))
 	}
-	if c, ok := w.(interface{ setTotal(int64) }); ok {
-		c.setTotal(res.ContentLength)
+	if c != nil {
+		c.addTotal(res.ContentLength)
 	}
 	_, err = io.Copy(w, res.Body)
 	return nil, err
 }
 
-// Stabile Release-Builds heißen z. B. ffmpeg-n9.0-latest-win64-gpl-9.0.zip; der höchste gewinnt.
-var reAsset = regexp.MustCompile(`^([0-9a-f]{64})\s+(ffmpeg-n(\d+)\.(\d+)-latest-win64-gpl-[\d.]+\.zip)$`)
-
-func pickAsset(sums []byte) (name, sum string, err error) {
+// Stabile Release-Builds heißen z. B. ffmpeg-n9.0-latest-linux64-gpl-9.0.tar.xz; die höchste Version gewinnt.
+func pickAsset(sums []byte, plat string) (name, sum string, err error) {
+	re := regexp.MustCompile(`^([0-9a-f]{64})\s+(ffmpeg-n(\d+)\.(\d+)-latest-` + regexp.QuoteMeta(plat) + `-gpl-[\d.]+\.(?:zip|tar\.xz))$`)
 	best := -1
 	sc := bufio.NewScanner(bytes.NewReader(sums))
 	for sc.Scan() {
-		m := reAsset.FindStringSubmatch(strings.TrimSpace(sc.Text()))
+		m := re.FindStringSubmatch(strings.TrimSpace(sc.Text()))
 		if m == nil {
 			continue
 		}
@@ -185,46 +268,68 @@ func pickAsset(sums []byte) (name, sum string, err error) {
 	return name, sum, nil
 }
 
-// extract holt nur ffmpeg.exe und ffprobe.exe aus dem Archiv.
-func extract(zipPath, dir string) error {
+// extractZip holt die Datei base aus dem Archiv nach dst; mit want wird ihre SHA-256 geprüft.
+func extractZip(zipPath, base, dst, want string) error {
 	r, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return err
 	}
 	defer r.Close()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	found := 0
 	for _, f := range r.File {
-		base := filepath.Base(f.Name)
-		if base != "ffmpeg.exe" && base != "ffprobe.exe" {
+		if filepath.Base(f.Name) != base || strings.Contains(f.Name, "__MACOSX") {
 			continue
 		}
-		if err := extractFile(f, filepath.Join(dir, base)); err != nil {
+		src, err := f.Open()
+		if err != nil {
 			return err
 		}
-		found++
+		defer src.Close()
+		return writeBinary(src, dst, want)
 	}
-	if found != 2 {
-		return errors.New("ffmpeg.exe/ffprobe.exe nicht im Archiv")
+	return fmt.Errorf("%s nicht im Archiv", base)
+}
+
+// extractTarXZ entpackt ffmpeg und ffprobe mit dem System-tar (spart eine xz-Bibliothek).
+func extractTarXZ(ctx context.Context, archive, dir string) error {
+	tmp, err := os.MkdirTemp(dir, "unpack-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmp)
+	if b, err := exec.CommandContext(ctx, "tar", "-xJf", archive, "-C", tmp).CombinedOutput(); err != nil {
+		return fmt.Errorf("Entpacken fehlgeschlagen: %v %s", err, b)
+	}
+	for _, bin := range []string{"ffmpeg", "ffprobe"} {
+		matches, _ := filepath.Glob(filepath.Join(tmp, "*", "bin", bin))
+		if len(matches) != 1 {
+			return fmt.Errorf("%s nicht im Archiv", bin)
+		}
+		f, err := os.Open(matches[0])
+		if err != nil {
+			return err
+		}
+		err = writeBinary(f, filepath.Join(dir, bin), "")
+		f.Close()
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func extractFile(f *zip.File, dst string) error {
-	src, err := f.Open()
-	if err != nil {
-		return err
-	}
-	defer src.Close()
+// writeBinary schreibt atomar und ausführbar; mit want muss die SHA-256 passen, sonst bleibt nichts liegen.
+func writeBinary(src io.Reader, dst, want string) error {
 	out, err := os.CreateTemp(filepath.Dir(dst), filepath.Base(dst)+".*")
 	if err != nil {
 		return err
 	}
-	_, err = io.Copy(out, src)
+	h := sha256.New()
+	_, err = io.Copy(io.MultiWriter(out, h), src)
 	if cerr := out.Close(); err == nil {
 		err = cerr
+	}
+	if err == nil && want != "" && hex.EncodeToString(h.Sum(nil)) != want {
+		err = fmt.Errorf("Prüfsumme von %s stimmt nicht – Download abgebrochen", filepath.Base(dst))
 	}
 	if err == nil {
 		err = os.Chmod(out.Name(), 0o755)
@@ -236,11 +341,12 @@ func extractFile(f *zip.File, dst string) error {
 	return os.Rename(out.Name(), dst)
 }
 
+// counter zählt heruntergeladene Bytes über alle Dateien eines Downloads.
 type counter Installer
 
-func (c *counter) setTotal(n int64) {
+func (c *counter) addTotal(n int64) {
 	c.mu.Lock()
-	c.total = n
+	c.total += max(n, 0)
 	c.mu.Unlock()
 }
 

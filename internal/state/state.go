@@ -32,8 +32,9 @@ type Settings struct {
 	ServerName string   `json:"serverName"`
 	Language   string   `json:"language"`
 	Dirs       []string `json:"dirs"`
-	TMDBKey    string   `json:"tmdbKey,omitempty"` // leer = eingebauter Projekt-Key
-	Secret     []byte   `json:"secret"`            // HMAC-Schlüssel für Medien-Tokens
+	TMDBKey    string   `json:"tmdbKey,omitempty"`   // leer = eingebauter Projekt-Key
+	NoUpdates  bool     `json:"noUpdates,omitempty"` // Update-Hinweis abgeschaltet
+	Secret     []byte   `json:"secret"`              // HMAC-Schlüssel für Medien-Tokens
 }
 
 type User struct {

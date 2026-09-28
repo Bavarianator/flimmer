@@ -22,6 +22,7 @@ import (
 	"github.com/flimmer-media/flimmer/internal/scan"
 	"github.com/flimmer-media/flimmer/internal/state"
 	"github.com/flimmer-media/flimmer/internal/transcode"
+	"github.com/flimmer-media/flimmer/internal/update"
 )
 
 type Server struct {
@@ -37,6 +38,7 @@ type Server struct {
 	LANURL   string                        // z. B. http://192.168.1.20:8096, für QR-Code und Anzeige
 	QR       http.Handler                  // PNG mit LANURL
 	Log      *LogRing                      // letzte Log-Zeilen für die Diagnose, nil = keine
+	Updates  *update.Checker               // nil = keine Update-Prüfung
 	FFmpeg   atomic.Bool                   // ffmpeg/ffprobe gefunden
 	HW       atomic.Pointer[hwaccel.Accel] // gesetzt, sobald hwaccel.Detect fertig ist
 

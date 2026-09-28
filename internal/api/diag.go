@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/flimmer-media/flimmer/internal/playback"
+	"github.com/flimmer-media/flimmer/internal/update"
 )
 
 // LogRing behält die letzten Log-Zeilen für die Diagnose (log.SetOutput(io.MultiWriter(os.Stderr, ring))).
@@ -125,12 +126,9 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 		version = ffmpegVersion()
 	}
 	writeJSON(w, map[string]any{
-		"version": Version, "os": runtime.GOOS + "/" + runtime.GOARCH, "cpus": runtime.NumCPU(),
+		"version": update.Version, "os": runtime.GOOS + "/" + runtime.GOARCH, "cpus": runtime.NumCPU(),
 		"ffmpeg": version, "hw": hw.Name, "hwSpeed": hw.Speed,
 		"diskFree": free, "diskTotal": total, "cacheDir": s.CacheDir,
 		"scan": s.Lib.Status(), "active": active, "recent": recent, "log": s.Log.Lines(),
 	})
 }
-
-// Version wird beim Release-Build per -ldflags "-X …/internal/api.Version=v0.1.0" gesetzt.
-var Version = "dev"

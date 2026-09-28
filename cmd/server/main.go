@@ -32,6 +32,7 @@ import (
 	"github.com/flimmer-media/flimmer/internal/setup"
 	"github.com/flimmer-media/flimmer/internal/state"
 	"github.com/flimmer-media/flimmer/internal/transcode"
+	"github.com/flimmer-media/flimmer/internal/update"
 	"github.com/flimmer-media/flimmer/web"
 )
 
@@ -108,7 +109,11 @@ func main() {
 	hls := transcode.NewManager(tmp)
 	lanURL := discovery.LANURL(port)
 	srv := &api.Server{Lib: lib, HLS: hls, State: st, Meta: res, Images: img, CacheDir: cacheDir,
-		Web: web.FS(), Pages: setup.FS(), LANURL: lanURL, QR: discovery.QRHandler(port), Log: ring}
+		Web: web.FS(), Pages: setup.FS(), LANURL: lanURL, QR: discovery.QRHandler(port), Log: ring, Updates: &update.Checker{}}
+	go srv.Updates.Run(ctx, func() (on bool) {
+		st.View(func(d *state.Data) { on = !d.Settings.NoUpdates })
+		return on
+	})
 	srv.FFmpeg.Store(hasFF)
 
 	// Scan und Hardware-Erkennung brauchen ffmpeg – starten sofort oder nach dem Download aus der Einrichtung.
