@@ -1,0 +1,210 @@
+/* Erzeugt von scripts/tokens.mjs aus tokens.json – nicht von Hand ändern. */
+@font-face { font-family: 'Flimmer Plakat'; font-weight: 800; font-style: normal; font-display: swap; src: url('/fonts/FlimmerPlakat-800.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans'; font-weight: 400; font-style: normal; font-display: swap; src: url('/fonts/IBMPlexSans-400.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans'; font-weight: 500; font-style: normal; font-display: swap; src: url('/fonts/IBMPlexSans-500.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans'; font-weight: 600; font-style: normal; font-display: swap; src: url('/fonts/IBMPlexSans-600.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-weight: 500; font-style: normal; font-display: swap; src: url('/fonts/IBMPlexMono-500.woff2') format('woff2'); }
+:root, [data-theme="kino"] {
+  --saal: #11100e;
+  --flaeche-1: #1a1916;
+  --flaeche-2: #24221e;
+  --flaeche-3: #2e2b26;
+  --linie: #34312b;
+  --linie-stark: #78716a;
+  --text: #ece7dd;
+  --text-2: #a8a195;
+  --text-3: #979083;
+  --marke: #ece7dd;
+  --auf-marke: #11100e;
+  --marke-leise: #2e2b26;
+  --fokus-innen: #11100e;
+  --ampel-gruen: #8fae86;
+  --ampel-gelb: #cfae5c;
+  --ampel-rot: #d4826f;
+  --gesehen: #ece7dd;
+  --badge-grund: rgba(17,16,14,0.8);
+  --scrim: rgba(10,9,8,0.78);
+  --player-grund: #000000;
+  --player-leiste: rgba(17,16,14,0.94);
+  --avatar-1: #b98a6e;
+  --avatar-2: #8fa487;
+  --avatar-3: #8d9bb0;
+  --avatar-4: #c2a868;
+  --avatar-5: #a88aa0;
+  --avatar-6: #7fa3a0;
+  --schatten-fokus: 0 0 0 3px #11100e, 0 0 0 6px #ece7dd;
+  --abstand-1: 4px;
+  --abstand-2: 8px;
+  --abstand-3: 12px;
+  --abstand-4: 16px;
+  --abstand-5: 24px;
+  --abstand-6: 32px;
+  --abstand-7: 48px;
+  --abstand-8: 64px;
+  --abstand-9: 96px;
+  --tv-rand-oben: 54px;
+  --radius-s: 2px;
+  --radius-m: 4px;
+  --radius-rund: 999px;
+  --schatten-overlay: 0 20px 48px rgba(0,0,0,0.5);
+  --dauer-schnell: 120ms;
+  --dauer-mittel: 200ms;
+  --dauer-langsam: 320ms;
+  --fokus-scale: 1.04;
+  --kurve-standard: cubic-bezier(0.2,0,0,1);
+  --kurve-raus: cubic-bezier(0.4,0,1,1);
+  --karte-poster-tv: 240px;
+  --karte-poster-dt: 184px;
+  --karte-poster-hd: 116px;
+  --karte-breit-tv: 416px;
+  --karte-breit-dt: 320px;
+  --karte-breit-hd: 256px;
+  --ziel-touch: 44px;
+  --fokus-ring-tv: 3px;
+  --fokus-ring-dt: 2px;
+  --font-plakat: "Flimmer Plakat", "Archivo", "Arial Narrow", sans-serif;
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "DejaVu Sans Mono", monospace;
+}
+[data-theme="hell"] {
+  --saal: #f3efe6;
+  --flaeche-1: #faf7f0;
+  --flaeche-2: #e8e3d8;
+  --flaeche-3: #dcd6c9;
+  --linie: #d6cfc1;
+  --linie-stark: #857e72;
+  --text: #16140f;
+  --text-2: #57524a;
+  --text-3: #696358;
+  --marke: #16140f;
+  --auf-marke: #f3efe6;
+  --marke-leise: #dcd6c9;
+  --fokus-innen: #f3efe6;
+  --ampel-gruen: #3d6b38;
+  --ampel-gelb: #7a5f1b;
+  --ampel-rot: #a13f2c;
+  --gesehen: #ece7dd;
+  --badge-grund: rgba(17,16,14,0.8);
+  --scrim: rgba(10,9,8,0.55);
+  --player-grund: #000000;
+  --player-leiste: rgba(17,16,14,0.94);
+  --avatar-1: #b98a6e;
+  --avatar-2: #8fa487;
+  --avatar-3: #8d9bb0;
+  --avatar-4: #c2a868;
+  --avatar-5: #a88aa0;
+  --avatar-6: #7fa3a0;
+  --schatten-fokus: 0 0 0 3px #f3efe6, 0 0 0 6px #16140f;
+}
+:root {
+  --t-plakat: 800 104px/96px var(--font-plakat);
+  --t-plakat-ls: 1px;
+  --t-titel: 600 36px/44px var(--font-sans);
+  --t-titel-ls: normal;
+  --t-reihe: 600 20px/28px var(--font-sans);
+  --t-reihe-ls: normal;
+  --t-karte: 500 16px/22px var(--font-sans);
+  --t-karte-ls: normal;
+  --t-text: 400 17px/27px var(--font-sans);
+  --t-text-ls: normal;
+  --t-klein: 400 14px/20px var(--font-sans);
+  --t-klein-ls: normal;
+  --t-label: 500 13px/18px var(--font-mono);
+  --t-label-ls: 2px;
+  --t-code: 500 48px/56px var(--font-mono);
+  --t-code-ls: 6px;
+  --karte-poster: 184px;
+  --karte-breit: 320px;
+  --fokus-ring: 2px;
+  --rand: 64px;
+}
+@media (max-width: 599px) {
+  :root {
+  --t-plakat: 800 56px/52px var(--font-plakat);
+  --t-plakat-ls: 0.5px;
+  --t-titel: 600 26px/32px var(--font-sans);
+  --t-titel-ls: normal;
+  --t-reihe: 600 18px/24px var(--font-sans);
+  --t-reihe-ls: normal;
+  --t-karte: 500 15px/20px var(--font-sans);
+  --t-karte-ls: normal;
+  --t-text: 400 16px/24px var(--font-sans);
+  --t-text-ls: normal;
+  --t-klein: 400 13px/18px var(--font-sans);
+  --t-klein-ls: normal;
+  --t-label: 500 12px/16px var(--font-mono);
+  --t-label-ls: 2px;
+  --t-code: 500 36px/44px var(--font-mono);
+  --t-code-ls: 4px;
+  --karte-poster: 116px;
+  --karte-breit: 256px;
+  --fokus-ring: 2px;
+  --rand: 16px;
+  }
+}
+html.tv {
+  --t-plakat: 800 144px/128px var(--font-plakat);
+  --t-plakat-ls: 1px;
+  --t-titel: 600 48px/56px var(--font-sans);
+  --t-titel-ls: normal;
+  --t-reihe: 600 30px/40px var(--font-sans);
+  --t-reihe-ls: normal;
+  --t-karte: 500 28px/36px var(--font-sans);
+  --t-karte-ls: normal;
+  --t-text: 400 28px/40px var(--font-sans);
+  --t-text-ls: normal;
+  --t-klein: 400 24px/32px var(--font-sans);
+  --t-klein-ls: normal;
+  --t-label: 500 22px/28px var(--font-mono);
+  --t-label-ls: 3px;
+  --t-code: 500 96px/104px var(--font-mono);
+  --t-code-ls: 8px;
+  --karte-poster: 240px;
+  --karte-breit: 416px;
+  --fokus-ring: 3px;
+  --rand: 96px;
+}
+html.dt {
+  --t-plakat: 800 104px/96px var(--font-plakat);
+  --t-plakat-ls: 1px;
+  --t-titel: 600 36px/44px var(--font-sans);
+  --t-titel-ls: normal;
+  --t-reihe: 600 20px/28px var(--font-sans);
+  --t-reihe-ls: normal;
+  --t-karte: 500 16px/22px var(--font-sans);
+  --t-karte-ls: normal;
+  --t-text: 400 17px/27px var(--font-sans);
+  --t-text-ls: normal;
+  --t-klein: 400 14px/20px var(--font-sans);
+  --t-klein-ls: normal;
+  --t-label: 500 13px/18px var(--font-mono);
+  --t-label-ls: 2px;
+  --t-code: 500 48px/56px var(--font-mono);
+  --t-code-ls: 6px;
+  --karte-poster: 184px;
+  --karte-breit: 320px;
+  --fokus-ring: 2px;
+  --rand: 64px;
+}
+html.hd {
+  --t-plakat: 800 56px/52px var(--font-plakat);
+  --t-plakat-ls: 0.5px;
+  --t-titel: 600 26px/32px var(--font-sans);
+  --t-titel-ls: normal;
+  --t-reihe: 600 18px/24px var(--font-sans);
+  --t-reihe-ls: normal;
+  --t-karte: 500 15px/20px var(--font-sans);
+  --t-karte-ls: normal;
+  --t-text: 400 16px/24px var(--font-sans);
+  --t-text-ls: normal;
+  --t-klein: 400 13px/18px var(--font-sans);
+  --t-klein-ls: normal;
+  --t-label: 500 12px/16px var(--font-mono);
+  --t-label-ls: 2px;
+  --t-code: 500 36px/44px var(--font-mono);
+  --t-code-ls: 4px;
+  --karte-poster: 116px;
+  --karte-breit: 256px;
+  --fokus-ring: 2px;
+  --rand: 16px;
+}

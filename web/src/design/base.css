@@ -1,0 +1,40 @@
+/* Basis: Reset, Schrift-Rollen, Hilfsklassen. Komponenten-Stile aus dem Designsystem liegen in
+   komponenten.css (.fl-*), Fokus ist die Klasse ist-fokus (kein :focus-visible in Chromium 53). */
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--saal);
+  font: var(--t-text);
+  -webkit-text-size-adjust: 100%;
+}
+html.tv body { overflow: hidden; }
+h1, h2, h3, h4, p { margin: 0; font-weight: inherit; font-size: inherit; }
+a { color: inherit; }
+input, select, textarea { font: inherit; color: inherit; }
+button { text-align: inherit; -webkit-appearance: none; margin: 0; }
+img { display: block; }
+:focus { outline: none; }
+::-webkit-scrollbar { display: none; }
+
+/* --- Schrift-Rollen (Skala je Gerät aus tokens.css) --- */
+.t-plakat { font: var(--t-plakat); letter-spacing: var(--t-plakat-ls); text-transform: uppercase; }
+.t-titel { font: var(--t-titel); }
+.t-reihe { font: var(--t-reihe); }
+.t-karte { font: var(--t-karte); }
+.t-text { font: var(--t-text); }
+.t-klein { font: var(--t-klein); }
+.t-label { font: var(--t-label); letter-spacing: var(--t-label-ls); text-transform: uppercase; color: var(--text-2); }
+.t-code { font: var(--t-code); letter-spacing: var(--t-code-ls); }
+.leise { color: var(--text-2); }
+.leiser { color: var(--text-3); }
+.fehlertext { color: var(--ampel-rot); }
+.eine-zeile { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nur-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* --- Layout-Helfer (Flexbox mit -webkit-, Abstände per margin) --- */
+.zeile { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
+.zeile-umbruch { -webkit-flex-wrap: wrap; flex-wrap: wrap; }
+.wachse { -webkit-flex: 1 1 auto; flex: 1 1 auto; min-width: 0; }
+.rand { padding-left: var(--rand); padding-right: var(--rand); }
+
+/* Fokus-Übergang: nur transform */
+.fokusierbar { -webkit-transition: -webkit-transform var(--dauer-schnell) var(--kurve-standard); transition: transform var(--dauer-schnell) var(--kurve-standard); }

@@ -133,28 +133,8 @@ export function deviceId(): string {
   return id || 'unbekannt'
 }
 
-export async function api<T>(path: string, body?: unknown): Promise<T> {
-  const headers: Record<string, string> = {}
-  if (body !== undefined) headers['Content-Type'] = 'application/json'
-  const token = getToken()
-  if (token) headers.Authorization = 'Bearer ' + token // TVs nach Kopplung; Browser nutzen das Cookie
-  const res = await fetch(path, {
-    credentials: 'same-origin',
-    method: body === undefined ? 'GET' : 'POST',
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
-  if (res.status === 401) {
-    let setup = false
-    try {
-      setup = !!(await res.json()).setup
-    } catch {}
-    const { LoginError } = await import('./data')
-    throw new LoginError(setup)
-  }
-  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`)
-  return res.status === 204 ? (undefined as T) : res.json()
-}
+// Die API liegt jetzt in lib/api.ts; hier nur noch weitergereicht für ältere Importe.
+export { api } from './lib/api'
 
 export function getToken(): string {
   try {

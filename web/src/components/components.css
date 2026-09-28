@@ -1,0 +1,116 @@
+/* Seitenlayout für die echten Screens. Die Komponenten-Stile (.fl-*) kommen aus design/komponenten.css;
+   hier stehen nur Anordnung, Maße je Gerät und das Verhalten von Schiene und Seite. */
+
+/* --- Wortmarke: Pfad im Verhältnis 3447:688 --- */
+.wortmarke { display: block; height: 28px; width: 140px; color: var(--text); }
+html.tv .wortmarke { height: 40px; width: 200px; }
+html.hd .wortmarke { height: 22px; width: 110px; }
+
+/* --- Seite: TV fährt per translateY, sonst scrollt das Dokument --- */
+.seite { position: relative; min-height: 100vh; overflow-x: hidden; }
+.seite-schiene { position: relative; padding-bottom: var(--abstand-8); }
+html.tv .seite { height: 100vh; overflow: hidden; }
+html.tv .seite-schiene { padding-bottom: var(--tv-rand-oben); -webkit-transition: -webkit-transform var(--dauer-mittel) var(--kurve-standard); transition: transform var(--dauer-mittel) var(--kurve-standard); will-change: transform; }
+html.hd .seite-schiene { padding-bottom: 88px; } /* Platz für die Tab-Leiste */
+
+/* --- Kopfzeile --- */
+.kopf { position: absolute; left: 0; right: 0; top: 0; z-index: 5; background: linear-gradient(rgba(17, 16, 14, 0.85), rgba(17, 16, 14, 0)); }
+html[data-theme="hell"] .kopf { background: linear-gradient(rgba(243, 239, 230, 0.9), rgba(243, 239, 230, 0)); }
+html.hd .fl-kopf { height: 68px; padding: 0 16px; }
+.fl-kopf .nav a .fl-icon { margin-top: -3px; }
+.kopf-profil { padding: 4px; margin: -4px; border-radius: var(--radius-s); }
+.kopf-name { margin-right: 12px; font: var(--t-karte); }
+.fl-tabbar { position: fixed; z-index: 5; padding-bottom: env(safe-area-inset-bottom); }
+
+/* --- Hero (Start, Detail) --- */
+.held { position: relative; min-height: 560px; margin-bottom: var(--abstand-5); }
+.held .kulisse { left: 30%; }
+.held .kulisse img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; -webkit-transition: opacity var(--dauer-langsam) var(--kurve-standard); transition: opacity var(--dauer-langsam) var(--kurve-standard); }
+.held .kulisse img.da { opacity: 1; }
+.held .inhalt { padding: 150px var(--rand) 0; }
+.held-text { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.held .fl-ampel-zeile { margin-bottom: 16px; }
+.held .fakten .fl-ampel-zeile { margin-bottom: 0; font-size: inherit; }
+html.tv .held { min-height: 560px; }
+html.tv .held .inhalt { max-width: 1200px; }
+html.tv .held .fl-ampel-zeile { font-size: 24px; }
+html.hd .held { min-height: 0; }
+html.hd .held .kulisse { left: 0; bottom: 45%; }
+html.hd .held .schleier { background: linear-gradient(0deg, #11100e 45%, rgba(17, 16, 14, 0) 80%); }
+html.hd .held .inhalt { padding-top: 200px; }
+html.hd .held p { font-size: 15px; line-height: 22px; margin-bottom: 20px; }
+.held-klein { min-height: 0; }
+.held-skel { min-height: 560px; }
+.held-skel .fl-skel { margin-bottom: 16px; }
+.skel-plakat { width: 45%; height: 1em; font: var(--t-plakat); }
+.skel-titel { width: 240px; height: 24px; margin-bottom: 16px; }
+
+/* Start auf dem TV: Hero zeigt den fokussierten Titel, die erste Reihe steht bei ~560 px. */
+html.tv .start .held { min-height: 520px; margin-bottom: 0; }
+
+/* --- Reihe und Raster --- */
+.fl-reihe { padding-left: var(--rand); }
+.fl-reihe .spur { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; }
+html.tv .fl-reihe .spur { overflow: hidden; }
+.fl-reihe .schiene { position: relative; }
+html.tv .fl-reihe .schiene { will-change: transform; }
+.fl-reihe .schiene > :last-child { margin-right: var(--rand); }
+.fl-karte .bild img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; -webkit-transition: opacity var(--dauer-langsam) var(--kurve-standard); transition: opacity var(--dauer-langsam) var(--kurve-standard); }
+.fl-karte .bild img.da, .fl-episode .bild img.da { opacity: 1; }
+.fl-karte .fl-platzhalter { font-size: 16px; }
+.fl-karte.breit .fl-platzhalter .t { font-size: 40px; line-height: 38px; }
+html.tv .fl-karte.breit .fl-platzhalter .t { font-size: 56px; line-height: 52px; }
+html.dt .fl-karte:hover .rahmen { -webkit-transform: scale(1.04); transform: scale(1.04); }
+.raster { white-space: normal; }
+.raster > .fl-karte { margin-bottom: 40px; }
+html.hd .raster > .fl-karte { width: calc((100% - 24px) / 3 - 0.1px); }
+html.hd .raster > .fl-karte:nth-child(3n) { margin-right: 0; }
+
+/* --- Seiten ohne Hero: Titel unter der Kopfzeile --- */
+.seitenkopf { padding-top: 104px; margin-bottom: var(--abstand-5); }
+html.tv .seitenkopf { padding-top: 136px; }
+html.hd .seitenkopf { padding-top: 76px; }
+.seitenkopf h1 { font: var(--t-titel); margin-bottom: var(--abstand-5); }
+.seitenkopf h1 small { font: var(--t-text); color: var(--text-2); }
+
+/* --- Serie: Info links, Folgen rechts (TV, Desktop); Handy untereinander --- */
+.serie-spalten { position: relative; padding-top: 104px; }
+html.tv .serie-spalten { padding-top: 136px; }
+.serie-spalten.fl-reihe-flex { -webkit-align-items: flex-start; align-items: flex-start; }
+.serie .held { position: static; min-height: 0; margin-bottom: 0; }
+.serie .held .kulisse { left: 47%; opacity: 0.8; }
+.serie .held .inhalt { padding: 0; }
+.serie .held h1 { font-size: 80px; line-height: 72px; }
+html.tv .serie .held h1 { font-size: 112px; line-height: 100px; }
+.serie-info { position: relative; width: 38%; margin-right: 6%; -webkit-flex: none; flex: none; }
+.serie-folgen { position: relative; -webkit-flex: 1; flex: 1; min-width: 0; }
+.serie-folgen .fl-tabs { margin-bottom: 24px; }
+.folgen { padding: 0 12px; }
+.als-naechstes { margin: 24px 0 16px; font: var(--t-klein); }
+html.hd .serie-spalten { display: block; padding-top: 200px; }
+html.hd .serie .held .kulisse { left: 0; bottom: auto; height: 300px; }
+html.hd .serie-info { width: auto; margin: 0 0 24px; }
+.fl-episode { width: 100%; text-align: left; }
+.fl-episode .vorschau .bild, .fl-episode .vorschau .fl-platzhalter { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
+.fl-episode .vorschau .fl-platzhalter .t { font-size: 40px; line-height: 38px; }
+.fl-episode .vorschau img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; -webkit-transition: opacity var(--dauer-langsam) var(--kurve-standard); transition: opacity var(--dauer-langsam) var(--kurve-standard); }
+.folge-dauer { margin-bottom: 4px !important; }
+.folge-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* --- Zustände --- */
+.zustand-platz { padding: 200px var(--rand) 0; }
+html.tv .zustand-platz { padding-top: 260px; }
+html.hd .zustand-platz { padding-top: 96px; }
+.zustand-platz .fl-zustand { margin: 0; }
+
+/* --- Fußzeile „Dieses Gerät“ --- */
+.fuss { margin-top: var(--abstand-5); color: var(--text-2); }
+.fuss .fl-ampel-zeile { margin-right: 24px; font: var(--t-klein); }
+.fuss-knoepfe { margin-top: var(--abstand-4); }
+
+/* --- Detail Film: Hero über die ganze Höhe, Restzeit unter den Knöpfen --- */
+.held.detail { min-height: 100vh; }
+html.hd .held.detail { min-height: 0; }
+html.tv .held.detail .inhalt { max-width: 1100px; }
+.restzeit { width: 420px; max-width: 100%; margin-top: 12px; }
+.restzeit .fl-2 { margin-top: 10px; font: var(--t-klein); }
