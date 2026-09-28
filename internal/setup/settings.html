@@ -92,6 +92,17 @@
     </section>
 
     <section class="card">
+      <h3>Sicherung</h3>
+      <p class="lead">Jede Nacht legt Flimmer automatisch eine Sicherung an (die letzten 7 bleiben). Hier kannst du eine herunterladen oder zurückspielen.</p>
+      <p class="hint" id="bkinfo"></p>
+      <div class="actions">
+        <a class="small" href="/api/settings/backup" style="color:var(--text);text-decoration:none;padding:6px 12px;border-radius:10px;background:var(--surface2)">Sicherung herunterladen</a>
+        <label class="small" style="margin:0;cursor:pointer;padding:6px 12px;border-radius:10px;background:var(--surface2);color:var(--text)">Sicherung einspielen …<input type="file" id="restoreFile" accept=".db" hidden></label>
+      </div>
+      <div class="error" id="bkerr"></div>
+    </section>
+
+    <section class="card">
       <h3>Diagnose</h3>
       <div id="diag"></div>
       <div id="streams"></div>
@@ -309,6 +320,20 @@ $('rpair').onclick = function () {
     .catch(function (e) { toast(e.message) });
 };
 
+// --- Sicherung ---
+$('restoreFile').onchange = function () {
+  var file = this.files[0];
+  this.value = '';
+  if (!file || !confirm('„' + file.name + '“ einspielen? Alle jetzigen Einstellungen, Personen und Fortschritte werden durch die Sicherung ersetzt. Die aktuelle Datenbank wird vorher als flimmer.db.bak gesichert.')) return;
+  $('bkerr').textContent = '';
+  toast('Sicherung wird eingespielt …');
+  fetch('/api/settings/restore', { method: 'POST', body: file }).then(function (r) {
+    if (!r.ok) return r.text().then(function (t) { throw new Error(t.trim()) });
+    toast('Sicherung eingespielt');
+    setTimeout(function () { location.reload() }, 1200);
+  }).catch(function (e) { $('bkerr').textContent = e.message });
+};
+
 // --- Diagnose ---
 var methodText = { 'direct-play': 'läuft direkt', 'direct-stream': 'nur umverpackt', 'transcode-audio': 'Ton wird umgewandelt', 'transcode': 'wird transkodiert' };
 function gb(b) { return (b / 1e9).toFixed(1).replace('.', ',') + ' GB' }
@@ -319,8 +344,11 @@ function loadDiag() {
       ['Version', d.version + ' · ' + d.os + ' · ' + d.cpus + ' Kerne'],
       ['ffmpeg', d.ffmpeg || 'fehlt'],
       ['Transcoding', d.hw ? d.hw + ' (' + d.hwSpeed.toFixed(1).replace('.', ',') + '× Echtzeit bei 1080p)' : 'wird noch gemessen …'],
-      ['Speicher (Cache)', d.diskTotal ? gb(d.diskFree) + ' frei von ' + gb(d.diskTotal) : 'unbekannt']
+      ['Speicher (Cache)', d.diskTotal ? gb(d.diskFree) + ' frei von ' + gb(d.diskTotal) : 'unbekannt'],
+      ['Datenbank', (d.db.sizeBytes / 1e6).toFixed(1).replace('.', ',') + ' MB · Prüfung: ' + (d.db.integrity === 'ok' ? 'in Ordnung' : (d.db.integrity || 'noch nicht gelaufen')) +
+        (d.db.checkedAt && d.db.checkedAt[0] !== '0' ? ' (' + new Date(d.db.checkedAt).toLocaleDateString() + ')' : '')]
     ];
+    $('bkinfo').textContent = d.db.backupAt && d.db.backupAt[0] !== '0' ? 'Letzte automatische Sicherung: ' + new Date(d.db.backupAt).toLocaleString() : 'Die erste automatische Sicherung entsteht heute Nacht.';
     $('diag').innerHTML = rows.map(function (r) { return '<div class="row"><div class="grow"><small>' + r[0] + '</small>' + esc(r[1]) + '</div></div>' }).join('');
     var all = d.active.map(function (s) { s.on = true; return s }).concat(d.recent);
     $('streams').innerHTML = all.length ? '<label>Wiedergaben</label>' + all.map(function (s) {

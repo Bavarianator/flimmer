@@ -172,6 +172,7 @@ func main() {
 			srv.RemoteToggle(true)
 		}
 	}
+	go store.Nightly(ctx, filepath.Join(cfgDir, "backups"), 7)
 	go srv.Updates.Run(ctx, func() bool {
 		s, err := store.Settings(ctx)
 		return err == nil && !s.NoUpdates

@@ -128,6 +128,7 @@ func (l *Library) Load(ctx context.Context) error {
 	}
 	l.mu.Lock()
 	l.items = items
+	l.metas, l.colors, l.metaErr, l.kf = nil, nil, nil, nil // nach einem Restore neu auflösen
 	l.mu.Unlock()
 	return nil
 }

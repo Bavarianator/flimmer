@@ -130,5 +130,6 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 		"ffmpeg": version, "hw": hw.Name, "hwSpeed": hw.Speed,
 		"diskFree": free, "diskTotal": total, "cacheDir": s.CacheDir,
 		"scan": s.Lib.Status(), "active": active, "recent": recent, "log": s.Log.Lines(),
+		"db": s.DB.Maintenance(r.Context()),
 	})
 }

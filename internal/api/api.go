@@ -86,6 +86,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/settings/review", adminOnly(s.review))
 	mux.HandleFunc("POST /api/rescan", adminOnly(s.rescan))
 	mux.HandleFunc("GET /api/diagnostics", adminOnly(s.diagnostics))
+	mux.HandleFunc("GET /api/settings/backup", adminOnly(s.backupDownload))
+	mux.HandleFunc("POST /api/settings/restore", adminOnly(s.restore))
 	if s.Remote != nil {
 		mux.HandleFunc("GET /api/remote", adminOnly(s.Remote.StatusHandler))
 		mux.HandleFunc("POST /api/remote/check", adminOnly(s.Remote.CheckHandler))

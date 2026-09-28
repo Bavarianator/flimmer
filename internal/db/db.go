@@ -28,9 +28,7 @@ type DB struct {
 
 // Open öffnet (oder erzeugt) die Datenbank und migriert sie.
 func Open(path string) (*DB, error) {
-	// Im URI nur die Sonderzeichen maskieren; Schrägstriche bleiben (auch C:/… unter Windows).
-	uri := strings.NewReplacer("%", "%25", "?", "%3f", "#", "%23").Replace(filepath.ToSlash(path))
-	dsn := "file:" + uri + "?_txlock=immediate" +
+	dsn := "file:" + uriPath(path) + "?_txlock=immediate" +
 		"&_pragma=busy_timeout(10000)&_pragma=foreign_keys(1)&_pragma=journal_mode(wal)&_pragma=synchronous(normal)"
 	sqlDB, err := sql.Open("sqlite3", dsn)
 	if err != nil {
@@ -49,16 +47,36 @@ func Open(path string) (*DB, error) {
 	return d, nil
 }
 
+// uriPath maskiert im URI nur die Sonderzeichen; Schrägstriche bleiben (auch C:/… unter Windows).
+func uriPath(path string) string {
+	return strings.NewReplacer("%", "%25", "?", "%3f", "#", "%23").Replace(filepath.ToSlash(path))
+}
+
+type migration struct {
+	version int
+	file    string
+}
+
+func migrationFiles() []migration {
+	files, _ := fs.Glob(migrations, "migrations/*.sql")
+	var out []migration
+	for _, f := range files {
+		if n, err := strconv.Atoi(strings.SplitN(strings.TrimPrefix(f, "migrations/"), "_", 2)[0]); err == nil {
+			out = append(out, migration{n, f})
+		}
+	}
+	slices.SortFunc(out, func(a, b migration) int { return a.version - b.version })
+	return out
+}
+
 func (d *DB) migrate(ctx context.Context) error {
 	var version int
 	if err := d.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
 		return fmt.Errorf("Datenbank %s nicht lesbar: %w", d.path, err)
 	}
-	files, _ := fs.Glob(migrations, "migrations/*.sql")
-	slices.Sort(files)
-	for _, f := range files {
-		n, err := strconv.Atoi(strings.SplitN(strings.TrimPrefix(f, "migrations/"), "_", 2)[0])
-		if err != nil || n <= version {
+	for _, m := range migrationFiles() {
+		n, f := m.version, m.file
+		if n <= version {
 			continue
 		}
 		if version > 0 {

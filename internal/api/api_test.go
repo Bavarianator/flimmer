@@ -133,6 +133,26 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatalf("home: %s", b)
 	}
 
+	// Sicherung herunterladen und wieder einspielen; Datenmüll wird abgelehnt.
+	res, b = call(browser, "GET", "/api/settings/backup", nil)
+	if res.StatusCode != 200 || !bytes.HasPrefix(b, []byte("SQLite format 3")) {
+		t.Fatalf("backup: %d %.20q", res.StatusCode, b)
+	}
+	if res, _ := call(anon, "GET", "/api/settings/backup", nil); res.StatusCode != 401 {
+		t.Fatalf("backup ohne Login: %d", res.StatusCode)
+	}
+	req, _ = http.NewRequest("POST", srv.URL+"/api/settings/restore", strings.NewReader("kein sqlite"))
+	if res, _ := browser.Do(req); res.StatusCode != 400 {
+		t.Fatalf("restore mit Müll: %d", res.StatusCode)
+	}
+	req, _ = http.NewRequest("POST", srv.URL+"/api/settings/restore", bytes.NewReader(b))
+	if res, err := browser.Do(req); err != nil || res.StatusCode != 204 {
+		t.Fatalf("restore: %v %v", err, res.Status)
+	}
+	if lib.Get(id) == nil {
+		t.Fatal("Bibliothek nach Restore leer")
+	}
+
 	// Falsches Passwort wird gedrosselt.
 	var users []struct{ ID string }
 	_, b = call(anon, "GET", "/api/users", nil)
