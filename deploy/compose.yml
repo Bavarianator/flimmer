@@ -1,0 +1,19 @@
+# Flimmer mit Docker Compose:  docker compose -f deploy/compose.yml up -d  → http://<server-ip>:8096
+services:
+  flimmer:
+    image: ghcr.io/flimmer-media/flimmer:latest
+    container_name: flimmer
+    restart: unless-stopped
+    ports:
+      - "8096:8096"
+    # Statt ports: network_mode host, damit Apps den Server per SSDP im Heimnetz finden.
+    # network_mode: host
+    volumes:
+      - ./flimmer-data:/data           # Einstellungen, Cache, Poster
+      - /pfad/zu/filmen:/media:ro      # anpassen; weitere Ordner als /media/serien usw.
+    # Hardware-Transcoding (Intel/AMD, VAAPI/QSV): einkommentieren, wenn /dev/dri existiert.
+    # devices:
+    #   - /dev/dri:/dev/dri
+    environment:
+      TZ: Europe/Berlin
+      # FLIMMER_TMDB_KEY: ""           # optional eigener TMDB-Key

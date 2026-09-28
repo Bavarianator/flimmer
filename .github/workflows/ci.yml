@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main, master]
+    tags: ["v*"] # Tag v1.2.3 → GitHub Release mit Binaries + Docker :v1.2.3/:latest
   pull_request:
 
 permissions:
@@ -65,14 +66,27 @@ jobs:
         with:
           name: web-dist
           path: web/dist
-      - name: Build
+      - name: Bauen und packen
         env:
           CGO_ENABLED: "0"
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           GOARM: ${{ matrix.goarm }}
           TMDB_KEY: ${{ secrets.TMDB_KEY }} # Projekt-Key, damit Metadaten ohne eigenen Key funktionieren
-        run: go build -trimpath -ldflags "-s -w -X github.com/flimmer-media/flimmer/internal/meta.DefaultTMDBKey=$TMDB_KEY" -o dist/flimmer-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goarm && format('v{0}', matrix.goarm) || '' }}${{ matrix.ext }} ./cmd/server
+          VERSION: ${{ github.ref_type == 'tag' && github.ref_name || 'dev' }}
+        run: |
+          name=flimmer-$VERSION-$GOOS-$GOARCH${GOARM:+v$GOARM}
+          mkdir -p pkg/$name dist
+          go build -trimpath -o pkg/$name/flimmer${{ matrix.ext }} -ldflags "-s -w \
+            -X github.com/flimmer-media/flimmer/internal/meta.DefaultTMDBKey=$TMDB_KEY \
+            -X github.com/flimmer-media/flimmer/internal/update.Version=$VERSION" ./cmd/server
+          cp LICENSE pkg/$name/
+          if [ "$GOOS" = windows ]; then
+            cp deploy/LIESMICH.txt pkg/$name/
+            (cd pkg && zip -qr ../dist/$name.zip $name)
+          else
+            (cd pkg && tar czf ../dist/$name.tar.gz $name)
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: flimmer-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goarm && format('v{0}', matrix.goarm) || '' }}
@@ -94,14 +108,47 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # PRs bauen nur zur Kontrolle, Pushes auf main veröffentlichen :latest.
+      # PRs bauen nur zur Kontrolle, main → :edge, Tag v1.2.3 → :v1.2.3 und :latest (Vorabversionen ohne :latest).
+      - id: tags
+        run: |
+          img=ghcr.io/${GITHUB_REPOSITORY,,}
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            tags=$img:$GITHUB_REF_NAME
+            [[ $GITHUB_REF_NAME == *-* ]] || tags=$tags,$img:latest
+          else
+            tags=$img:edge
+          fi
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@v6
         with:
           context: .
           file: deploy/Dockerfile
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           push: ${{ github.event_name == 'push' }}
-          tags: ghcr.io/${{ github.repository }}:latest
-          build-args: TMDB_KEY=${{ secrets.TMDB_KEY }}
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            TMDB_KEY=${{ secrets.TMDB_KEY }}
+            VERSION=${{ github.ref_type == 'tag' && github.ref_name || 'dev' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: [build, docker]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: flimmer-*
+          merge-multiple: true
+          path: dist
+      - run: cd dist && sha256sum * > SHA256SUMS
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pre=; [[ $GITHUB_REF_NAME == *-* ]] && pre=--prerelease
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" \
+            --title "Flimmer $GITHUB_REF_NAME" --generate-notes $pre

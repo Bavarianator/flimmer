@@ -9,9 +9,22 @@ Weitere Ziele:
 - **Alle Geräte:** eine Web-UI für Browser, LG webOS, Samsung Tizen, Android (TV) und iOS.
 - **Gemeinsam schauen und einfaches Teilen** sind geplant (siehe [Architektur](docs/architektur.md)).
 
-> Status: früher Prototyp. Benutzer, Metadaten (TMDB/NFO) und die meisten Apps fehlen noch. Für LG-TVs gibt es einen webOS-Starter.
+> Status: frühe Version. Benutzer, Metadaten (NFO/TMDB) und Hardware-Transcoding sind da; Apps außer dem LG-Starter fehlen noch.
 
-## Schnellstart
+## Schnellstart in 3 Schritten
+
+1. **Herunterladen:** Die passende Datei aus den [Releases](https://github.com/flimmer-media/flimmer/releases/latest) holen und entpacken.
+   - Windows: `…-windows-amd64.zip`
+   - Mac mit Apple-Chip: `…-darwin-arm64.tar.gz`
+   - Linux-PC/NAS: `…-linux-amd64.tar.gz`
+   - Raspberry Pi 4/5: `…-linux-arm64.tar.gz`
+   - Raspberry Pi 2/3: `…-linux-armv7.tar.gz`
+2. **Starten:** `flimmer` doppelklicken bzw. im Terminal `./flimmer` ausführen.
+   - Unter Windows wird ffmpeg bei Bedarf automatisch geladen.
+   - Unter Linux und macOS muss ffmpeg installiert sein, z. B. mit `sudo apt install ffmpeg` bzw. `brew install ffmpeg`.
+3. **Browser:** Die Einrichtung öffnet sich unter `http://localhost:8096`. Dort Medienordner wählen, fertig. TV und Handy erreichen den Server unter der angezeigten Adresse oder per QR-Code.
+
+Automatisch mit dem Rechner starten: `flimmer install`, wieder entfernen mit `flimmer uninstall`. Dafür sind keine Admin-Rechte nötig. Unter Linux wird dabei eine systemd-User-Unit angelegt, unter macOS ein LaunchAgent, unter Windows ein Eintrag im Autostart.
 
 ### Docker
 
@@ -22,26 +35,16 @@ docker run -d --name flimmer -p 8096:8096 \
   ghcr.io/flimmer-media/flimmer
 ```
 
-Selbst bauen (Multi-Arch):
+Oder mit Compose: [`deploy/compose.yml`](deploy/compose.yml) anpassen und dann `docker compose -f deploy/compose.yml up -d` ausführen. `:latest` ist das letzte Release, `:edge` der aktuelle Stand von `main`.
 
-```sh
-docker buildx build -f deploy/Dockerfile --platform linux/amd64,linux/arm64,linux/arm/v7 -t flimmer .
-```
+### Als Systemdienst (Linux-Server)
 
-### Binary
-
-Voraussetzung: `ffmpeg` und `ffprobe` im `PATH`.
-
-```sh
-flimmer -media /pfad/zu/filmen,/pfad/zu/serien -data ~/.cache/flimmer
-```
-
-Danach im Browser `http://localhost:8096` öffnen. Als Dienst unter Linux: siehe [`deploy/flimmer.service`](deploy/flimmer.service).
+Für einen eigenen Benutzer und Härtung gibt es [`deploy/flimmer.service`](deploy/flimmer.service). Die Anleitung steht in der Datei.
 
 | Flag | Standard | Bedeutung |
 |---|---|---|
-| `-media` | – (Pflicht) | Medienordner, mehrere mit Komma getrennt |
-| `-data` | Benutzer-Cache-Ordner/flimmer | Cache und Transcode-Zwischendateien |
+| `-media` | – | Medienordner, mehrere mit Komma getrennt. Alternativ in der Einrichtung wählen. |
+| `-data` | Benutzer-Cache-Ordner/flimmer | Einstellungen, Cache, Poster |
 | `-addr` | `:8096` | Adresse, auf der der Server lauscht |
 
 ### Aus dem Quellcode
@@ -53,6 +56,8 @@ Du brauchst Go 1.27+, Node 22 und ffmpeg.
 go run ./cmd/server -media /pfad/zu/filmen
 go test ./...
 ```
+
+Ein Release entsteht durch einen Tag, z. B. `git tag v0.1.0 && git push --tags`. Die CI baut daraus die Binaries für alle Plattformen, das Windows-ZIP und die Docker-Images `:v0.1.0` und `:latest`. Den TMDB-Projekt-Key liest sie aus dem Repo-Secret `TMDB_KEY`.
 
 ### LG-TV (webOS)
 

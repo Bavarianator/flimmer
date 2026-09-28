@@ -1,0 +1,17 @@
+Flimmer – dein Medienserver
+===========================
+
+1. flimmer.exe doppelklicken.
+   - Meldet Windows „Der Computer wurde durch Windows geschützt“:
+     auf „Weitere Informationen“ und dann „Trotzdem ausführen“ klicken.
+   - Fragt die Firewall nach: „Private Netzwerke“ erlauben, damit TV und Handy den Server finden.
+2. Der Browser öffnet sich mit der Einrichtung. Dort den Ordner mit Filmen und Serien wählen.
+   ffmpeg wird bei Bedarf automatisch heruntergeladen.
+3. Fertig. Auf TV und Handy die Adresse aufrufen, die die Einrichtung anzeigt
+   (z. B. http://192.168.178.20:8096), oder den QR-Code scannen.
+
+Automatisch mit Windows starten:
+   In diesem Ordner eine Eingabeaufforderung öffnen und eingeben:  flimmer.exe install
+   Wieder entfernen:                                              flimmer.exe uninstall
+
+Hilfe und Quellcode: https://github.com/flimmer-media/flimmer
