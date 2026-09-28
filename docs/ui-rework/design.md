@@ -1,45 +1,51 @@
 # UI-Rework – Design (Phase 2)
 
-Stand: 2026-09-28. Session: flimmer-ui-rework. Status: **Die visuelle Richtung ist noch nicht gewählt. Code in `web/src` entsteht erst nach der Freigabe.**
+Stand: 2026-09-28. Session: ui-design (vorher flimmer-ui-rework). Status: **Richtung „Mischung“ ist gewählt und im Designsystem umgesetzt.**
 
-## Artefakte
+## Artefakte und Dateien
 
-| Was | Link / Ort |
+| Was | Ort |
 |---|---|
-| Designsystem „Flimmer“ | https://claude.ai/artifact/4u41G18sE1BuLkX1eUAk2p |
-| Zwei neue visuelle Richtungen (Cover und Startseite TV) | [richtungen/](richtungen/README.md) |
+| Designsystem „Flimmer“ (Version 5, Richtung Mischung) | https://claude.ai/artifact/4u41G18sE1BuLkX1eUAk2p |
+| Tokens als Datei (Kopie aus dem Artefakt) | [tokens.json](tokens.json) |
+| Screens: 17 Screens in TV, Desktop und Handy | [screens/](screens/README.md) |
+| Die zwei Richtungen zur Wahl | [richtungen/](richtungen/README.md) |
 | Bestandsaufnahme | [bestand.md](bestand.md) |
 
-Das Artefakt ist privat. Wer außer dem Nutzer es sehen soll, braucht eine Freigabe über das Teilen-Menü der Seite.
+Das Artefakt ist privat. Andere sehen es erst nach einer Freigabe über das Teilen-Menü.
 
 ## Verlauf
 
-1. **Erster Entwurf** (im Artefakt, Version 3):
-   - Aufbau: Markenbuch, Tokens für Kino und Hell, drei Typo-Skalen, 27 Komponenten, Chromium-53-Regeln, Ampel über die Form, Sprache.
-   - Optik: Neon-Cyan, Bricolage Grotesque, Pillen, Verläufe.
-   - Nutzer-Urteil: Der Aufbau ist „Weltklasse“ und bleibt. Die Optik ist „AI slop“ und wird ersetzt.
-2. **Zwei neue Richtungen**, siehe `richtungen/`:
-   - **A · Kinemathek**: warmes Schwarz und Papierweiß, Serife für Titel, IBM Plex für die UI.
-   - **B · Plakat**: Schwarz und Weiß, schmale Archivo-Versalien, keine Rundungen.
-   - Der Nutzer wählt eine davon.
-3. **Nach der Wahl**:
-   - Im bestehenden Artefakt tauschen: `tokens.json`, `bundle.css`, Vorschauen, Cover, Wortmarke und Icons. Aufbau und Dateien bleiben.
-   - Danach die Screens in TV 1920, Desktop 1440 und Handy 390 als HTML und PNG unter `screens/` anlegen.
-   - Der Entwurf der Screens im alten Stil ist verworfen und nicht eingecheckt.
+1. **Erster Entwurf** (Version 3 des Artefakts):
+   - Aufbau: Markenbuch, Tokens, 27 Komponenten, Chromium-53-Regeln, Ampel, Sprache. Der Aufbau bleibt.
+   - Die Optik wurde verworfen: Neon-Cyan, Bricolage Grotesque, Pillen, Verläufe.
+2. **Zwei Richtungen**: A „Kinemathek“ und B „Plakat“ (siehe `richtungen/`).
+3. **Nutzer-Entscheidung „Mischung“**:
+   - Das Grundgerüst kommt von A.
+   - Wortmarke, Hero-Titel und bildlose Platzhalter bekommen die schmalen Plakat-Versalien von B.
+   - Die Serife fällt weg.
 
-## Designentscheidungen, die in jeder Richtung bleiben
+## Zentrale Designentscheidungen
 
+- **Farben**:
+  - Warmes Schwarz `#11100e` als Grund, Papierweiß `#ece7dd` als Text.
+  - Dazu drei warme Grautöne, keine Akzentfarbe. Hervorhebung ist Helligkeit: Primärbutton, Fokus und Fortschritt sind papierweiß.
+  - Die Ampel ist gedeckt (Salbei `#8fae86`, Ocker `#cfae5c`, Ziegel `#d4826f`) und klein. Die Form trägt die Bedeutung: voller Punkt, halber Punkt, Ring.
+  - Das Papier-Thema (hell) tauscht die Rollen: Grund `#f3efe6`, Text Tinte `#16140f`.
+- **Typografie**, zwei Familien:
+  - Archivo in Breite 62 und Gewicht 800, als Versalien: nur Wortmarke, Hero- und Detailtitel (TV 144 px, Desktop 104 px, Handy 56 px), bildlose Platzhalter und Avatar-Initialen.
+  - IBM Plex Sans für die ganze UI in normaler Schreibung.
+  - IBM Plex Mono für Zeiten, Codes, Messwerte und kleine Kicker.
+  - Auf dem TV nie unter 24 px.
+- **Form**:
+  - Ecken 2 px, Haarlinien statt Kästen.
+  - Fokus: papierweißer Rahmen, 3 px auf dem TV, mit 3 px dunklem Abstand. Karten skalieren um 1.04. Kein Glow.
+- **Layout TV vs. Handy**:
+  - TV: ruhige Textnavigation oben im 96/54-px-Sicherheitsrand, Hero mit Plakat-Titel. Die Reihen fahren per `translateX`, die Seite per `translateY`.
+  - Handy: Tab-Leiste unten, Hero als Standbild mit dem Titel darauf, Reihen zum Wischen, Sheets statt Modals.
+  - Desktop: Kopfzeile mit Suche und Avatar-Menü.
 - **Chromium 53**:
-  - Flexbox mit margin, kein Grid und kein `gap`.
-  - `padding-top` statt `aspect-ratio`.
-  - Deckende Flächen statt `backdrop-filter`.
-  - Klasse `ist-fokus` statt `:focus-visible`.
-- **Bewegung**: nur `transform` und `opacity`. `prefers-reduced-motion` wird respektiert.
-- **TV**:
-  - Schrift mindestens 24 px.
-  - Sicherheitsrand 96 × 54 px.
-  - Die Reihe verschiebt sich per `translateX`, die Seite per `translateY`.
-  - Navigationsleiste links.
-- **Desktop**: Kopfzeile mit Bereichen. **Handy**: Tab-Leiste unten, Sheets statt Modals.
-- **Ampel**: Die Form trägt die Bedeutung (voll, halb, Ring bzw. Rahmen), gedeckt und klein, immer mit Text-Alternative.
-- **Funktionsgleichheit**: Ampel, Fortschritt, Ton- und Untertitelmenü mit Nachtmodus (API: `night`, `subtitleMode`, `subtitleIndex`, `forced`/`sdh`, `notes[]`), Kopplungscode mit QR, Profil-PIN und Kinderprofil, Gemeinsam-schauen-Leiste mit Chat, Suche mit Filtern, Einstellungen mit Diagnose, Sicherung, Fernzugriff und Einladungen.
+  - Nur Flexbox mit margin, kein Grid, kein `gap`, kein `aspect-ratio`, kein Blur.
+  - Die Plakat-Schrift kommt als statische woff2-Instanz, weil Chromium 53 keine variablen Achsen kann.
+  - Animationen nur mit `transform` und `opacity`.
+- **Funktionsgleichheit**: Ampel, Fortschritt, Ton-/Untertitelmenü mit Nachtmodus (`night`, `subtitleMode`, `subtitleIndex`, `forced`/`sdh`, `notes[]`), Kopplungscode mit QR, PIN und Kinderprofil, Gemeinsam-schauen-Leiste mit Chat, Suche mit Filtern, Einstellungen mit Diagnose, Sicherung, Fernzugriff und Einladungen.
