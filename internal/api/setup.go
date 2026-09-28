@@ -103,7 +103,7 @@ func (s *Server) settings(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, map[string]any{"serverName": set.ServerName, "language": cmp(set.Language, "de"), "dirs": nonNil(set.Dirs),
 		"tmdbKey": set.TMDBKey != "", "suggestions": suggestions(), "ffmpeg": s.ffmpegInfo(), "lanUrl": s.LANURL,
-		"updateCheck": !set.NoUpdates, "remote": set.Remote, "remoteAvailable": s.Remote != nil, "update": s.availableUpdate(), "version": update.Version})
+		"updateCheck": !set.NoUpdates, "remote": set.Remote, "optimize": set.Optimize, "remoteAvailable": s.Remote != nil, "update": s.availableUpdate(), "version": update.Version})
 }
 
 func (s *Server) availableUpdate() *update.Release {
@@ -115,12 +115,13 @@ func (s *Server) availableUpdate() *update.Release {
 
 func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		ServerName *string  `json:"serverName"`
-		Language   *string  `json:"language"`
-		Dirs       []string `json:"dirs"`
-		TMDBKey    *string  `json:"tmdbKey"` // "" entfernt den eigenen Key
-		Update     *bool    `json:"updateCheck"`
-		Remote     *bool    `json:"remote"`
+		ServerName *string      `json:"serverName"`
+		Language   *string      `json:"language"`
+		Dirs       []string     `json:"dirs"`
+		TMDBKey    *string      `json:"tmdbKey"` // "" entfernt den eigenen Key
+		Update     *bool        `json:"updateCheck"`
+		Remote     *bool        `json:"remote"`
+		Optimize   *db.Optimize `json:"optimize"`
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -151,6 +152,10 @@ func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Remote != nil {
 			set.Remote = *req.Remote
+		}
+		if o := req.Optimize; o != nil {
+			o.From, o.To, o.MinFreeGB = min(max(o.From, 0), 23), min(max(o.To, 0), 23), max(o.MinFreeGB, 0)
+			set.Optimize = *o
 		}
 	})
 	if writeErr(w, err) {

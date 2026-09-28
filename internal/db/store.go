@@ -7,10 +7,27 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 )
 
 // --- Einstellungen ---
+
+// Optimize steuert die Hintergrund-Optimierung (MP4-Version für Titel, die sonst transkodiert würden).
+type Optimize struct {
+	Off       bool `json:"off"`  // Standard: an
+	From      int  `json:"from"` // volle Stunden; beide 0 = Standard 2–6 Uhr
+	To        int  `json:"to"`
+	MinFreeGB int  `json:"minFreeGB"` // 0 = Standard 20 GB
+}
+
+// Window liefert das Zeitfenster mit Standardwerten.
+func (o Optimize) Window() (from, to int, on bool) {
+	if o.From == 0 && o.To == 0 {
+		return 2, 6, !o.Off
+	}
+	return o.From, o.To, !o.Off
+}
 
 type Settings struct {
 	ServerName string
@@ -19,6 +36,7 @@ type Settings struct {
 	TMDBKey    string // leer = eingebauter Projekt-Key
 	NoUpdates  bool   // Update-Hinweis abgeschaltet
 	Remote     bool   // Fernzugriff eingeschaltet (Portfreigabe im Router)
+	Optimize   Optimize
 	Secret     []byte // HMAC-Schlüssel für Medien-Tokens
 }
 
@@ -55,6 +73,14 @@ func settings(ctx context.Context, q querier) (Settings, error) {
 			s.NoUpdates = v == "1"
 		case "remote":
 			s.Remote = v == "1"
+		case "opt_off":
+			s.Optimize.Off = v == "1"
+		case "opt_from":
+			s.Optimize.From, _ = strconv.Atoi(v)
+		case "opt_to":
+			s.Optimize.To, _ = strconv.Atoi(v)
+		case "opt_min_free_gb":
+			s.Optimize.MinFreeGB, _ = strconv.Atoi(v)
 		case "secret":
 			s.Secret, _ = hex.DecodeString(v)
 		}
@@ -92,7 +118,9 @@ func (d *DB) UpdateSettings(ctx context.Context, f func(s *Settings)) error {
 
 func writeSettings(ctx context.Context, tx *sql.Tx, s Settings) error {
 	kv := map[string]string{"server_name": s.ServerName, "language": s.Language, "tmdb_key": s.TMDBKey,
-		"no_updates": fmt.Sprint(b2i(s.NoUpdates)), "remote": fmt.Sprint(b2i(s.Remote)), "secret": hex.EncodeToString(s.Secret)}
+		"no_updates": fmt.Sprint(b2i(s.NoUpdates)), "remote": fmt.Sprint(b2i(s.Remote)), "secret": hex.EncodeToString(s.Secret),
+		"opt_off": fmt.Sprint(b2i(s.Optimize.Off)), "opt_from": fmt.Sprint(s.Optimize.From), "opt_to": fmt.Sprint(s.Optimize.To),
+		"opt_min_free_gb": fmt.Sprint(s.Optimize.MinFreeGB)}
 	for k, v := range kv {
 		if _, err := tx.ExecContext(ctx, "INSERT INTO settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", k, v); err != nil {
 			return err
@@ -394,6 +422,24 @@ func (d *DB) Device(ctx context.Context, id string) []byte {
 	var b []byte
 	d.QueryRowContext(ctx, "SELECT profile FROM devices WHERE id = ?", id).Scan(&b)
 	return b
+}
+
+// Devices liefert alle gespeicherten Geräteprofile (JSON).
+func (d *DB) Devices(ctx context.Context) ([][]byte, error) {
+	rows, err := d.QueryContext(ctx, "SELECT profile FROM devices ORDER BY updated_at DESC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out [][]byte
+	for rows.Next() {
+		var b []byte
+		if err := rows.Scan(&b); err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
 }
 
 func (d *DB) SetDevice(ctx context.Context, id string, profile []byte) error {

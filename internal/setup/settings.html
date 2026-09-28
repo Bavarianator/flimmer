@@ -92,6 +92,21 @@
     </section>
 
     <section class="card">
+      <h3>Nachts vorbereiten</h3>
+      <p class="lead">Titel, die ein Gerät nur mit Umwandeln abspielen kann (rote Ampel), bereitet Flimmer nachts als MP4 vor. Danach laufen sie direkt – ohne Last beim Schauen. Das Original bleibt unverändert.</p>
+      <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="optOn" style="width:auto"> einschalten</label>
+      <div class="inline" style="margin-top:8px">
+        <div style="flex:1"><label for="optFrom">von</label><select id="optFrom"><option value="0">0 Uhr</option><option value="1">1 Uhr</option><option value="2">2 Uhr</option><option value="3">3 Uhr</option><option value="4">4 Uhr</option><option value="5">5 Uhr</option><option value="6">6 Uhr</option><option value="7">7 Uhr</option><option value="8">8 Uhr</option><option value="9">9 Uhr</option><option value="10">10 Uhr</option><option value="11">11 Uhr</option><option value="12">12 Uhr</option><option value="13">13 Uhr</option><option value="14">14 Uhr</option><option value="15">15 Uhr</option><option value="16">16 Uhr</option><option value="17">17 Uhr</option><option value="18">18 Uhr</option><option value="19">19 Uhr</option><option value="20">20 Uhr</option><option value="21">21 Uhr</option><option value="22">22 Uhr</option><option value="23">23 Uhr</option></select></div>
+        <div style="flex:1"><label for="optTo">bis</label><select id="optTo"><option value="0">0 Uhr</option><option value="1">1 Uhr</option><option value="2">2 Uhr</option><option value="3">3 Uhr</option><option value="4">4 Uhr</option><option value="5">5 Uhr</option><option value="6">6 Uhr</option><option value="7">7 Uhr</option><option value="8">8 Uhr</option><option value="9">9 Uhr</option><option value="10">10 Uhr</option><option value="11">11 Uhr</option><option value="12">12 Uhr</option><option value="13">13 Uhr</option><option value="14">14 Uhr</option><option value="15">15 Uhr</option><option value="16">16 Uhr</option><option value="17">17 Uhr</option><option value="18">18 Uhr</option><option value="19">19 Uhr</option><option value="20">20 Uhr</option><option value="21">21 Uhr</option><option value="22">22 Uhr</option><option value="23">23 Uhr</option></select></div>
+        <div style="flex:1"><label for="optFree">mindestens frei lassen</label><input id="optFree" type="number" min="1" step="1" placeholder="20"></div>
+      </div>
+      <p class="hint">In GB. Die Speichergrenze gilt ab dem nächsten Start. Läuft gerade eine Wiedergabe, wartet die Vorbereitung. HDR-Titel werden dabei für normale Fernseher nach SDR umgerechnet; Dolby Vision Profil 5 wird übersprungen, weil es sich nicht farbtreu umrechnen lässt.</p>
+      <div class="status" style="margin-top:12px"><span class="dot" id="odot"></span><span id="otext">…</span></div>
+      <p class="hint" id="oerr"></p>
+      <div class="actions"><span></span><button class="primary" id="saveOpt">Speichern</button></div>
+    </section>
+
+    <section class="card">
       <h3>Sicherung</h3>
       <p class="lead">Jede Nacht legt Flimmer automatisch eine Sicherung an (die letzten 7 bleiben). Hier kannst du eine herunterladen oder zurückspielen.</p>
       <p class="hint" id="bkinfo"></p>
@@ -158,6 +173,9 @@ function load() {
     $('ffhint').textContent = s.ffmpeg.download.error ? 'Download fehlgeschlagen: ' + s.ffmpeg.download.error : s.ffmpeg.hint;
     $('ffget').hidden = !s.ffmpeg.canDownload;
     $('updateCheck').checked = s.updateCheck;
+    var o = s.optimize, w = (o.from || o.to) ? [o.from, o.to] : [2, 6];
+    $('optOn').checked = !o.off; $('optFrom').value = w[0]; $('optTo').value = w[1]; $('optFree').value = o.minFreeGB || '';
+    loadOptimize();
     $('remoteCard').hidden = !s.remoteAvailable;
     $('remoteOn').checked = s.remote;
     if (s.remote) loadRemote();
@@ -319,6 +337,23 @@ $('rpair').onclick = function () {
   api('POST', '/api/remote/pair').then(function (r) { $('rcode').textContent = 'Code: ' + r.code + ' – in der App unter „Server hinzufügen“ eingeben. Gilt bis ' + new Date(r.expires).toLocaleTimeString() + '.' })
     .catch(function (e) { toast(e.message) });
 };
+
+// --- Nachts vorbereiten ---
+function loadOptimize() {
+  api('GET', '/api/settings/optimize').then(function (st) {
+    if (st.waiting) { $('odot').className = 'dot'; $('otext').textContent = 'Startet, sobald die Hardware gemessen ist.'; return }
+    var busy = st.current;
+    $('odot').className = 'dot ' + (st.on ? 'ok' : '');
+    $('otext').textContent = !st.on ? 'Ausgeschaltet' : busy ? 'Bereitet vor: ' + busy.title + ' – ' + Math.round(busy.percent) + ' %' :
+      st.done + ' fertig, ' + st.pending + ' warten auf ' + st.window;
+    $('oerr').textContent = st.lastError ? 'Zuletzt: ' + st.lastError : '';
+  }).catch(function () {});
+}
+$('saveOpt').onclick = function () {
+  api('PUT', '/api/settings', { optimize: { off: !$('optOn').checked, from: +$('optFrom').value, to: +$('optTo').value, minFreeGB: +$('optFree').value || 0 } })
+    .then(function () { toast('Gespeichert'); loadOptimize() }).catch(function (e) { toast(e.message) });
+};
+setInterval(function () { if (!$('app').hidden) loadOptimize() }, 10000);
 
 // --- Sicherung ---
 $('restoreFile').onchange = function () {

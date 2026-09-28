@@ -20,6 +20,8 @@ import (
 	"github.com/flimmer-media/flimmer/internal/hwaccel"
 	"github.com/flimmer-media/flimmer/internal/images"
 	"github.com/flimmer-media/flimmer/internal/meta"
+	"github.com/flimmer-media/flimmer/internal/optimize"
+	"github.com/flimmer-media/flimmer/internal/probe"
 	"github.com/flimmer-media/flimmer/internal/remote"
 	"github.com/flimmer-media/flimmer/internal/scan"
 	"github.com/flimmer-media/flimmer/internal/transcode"
@@ -46,6 +48,9 @@ type Server struct {
 	FFmpeg       atomic.Bool                   // ffmpeg/ffprobe gefunden
 	HW           atomic.Pointer[hwaccel.Accel] // gesetzt, sobald hwaccel.Detect fertig ist
 
+	Optimizer atomic.Pointer[optimize.Optimizer] // gesetzt, sobald die Hardware gemessen ist
+
+	alt     altCache
 	pairing auth.Pairing
 	limiter auth.Limiter
 	streams streams
@@ -86,6 +91,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/settings/review", adminOnly(s.review))
 	mux.HandleFunc("POST /api/rescan", adminOnly(s.rescan))
 	mux.HandleFunc("GET /api/diagnostics", adminOnly(s.diagnostics))
+	mux.HandleFunc("GET /api/settings/optimize", adminOnly(s.optimizeStatus))
 	mux.HandleFunc("GET /api/settings/backup", adminOnly(s.backupDownload))
 	mux.HandleFunc("POST /api/settings/restore", adminOnly(s.restore))
 	if s.Remote != nil {
@@ -101,9 +107,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/items/{id}/play", s.play)
 	mux.HandleFunc("POST /api/items/{id}/progress", s.progress)
 	mux.HandleFunc("POST /api/items/{id}/watched", s.watched)
-	mux.HandleFunc("GET /api/items/{id}/file", s.file)
-	mux.HandleFunc("GET /api/items/{id}/hls/{audio}/{acodec}/{vcodec}/index.m3u8", s.playlist)
-	mux.HandleFunc("GET /api/items/{id}/hls/{audio}/{acodec}/{vcodec}/{seg}", s.segment)
+	for _, v := range []string{"", "/o"} { // /o = optimierte Version
+		mux.HandleFunc("GET /api/items/{id}"+v+"/file", s.file)
+		mux.HandleFunc("GET /api/items/{id}"+v+"/hls/{audio}/{acodec}/{vcodec}/index.m3u8", s.playlist)
+		mux.HandleFunc("GET /api/items/{id}"+v+"/hls/{audio}/{acodec}/{vcodec}/{seg}", s.segment)
+	}
 	mux.HandleFunc("GET /api/items/{id}/subs/{index}", s.subtitle)
 	mux.HandleFunc("GET /api/devices/{device}/profile", s.deviceProfile)
 	mux.HandleFunc("PUT /api/devices/{device}/profile", s.deviceProfile)
@@ -198,7 +206,9 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 func (s *Server) file(w http.ResponseWriter, r *http.Request) {
 	if it := s.item(w, r); it != nil {
 		s.touch(r, it)
-		http.ServeFile(w, r, it.Path) // Range-Requests, If-Modified-Since usw. aus der Stdlib
+		if path, _, _, ok := s.source(w, r, it, false); ok {
+			http.ServeFile(w, r, path) // Range-Requests, If-Modified-Since usw. aus der Stdlib
+		}
 	}
 }
 
@@ -215,19 +225,17 @@ func (s *Server) job(w http.ResponseWriter, r *http.Request) (transcode.Job, boo
 		http.Error(w, "ungültige Parameter", http.StatusBadRequest)
 		return transcode.Job{}, false
 	}
-	if audio >= 0 && !hasStream(it, audio, "audio") {
+	path, media, kf, ok := s.source(w, r, it, true)
+	if !ok {
+		return transcode.Job{}, false
+	}
+	if audio >= 0 && !hasStream(media, audio, "audio") {
 		http.Error(w, "Tonspur existiert nicht", http.StatusBadRequest)
 		return transcode.Job{}, false
 	}
-	kf, err := s.Lib.Keyframes(r.Context(), it)
-	if err != nil {
-		log.Printf("keyframes %q: %v", it.Title, err)
-		http.Error(w, "Datei konnte nicht gelesen werden", http.StatusInternalServerError)
-		return transcode.Job{}, false
-	}
 	job := transcode.Job{
-		Input:      it.Path,
-		Segments:   transcode.Segments(kf, it.Media.Duration),
+		Input:      path,
+		Segments:   transcode.Segments(kf, media.Duration),
 		AudioIndex: audio,
 		AudioCodec: acodec,
 		VideoCodec: vc,
@@ -283,7 +291,7 @@ func (s *Server) subtitle(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("index")
 	ext := filepath.Ext(name)
 	idx, err := strconv.Atoi(name[:len(name)-len(ext)])
-	if err != nil || (ext != ".vtt" && ext != ".sup") || !hasStream(it, idx, "subtitle") {
+	if err != nil || (ext != ".vtt" && ext != ".sup") || !hasStream(it.Media, idx, "subtitle") {
 		http.NotFound(w, r)
 		return
 	}
@@ -330,8 +338,8 @@ func (s *Server) item(w http.ResponseWriter, r *http.Request) *scan.Item {
 	return it
 }
 
-func hasStream(it *scan.Item, idx int, typ string) bool {
-	for _, st := range it.Media.Streams {
+func hasStream(m *probe.Media, idx int, typ string) bool {
+	for _, st := range m.Streams {
 		if st.Index == idx && st.Type == typ {
 			return true
 		}

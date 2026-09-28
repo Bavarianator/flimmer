@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -28,6 +29,8 @@ import (
 	"github.com/flimmer-media/flimmer/internal/hwaccel"
 	"github.com/flimmer-media/flimmer/internal/images"
 	"github.com/flimmer-media/flimmer/internal/meta"
+	"github.com/flimmer-media/flimmer/internal/optimize"
+	"github.com/flimmer-media/flimmer/internal/playback"
 	"github.com/flimmer-media/flimmer/internal/remote"
 	"github.com/flimmer-media/flimmer/internal/scan"
 	"github.com/flimmer-media/flimmer/internal/service"
@@ -196,6 +199,9 @@ func main() {
 					a := hwaccel.Detect(ctx)
 					log.Printf("Transcoding: %s (%.1f× Echtzeit bei 1080p)", a.Name, a.Speed)
 					srv.HW.Store(&a)
+					if try == 0 {
+						startOptimizer(ctx, srv, store, filepath.Join(cacheDir, "optimized"), a)
+					}
 					if a.Speed >= 1.5 {
 						return
 					}
@@ -267,6 +273,45 @@ func main() {
 		tlsSrv.Shutdown(shutdown)
 	}
 	hls.Close() // falls während des Herunterfahrens noch ein Segment angefragt wurde
+}
+
+// startOptimizer legt nachts MP4-Versionen für Titel an, die sonst transkodiert würden (internal/optimize).
+// Braucht das Ergebnis der Hardware-Messung, deshalb erst danach. Die Speichergrenze gilt ab dem nächsten Start.
+func startOptimizer(ctx context.Context, srv *api.Server, store *db.DB, dir string, accel hwaccel.Accel) {
+	settings := func() db.Optimize {
+		s, err := store.Settings(ctx)
+		if err != nil {
+			return db.Optimize{Off: true}
+		}
+		return s.Optimize
+	}
+	o := optimize.New(optimize.Options{
+		Dir:   dir,
+		Items: srv.OptimizeItems,
+		Profiles: func(ctx context.Context) []playback.Profile {
+			raw, _ := store.Devices(ctx)
+			var out []playback.Profile
+			for _, b := range raw {
+				var p playback.Profile
+				if json.Unmarshal(b, &p) == nil {
+					out = append(out, p)
+				}
+			}
+			return out
+		},
+		Speed: func() float64 {
+			if a := srv.HW.Load(); a != nil {
+				return a.Speed
+			}
+			return 0
+		},
+		Accel:   accel,
+		Busy:    srv.Busy,
+		Window:  func() (int, int, bool) { return settings().Window() },
+		MinFree: uint64(settings().MinFreeGB) << 30,
+	})
+	srv.Optimizer.Store(o)
+	go o.Run(ctx)
 }
 
 // dataDirs: Einstellungen in den Konfig-Ordner (wird nicht „aufgeräumt“), Caches in den Cache-Ordner.

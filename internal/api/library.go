@@ -213,8 +213,9 @@ type playResponse struct {
 	URL       string        `json:"url"`
 	Duration  float64       `json:"duration"`
 	Title     string        `json:"title"`
-	Resume    float64       `json:"resume"` // Sekunden, 0 = von vorn
-	Prefs     db.TrackPref  `json:"prefs"`  // zuletzt gewählte Sprachen dieser Serie
+	Resume    float64       `json:"resume"`              // Sekunden, 0 = von vorn
+	Prefs     db.TrackPref  `json:"prefs"`               // zuletzt gewählte Sprachen dieser Serie
+	Optimized bool          `json:"optimized,omitempty"` // spielt die vorbereitete MP4-Version statt des Originals
 }
 
 func (s *Server) play(w http.ResponseWriter, r *http.Request) {
@@ -236,13 +237,19 @@ func (s *Server) play(w http.ResponseWriter, r *http.Request) {
 		p.AudioLang = prefs.Audio // zuletzt gewählte Tonsprache der Serie
 	}
 	plan := playback.Decide(it.Media, p, s.hw().Speed)
+	plan, optimized := s.optimizedPlan(r.Context(), it, p, plan)
 	resp := playResponse{Plan: plan, Duration: it.Media.Duration, Title: it.Title, Subtitles: []subtitleOut{}, Resume: resume, Prefs: prefs}
 	// Medien-Token im Pfad: <video src>, hls.js-Segmente und TVs schicken keine Header.
 	base := "/api/m/" + auth.MediaToken(s.secret(), u.ID, mediaTTL) + "/items/" + it.ID
+	media := base
+	if optimized {
+		media += "/o"
+		resp.Optimized = true
+	}
 	if plan.Method == playback.DirectPlay {
-		resp.URL = base + "/file"
+		resp.URL = media + "/file"
 	} else {
-		resp.URL = base + "/hls/" + strconv.Itoa(plan.AudioIndex) + "/" + plan.AudioCodec + "/" + plan.VideoCodec + "/index.m3u8"
+		resp.URL = media + "/hls/" + strconv.Itoa(plan.AudioIndex) + "/" + plan.AudioCodec + "/" + plan.VideoCodec + "/index.m3u8"
 	}
 	for _, sub := range plan.Subtitles {
 		ext := ".vtt"

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/flimmer-media/flimmer/internal/db"
+	"github.com/flimmer-media/flimmer/internal/optimize"
 	"github.com/flimmer-media/flimmer/internal/scan"
 	"github.com/flimmer-media/flimmer/internal/setup"
 	"github.com/flimmer-media/flimmer/internal/transcode"
@@ -116,6 +117,28 @@ func TestEndToEnd(t *testing.T) {
 	if res, err := anon.Do(req); err != nil || res.StatusCode != http.StatusPartialContent {
 		t.Fatalf("range: %v %v", err, res.Status)
 	}
+
+	// Vorbereitete MP4-Version: Das Original (MKV) würde nur umverpackt, die MP4 läuft direkt → play nimmt /o/.
+	optDir := t.TempDir()
+	if b, err := exec.Command("ffmpeg", "-v", "error", "-i", clip, "-c", "copy", filepath.Join(optDir, id+".mp4")).CombinedOutput(); err != nil {
+		t.Fatalf("%v %s", err, b)
+	}
+	s.Optimizer.Store(optimize.New(optimize.Options{Dir: optDir}))
+	var opt struct {
+		URL       string `json:"url"`
+		Optimized bool   `json:"optimized"`
+	}
+	_, b = call(browser, "POST", "/api/items/"+id+"/play", map[string]any{"containers": []string{"mp4"}, "video": []string{"h264"}})
+	json.Unmarshal(b, &opt)
+	if !opt.Optimized || !strings.HasSuffix(opt.URL, "/o/file") {
+		t.Fatalf("optimierte Version nicht gewählt: %s", b)
+	}
+	req, _ = http.NewRequest("GET", srv.URL+opt.URL, nil)
+	req.Header.Set("Range", "bytes=0-99")
+	if res, err := anon.Do(req); err != nil || res.StatusCode != http.StatusPartialContent {
+		t.Fatalf("optimierte Datei: %v %v", err, res.Status)
+	}
+	s.Optimizer.Store(nil)
 
 	// Fortschritt → Weiterschauen.
 	if res, b := call(browser, "POST", "/api/items/"+id+"/progress", map[string]any{"pos": 4}); res.StatusCode != 200 {
