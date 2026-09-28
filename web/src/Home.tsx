@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks'
 import { FocusContext, useFocusable, setFocus } from '@noriginmedia/norigin-spatial-navigation'
-import { profile, setProbe } from './profile'
+import { api, isTV, profile, setProbe, setToken } from './profile'
 import { loadProbe, runProbe } from './probe'
 import { displayTitle, groupSeries, home, image, library, nextUp, resumePos, type HomeRow, type Item } from './data'
 import { Card, Row } from './ui'
@@ -34,6 +34,7 @@ export function Home() {
   const [rows, setRows] = useState<HomeRow[]>([])
   const [error, setError] = useState('')
   const [probing, setProbing] = useState(false)
+  const [me, setMe] = useState<{ name: string; admin: boolean } | null>(null)
   const { ref, focusKey } = useFocusable({ focusKey: 'home' })
 
   const load = (reload: boolean) =>
@@ -54,6 +55,7 @@ export function Home() {
     })
   }
   useEffect(() => {
+    api<{ name: string; admin: boolean }>('/api/me').then(setMe, () => {})
     load(false)
     if (!loadProbe()) probe() // einmal pro Gerät/Firmware im Hintergrund
   }, [])
@@ -82,6 +84,34 @@ export function Home() {
             <button class="link" onClick={probe} disabled={probing}>
               {probing ? 'Gerät wird getestet …' : 'Gerät neu testen'}
             </button>
+            {!isTV && (
+              <>
+                {' · '}
+                <button class="link" onClick={() => go('/pair')}>Fernseher koppeln</button>
+              </>
+            )}
+            {me && me.admin && (
+              <>
+                {' · '}
+                <a class="link" href="/settings">Einstellungen</a>
+              </>
+            )}
+            {me && (
+              <>
+                {' · '}
+                <button
+                  class="link"
+                  onClick={() =>
+                    api('/api/logout', {}).finally(() => {
+                      setToken('')
+                      location.reload()
+                    })
+                  }
+                >
+                  {me.name}: Profil wechseln
+                </button>
+              </>
+            )}
           </span>
         </header>
         {rows.map((r) => (

@@ -105,7 +105,7 @@ export async function api<T>(path: string, body?: unknown): Promise<T> {
     throw new LoginError(setup)
   }
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`)
-  return res.json()
+  return res.status === 204 ? (undefined as T) : res.json()
 }
 
 export function getToken(): string {
