@@ -264,6 +264,9 @@ func TestEncode(t *testing.T) {
 	if o3.Lookup("clip", src) == "" {
 		t.Fatalf("kein Software-Rückfall: %s", o3.Status().LastError)
 	}
+	if st := o3.Status(); st.Done != 1 || st.Pending != 0 {
+		t.Fatalf("Status nach fertigem Job: %+v", st)
+	}
 
 	// Abbruch bei Wiedergabe: keine Datei, kein .part.
 	old := checkEvery

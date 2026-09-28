@@ -170,6 +170,9 @@ func (o *Optimizer) tick(ctx context.Context) {
 	switch {
 	case err == nil:
 		o.setErr(nil)
+		o.mu.Lock()
+		o.st.Done, o.st.Pending = o.st.Done+1, max(0, o.st.Pending-1) // nicht erst beim nächsten tick
+		o.mu.Unlock()
 	case errors.As(err, &slow), errors.Is(err, errFailed):
 		o.mu.Lock()
 		o.failed[it.ID] = err.Error()
