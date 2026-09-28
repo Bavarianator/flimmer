@@ -2,7 +2,9 @@
 package playback
 
 import (
+	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/flimmer-media/flimmer/internal/probe"
@@ -16,6 +18,9 @@ type Profile struct {
 	Audio      []string `json:"audio"`      // aac, ac3, eac3, mp3, opus, flac, dts, truehd
 	NativeHLS  bool     `json:"nativeHls"`
 	MaxBitrate int64    `json:"maxBitrate"` // 0 = unbegrenzt
+	// HDR-Formate des Bildschirms: hdr10, hlg, hdr10+, dv. nil = unbekannt (ältere Clients: kein Tone-Mapping),
+	// leer = SDR (HDR-Quellen werden umgerechnet statt blass gezeigt).
+	HDR []string `json:"hdr"`
 
 	// Wunsch für diese Wiedergabe (kein Geräte-Merkmal, reist aber im selben Body mit):
 	AudioTrack int    `json:"audioTrack,omitempty"` // Stream-Index der gewählten Tonspur, 0 = automatisch
@@ -62,10 +67,51 @@ type Plan struct {
 	Reasons    []string     `json:"reasons,omitempty"`
 	AudioIndex int          `json:"audioIndex"`
 	AudioCodec string       `json:"audioCodec"` // Ziel-Codec, "copy" wenn unverändert
-	VideoCodec string       `json:"videoCodec"` // "copy", "h264" oder "h264-720"
+	VideoCodec string       `json:"videoCodec"` // "copy" oder "h264[-720|-1080][-sdr]" (siehe transcode.ParseVideo)
 	Subtitles  []Subtitle   `json:"subtitles"`
 	Audio      []AudioTrack `json:"audio"`
+	Notes      []string     `json:"notes,omitempty"` // Hinweise ohne Einfluss auf die Methode (z. B. WLAN bei 4K-Remux)
 }
+
+// Better meldet, ob a für den Zuschauer besser ist als b: erst die Ampel, dann weniger Umwandlung.
+func Better(a, b Plan) bool {
+	light := map[Light]int{Green: 2, Yellow: 1, Red: 0}
+	method := map[Method]int{DirectPlay: 3, DirectStream: 2, TranscodeAudio: 1, Transcode: 0}
+	if light[a.Light] != light[b.Light] {
+		return light[a.Light] > light[b.Light]
+	}
+	return method[a.Method] > method[b.Method]
+}
+
+// hdrCheck prüft HDR/Dolby Vision gegen den Bildschirm. toneMap: Das Bild muss nach SDR umgerechnet werden,
+// sonst erscheint es blass (HDR10/HLG auf SDR) oder grün-lila (DV Profil 5 ohne DV).
+func hdrCheck(v *probe.Stream, p Profile) (toneMap bool, reason string) {
+	if v == nil || v.HDR == "" || p.HDR == nil {
+		return false, ""
+	}
+	has := func(f string) bool { return slices.Contains(p.HDR, f) }
+	format := v.HDR
+	if format == "dv" {
+		switch {
+		case has("dv") && v.DVProfile != 7:
+			return false, ""
+		case v.DVCompat == 2: // SDR-Basisschicht
+			return false, ""
+		case v.DVCompat == 1 || v.DVCompat == 6 || v.DVProfile == 7: // 8.1, 7: HDR10-Basis
+			format, reason = "hdr10", "Dolby Vision Profil "+itoa(v.DVProfile)+" läuft als HDR10-Basisschicht"
+		case v.DVCompat == 4: // 8.4
+			format, reason = "hlg", "Dolby Vision läuft als HLG-Basisschicht"
+		default: // Profil 5: keine kompatible Basisschicht
+			return true, "Dolby Vision Profil 5 braucht ein Dolby-Vision-Gerät – wird nach SDR umgerechnet, Farben können abweichen"
+		}
+	}
+	if has(format) || format == "hdr10+" && has("hdr10") {
+		return false, reason
+	}
+	return true, "Gerät zeigt kein " + strings.ToUpper(format) + " – wird nach SDR umgerechnet (Tone-Mapping)"
+}
+
+func itoa(n int) string { return strconv.Itoa(n) }
 
 // In MPEG-TS-Segmenten sauber transportierbare Audio-Codecs.
 var tsAudio = []string{"aac", "ac3", "eac3", "mp3"}
@@ -98,10 +144,15 @@ func Decide(m *probe.Media, p Profile, speed float64) Plan {
 	plan := Plan{AudioIndex: -1, AudioCodec: "copy", VideoCodec: "copy"}
 
 	v := m.First("video")
-	videoOK := v != nil && slices.Contains(p.Video, VideoKey(v))
-	if v != nil && !videoOK {
+	codecOK := v != nil && slices.Contains(p.Video, VideoKey(v))
+	if v != nil && !codecOK {
 		plan.Reasons = append(plan.Reasons, "Video-Codec "+VideoKey(v)+" wird vom Gerät nicht unterstützt")
 	}
+	toneMap, hdrReason := hdrCheck(v, p)
+	if hdrReason != "" {
+		plan.Reasons = append(plan.Reasons, hdrReason)
+	}
+	videoOK := codecOK && !toneMap
 
 	a := chooseAudio(m, p)
 	// Eine andere als die Standard-Tonspur kann der native Player nicht zuverlässig wählen → Remux mit genau dieser Spur.
@@ -134,22 +185,47 @@ func Decide(m *probe.Media, p Profile, speed float64) Plan {
 		plan.Method, plan.Light = TranscodeAudio, Yellow
 		plan.AudioCodec = targetAudio(a, p)
 	default:
-		plan.Method, plan.Light, plan.VideoCodec = Transcode, Red, "h264"
-		switch need := requiredSpeed(v); {
+		plan.Method, plan.Light = Transcode, Red
+		// Jede umgewandelte HDR-Quelle wird tone-gemappt: H.264 8 bit trägt kein HDR.
+		sdr := v != nil && v.HDR != ""
+		need := requiredSpeed(v)
+		if sdr {
+			need *= toneMapCost
+		}
+		height := 0
+		if v != nil && v.Height > 1080 {
+			height = 1080 // 4K wird nie in 4K neu kodiert
+		}
+		switch {
 		case speed >= need:
 			plan.Light = Yellow
 		case v != nil && v.Height > 720 && speed >= need*reduce720:
-			plan.Light, plan.VideoCodec = Yellow, "h264-720"
+			plan.Light, height = Yellow, 720
 			plan.Reasons = append(plan.Reasons, "wird in 720p umgewandelt, damit nichts ruckelt")
 		default:
 			if v != nil && v.Height > 720 {
-				plan.VideoCodec = "h264-720" // bestmöglicher Versuch
+				height = 720 // bestmöglicher Versuch
 			}
-			plan.Reasons = append(plan.Reasons, "Server ist für Echtzeit-Transcoding zu langsam")
+			msg := "Server ist für Echtzeit-Transcoding zu langsam"
+			if sdr || v != nil && v.Height > 1080 {
+				msg += " – für 4K/HDR die Hintergrund-Optimierung nutzen"
+			}
+			plan.Reasons = append(plan.Reasons, msg)
+		}
+		plan.VideoCodec = "h264"
+		if height > 0 {
+			plan.VideoCodec += "-" + itoa(height)
+		}
+		if sdr {
+			plan.VideoCodec += "-sdr"
 		}
 		if a != nil && !(audioOK && slices.Contains(tsAudio, a.Codec)) {
 			plan.AudioCodec = targetAudio(a, p)
 		}
+	}
+
+	if (plan.Method == DirectPlay || plan.Method == DirectStream) && m.Bitrate > wifiLimit {
+		plan.Notes = append(plan.Notes, fmt.Sprintf("Sehr hohe Bitrate (%d Mbit/s): über WLAN kann es stocken – besser per Kabel oder mit Bitrate-Grenze", m.Bitrate/1_000_000))
 	}
 
 	for _, s := range m.All("subtitle") {
@@ -174,6 +250,13 @@ func Decide(m *probe.Media, p Profile, speed float64) Plan {
 // requiredSpeed: 1,5× Reserve bei 1080p, größere Quellen kosten beim Dekodieren proportional mehr.
 // reduce720: 720p-Encoding kostet grob die Hälfte von 1080p (Dekodieren der Quelle bleibt gleich teuer).
 const reduce720 = 0.5
+
+// toneMapCost: zscale+tonemap in Software kostet grob so viel wie das Encoding selbst.
+// ponytail: Schätzwert; mit tonemap_vaapi/opencl deutlich weniger – messen, wenn HW-Tone-Mapping kommt.
+const toneMapCost = 2.0
+
+// wifiLimit: darüber reicht WLAN oft nicht mehr zuverlässig (4K-Remux mit 80–120 Mbit/s).
+const wifiLimit = 80_000_000
 
 func requiredSpeed(v *probe.Stream) float64 {
 	f := 1.5

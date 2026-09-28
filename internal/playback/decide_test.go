@@ -1,6 +1,7 @@
 package playback
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/flimmer-media/flimmer/internal/probe"
@@ -113,7 +114,7 @@ func TestTranscodeLightFollowsServerSpeed(t *testing.T) {
 		{hd, 1.2, Yellow, "h264-720"}, // Pi 5 mit x264: 1080p würde ruckeln, 720p läuft
 		{hd, 3.3, Yellow, "h264"},     // VAAPI auf iGPU
 		{uhd, 3.3, Yellow, "h264-720"},
-		{uhd, 8, Yellow, "h264"},
+		{uhd, 8, Yellow, "h264-1080"}, // 4K wird nie in 4K neu kodiert
 	}
 	for _, tt := range tests {
 		got := Decide(tt.m, oldBrowser, tt.speed)
@@ -166,5 +167,71 @@ func TestTargetAudioOnlyWhatDeviceCan(t *testing.T) {
 	p.Audio = []string{"aac", "eac3"}
 	if got := Decide(m, p, 0); got.AudioCodec != "aac" {
 		t.Fatalf("Stereo mit AAC: got %s", got.AudioCodec)
+	}
+}
+
+func TestHDR(t *testing.T) {
+	const mkv = "matroska,webm"
+	hdr := func(kind string, dvProfile, dvCompat int) *probe.Media {
+		m := media(mkv, "hevc", "yuv420p10le", "eac3", 6)
+		v := &m.Streams[0]
+		v.Width, v.Height, v.HDR, v.DVProfile, v.DVCompat = 3840, 2160, kind, dvProfile, dvCompat
+		return m
+	}
+	lg := lgTV
+	lg.HDR = []string{"hdr10", "hlg", "dv"}
+	samsung := lgTV
+	samsung.HDR = []string{"hdr10", "hlg", "hdr10+"}
+	sdrTV := lgTV
+	sdrTV.HDR = []string{}
+	browser := Profile{Containers: []string{"mp4"}, Video: []string{"h264"}, Audio: []string{"aac"}, HDR: []string{}}
+
+	tests := []struct {
+		name   string
+		m      *probe.Media
+		p      Profile
+		speed  float64
+		method Method
+		video  string
+	}{
+		{"4K HDR10 auf LG → Direct Play", hdr("hdr10", 0, 0), lg, 0, DirectPlay, "copy"},
+		{"HDR10+ auf LG (nur HDR10) → Direct Play mit statischen Metadaten", hdr("hdr10+", 0, 0), lg, 0, DirectPlay, "copy"},
+		{"DV 8.1 auf Samsung → HDR10-Basisschicht, Direct Play", hdr("dv", 8, 1), samsung, 0, DirectPlay, "copy"},
+		{"DV 8.4 auf Samsung → HLG-Basisschicht", hdr("dv", 8, 4), samsung, 0, DirectPlay, "copy"},
+		{"DV 7 auf LG → HDR10-Basis statt Dual-Layer", hdr("dv", 7, 6), lg, 0, DirectPlay, "copy"},
+		{"DV 5 auf LG (DV-fähig) → Direct Play", hdr("dv", 5, 0), lg, 0, DirectPlay, "copy"},
+		{"DV 5 auf Samsung → Tone-Mapping Pflicht", hdr("dv", 5, 0), samsung, 20, Transcode, "h264-1080-sdr"},
+		{"HDR10 auf SDR-TV, schneller Server → 1080p SDR", hdr("hdr10", 0, 0), sdrTV, 20, Transcode, "h264-1080-sdr"},
+		{"HDR10 auf SDR-TV, NAS → 720p SDR, Rot", hdr("hdr10", 0, 0), sdrTV, 0.9, Transcode, "h264-720-sdr"},
+		{"HLG im SDR-Browser (braucht ohnehin H.264)", hdr("hlg", 0, 0), browser, 20, Transcode, "h264-1080-sdr"},
+		{"HDR10 bei unbekanntem Gerät (altes Profil) → wie bisher", hdr("hdr10", 0, 0), lgTV, 0, DirectPlay, "copy"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := Decide(tt.m, tt.p, tt.speed)
+			if got.Method != tt.method || got.VideoCodec != tt.video {
+				t.Fatalf("got %s video=%s (%v), want %s video=%s", got.Method, got.VideoCodec, got.Reasons, tt.method, tt.video)
+			}
+		})
+	}
+	if got := Decide(hdr("hdr10", 0, 0), sdrTV, 0.9); got.Light != Red || !strings.Contains(strings.Join(got.Reasons, " "), "Hintergrund-Optimierung") {
+		t.Errorf("NAS mit 4K-HDR muss ehrlich Rot mit Optimierungs-Hinweis sein: %s %v", got.Light, got.Reasons)
+	}
+}
+
+func TestWLANHinweis(t *testing.T) {
+	m := media("matroska", "hevc", "yuv420p10le", "eac3", 6)
+	m.Bitrate = 95_000_000
+	got := Decide(m, lgTV, 0)
+	if got.Method != DirectPlay || len(got.Notes) != 1 || !strings.Contains(got.Notes[0], "95 Mbit/s") {
+		t.Errorf("%s %v", got.Method, got.Notes)
+	}
+}
+
+func TestBetter(t *testing.T) {
+	red, yellow := Plan{Light: Red, Method: Transcode}, Plan{Light: Yellow, Method: Transcode}
+	direct, remux := Plan{Light: Green, Method: DirectPlay}, Plan{Light: Green, Method: DirectStream}
+	if !Better(yellow, red) || Better(red, yellow) || !Better(direct, remux) || Better(remux, remux) {
+		t.Error("Better")
 	}
 }
