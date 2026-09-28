@@ -60,7 +60,19 @@ func media(codec string) *probe.Media {
 		{Index: 1, Type: "audio", Codec: "aac", Channels: 2}}}
 }
 
+func fakeTransfer(t *testing.T, trc map[string]string) {
+	old := colorTransfer
+	colorTransfer = func(_ context.Context, path string) (string, error) {
+		if v, ok := trc[filepath.Base(path)]; ok {
+			return v, nil
+		}
+		return "", errors.New("ffprobe kaputt")
+	}
+	t.Cleanup(func() { colorTransfer = old })
+}
+
 func TestPendingAndLookup(t *testing.T) {
+	fakeTransfer(t, map[string]string{"a.mkv": "bt709"})
 	dir, lib := t.TempDir(), t.TempDir()
 	src := filepath.Join(lib, "a.mkv")
 	os.WriteFile(src, nil, 0o644)
@@ -101,6 +113,9 @@ func TestPendingAndLookup(t *testing.T) {
 	if o.Lookup("red", src) == "" {
 		t.Error("frische Version nicht gefunden")
 	}
+	if o.Status().SkipHDR != 0 {
+		t.Error("SDR als HDR gezählt")
+	}
 	o.failed["stale"] = "x"
 	if todo, _ := o.pending(context.Background()); len(todo) != 0 {
 		t.Errorf("gescheiterte/fertige Titel erneut: %v", todo)
@@ -131,6 +146,43 @@ func TestShouldStop(t *testing.T) {
 	busy.Store(false)
 	if err := o.shouldStop(now, 0, 100, now); !errors.Is(err, errWindow) {
 		t.Fatalf("Fenster: %v", err)
+	}
+}
+
+func TestSkipHDR(t *testing.T) {
+	fakeTransfer(t, map[string]string{"pq.mkv": "smpte2084", "hlg.mkv": "arib-std-b67", "sdr.mkv": "bt709", "leer.mkv": ""})
+	lib := t.TempDir()
+	var items []Item
+	for _, n := range []string{"pq.mkv", "hlg.mkv", "sdr.mkv", "leer.mkv", "kaputt.mkv"} {
+		os.WriteFile(filepath.Join(lib, n), nil, 0o644)
+		items = append(items, Item{ID: n, Path: filepath.Join(lib, n), Media: media("hevc")})
+	}
+	o := New(Options{Dir: t.TempDir(), MinFree: 1, Items: func(context.Context) ([]Item, error) { return items, nil },
+		Profiles: func(context.Context) []playback.Profile { return []playback.Profile{tv} }})
+	todo, _ := o.pending(context.Background())
+	var ids []string
+	for _, it := range todo {
+		ids = append(ids, it.ID)
+	}
+	if !slices.Equal(ids, []string{"sdr.mkv", "leer.mkv"}) || o.Status().SkipHDR != 3 {
+		t.Fatalf("pending = %v, SkipHDR = %d", ids, o.Status().SkipHDR)
+	}
+}
+
+// TestHDRProbe prüft die echte ffprobe-Abfrage an einem als PQ markierten Clip.
+func TestHDRProbe(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg fehlt")
+	}
+	src := filepath.Join(t.TempDir(), "pq.mkv")
+	out, err := exec.Command("ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=320x180:duration=1",
+		"-vf", "setparams=color_trc=smpte2084:color_primaries=bt2020:colorspace=bt2020nc", "-c:v", "libx264", src).CombinedOutput()
+	if err != nil {
+		t.Skipf("Testclip: %v %s", err, out)
+	}
+	o := New(Options{Dir: t.TempDir()})
+	if !o.isHDR(context.Background(), Item{ID: "pq", Path: src}) {
+		t.Fatal("PQ-Clip nicht als HDR erkannt")
 	}
 }
 

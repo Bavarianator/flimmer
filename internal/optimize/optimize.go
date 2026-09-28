@@ -52,6 +52,7 @@ type Status struct {
 	Current   *Job   `json:"current,omitempty"`
 	Done      int    `json:"done"`    // fertige Versionen
 	Pending   int    `json:"pending"` // Titel, die noch drankommen
+	SkipHDR   int    `json:"skipHdr"` // rote HDR-Titel, die ohne Tone-Mapping übersprungen werden
 	LastError string `json:"lastError,omitempty"`
 }
 
@@ -68,6 +69,7 @@ type Optimizer struct {
 	mu     sync.Mutex
 	st     Status
 	failed map[string]string // ID → Grund; ponytail: nur bis zum Neustart gemerkt, in die DB wenn das nervt
+	hdr    map[string]bool   // ID → HDR-Quelle (Cache für isHDR)
 }
 
 func New(opts Options) *Optimizer {
@@ -86,7 +88,7 @@ func New(opts Options) *Optimizer {
 	if opts.Busy == nil {
 		opts.Busy = func() bool { return false }
 	}
-	return &Optimizer{opts: opts, now: time.Now, failed: map[string]string{}}
+	return &Optimizer{opts: opts, now: time.Now, failed: map[string]string{}, hdr: map[string]bool{}}
 }
 
 // Lookup liefert die optimierte Version eines Titels oder "", wenn es keine (aktuelle) gibt.
@@ -181,14 +183,20 @@ func (o *Optimizer) pending(ctx context.Context) ([]Item, error) {
 	speed := o.opts.Speed()
 	known := map[string]bool{}
 	var todo []Item
+	skipHDR := 0
 	for _, it := range items {
 		known[it.ID] = true
 		if it.Media == nil || o.Lookup(it.ID, it.Path) != "" || o.failedReason(it.ID) != "" {
 			continue
 		}
-		if slices.ContainsFunc(profiles, func(p playback.Profile) bool { return playback.Decide(it.Media, p, speed).Light == playback.Red }) {
-			todo = append(todo, it)
+		if !slices.ContainsFunc(profiles, func(p playback.Profile) bool { return playback.Decide(it.Media, p, speed).Light == playback.Red }) {
+			continue
 		}
+		if o.isHDR(ctx, it) {
+			skipHDR++
+			continue
+		}
+		todo = append(todo, it)
 	}
 	entries, _ := os.ReadDir(o.opts.Dir)
 	done := 0
@@ -207,9 +215,35 @@ func (o *Optimizer) pending(ctx context.Context) ([]Item, error) {
 		done++
 	}
 	o.mu.Lock()
-	o.st.Done, o.st.Pending = done, len(todo)
+	o.st.Done, o.st.Pending, o.st.SkipHDR = done, len(todo), skipHDR
 	o.mu.Unlock()
 	return todo, nil
+}
+
+// isHDR: HDR-Quellen (PQ/HLG) werden übersprungen, bis transcode ein Tone-Mapping-Rezept hat –
+// sonst entstünden blasse SDR-Versionen, die als grün gälten. Im Zweifel (ffprobe scheitert) auch überspringen.
+func (o *Optimizer) isHDR(ctx context.Context, it Item) bool {
+	o.mu.Lock()
+	v, ok := o.hdr[it.ID]
+	o.mu.Unlock()
+	if ok {
+		return v
+	}
+	trc, err := colorTransfer(ctx, it.Path)
+	v = err != nil || trc == "smpte2084" || trc == "arib-std-b67"
+	if err == nil { // Fehler nicht cachen: Laufwerk kann kurz weg sein
+		o.mu.Lock()
+		o.hdr[it.ID] = v
+		o.mu.Unlock()
+	}
+	return v
+}
+
+// colorTransfer liest color_transfer des ersten Videostreams (in Tests austauschbar).
+var colorTransfer = func(ctx context.Context, path string) (string, error) {
+	out, err := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-select_streams", "v:0",
+		"-show_entries", "stream=color_transfer", "-of", "csv=p=0", path).Output()
+	return strings.TrimSpace(string(out)), err
 }
 
 func (o *Optimizer) failedReason(id string) string {
