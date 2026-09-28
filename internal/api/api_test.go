@@ -20,6 +20,7 @@ import (
 	"github.com/flimmer-media/flimmer/internal/optimize"
 	"github.com/flimmer-media/flimmer/internal/scan"
 	"github.com/flimmer-media/flimmer/internal/setup"
+	"github.com/flimmer-media/flimmer/internal/share"
 	"github.com/flimmer-media/flimmer/internal/transcode"
 )
 
@@ -43,6 +44,8 @@ func TestEndToEnd(t *testing.T) {
 	s := &Server{Lib: lib, HLS: transcode.NewManager(t.TempDir()), DB: store, CacheDir: data,
 		Web: fstest.MapFS{"index.html": {Data: []byte("ui")}}, Pages: setup.FS()}
 	s.FFmpeg.Store(true)
+	s.Share = share.New(share.Options{DB: store, BaseURL: func() (string, bool) { return "http://flimmer", false },
+		Login: s.GuestLogin, UserID: func(r *http.Request) string { return UserFrom(r).ID }})
 	srv := httptest.NewServer(s.Handler())
 	defer srv.Close()
 
@@ -178,6 +181,51 @@ func TestEndToEnd(t *testing.T) {
 	}
 	if lib.Get(id) == nil {
 		t.Fatal("Bibliothek nach Restore leer")
+	}
+
+	// Gast mit Einladung für einen anderen Titel: sieht nichts, kommt nicht an diesen Film, steht nicht in der
+	// Profilauswahl; nach dem Widerruf ist Schluss.
+	var inv struct {
+		URL    string              `json:"url"`
+		Invite struct{ ID string } `json:"invite"`
+	}
+	other := filepath.Join(media, "Anderer Film (2020).mkv")
+	if b, err := exec.Command("ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=size=160x120:rate=25:duration=2",
+		"-c:v", "libx264", other).CombinedOutput(); err != nil {
+		t.Fatalf("%v %s", err, b)
+	}
+	if err := lib.Scan(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	otherID := scan.ID(other)
+	res, b = call(browser, "POST", "/api/invites", map[string]any{"items": []string{otherID}, "hours": 24})
+	json.Unmarshal(b, &inv)
+	_, token, _ := strings.Cut(inv.URL, "#")
+	if res.StatusCode != 200 || token == "" {
+		t.Fatalf("Einladung: %d %s", res.StatusCode, b)
+	}
+	gjar, _ := cookiejar.New(nil)
+	guest := &http.Client{Jar: gjar}
+	if res, b := call(guest, "POST", "/api/invites/redeem", map[string]any{"token": token, "name": "Gast"}); res.StatusCode != 200 {
+		t.Fatalf("einlösen: %d %s", res.StatusCode, b)
+	}
+	if _, b := call(guest, "POST", "/api/library", map[string]any{}); !strings.Contains(string(b), otherID) || strings.Contains(string(b), id) {
+		t.Fatalf("Gast sieht falsche Bibliothek: %s", b)
+	}
+	if _, b := call(guest, "POST", "/api/home", map[string]any{}); strings.Contains(string(b), id) {
+		t.Fatalf("Gast sieht fremden Film auf der Startseite: %s", b)
+	}
+	if res, _ := call(guest, "POST", "/api/items/"+id+"/play", map[string]any{}); res.StatusCode != 404 {
+		t.Fatalf("Gast darf fremden Film abspielen: %d", res.StatusCode)
+	}
+	if _, b := call(anon, "GET", "/api/users", nil); strings.Contains(string(b), "Gast") {
+		t.Fatalf("Gast in der Profilauswahl: %s", b)
+	}
+	if res, _ := call(browser, "DELETE", "/api/invites/"+inv.Invite.ID, nil); res.StatusCode != 204 {
+		t.Fatalf("widerrufen: %d", res.StatusCode)
+	}
+	if res, _ := call(guest, "POST", "/api/library", map[string]any{}); res.StatusCode != 401 {
+		t.Fatalf("Gast nach Widerruf: %d", res.StatusCode)
 	}
 
 	// Falsches Passwort wird gedrosselt.

@@ -35,6 +35,7 @@ import (
 	"github.com/flimmer-media/flimmer/internal/scan"
 	"github.com/flimmer-media/flimmer/internal/service"
 	"github.com/flimmer-media/flimmer/internal/setup"
+	"github.com/flimmer-media/flimmer/internal/share"
 	"github.com/flimmer-media/flimmer/internal/transcode"
 	"github.com/flimmer-media/flimmer/internal/update"
 	"github.com/flimmer-media/flimmer/web"
@@ -175,6 +176,27 @@ func main() {
 			srv.RemoteToggle(true)
 		}
 	}
+	// Einladungen: Links zeigen auf die öffentliche Adresse, wenn der Fernzugriff läuft, sonst ins Heimnetz.
+	srv.Share = share.New(share.Options{
+		DB:   store,
+		Port: port,
+		BaseURL: func() (string, bool) {
+			if srv.Remote != nil {
+				if st := srv.Remote.Status(); st.Reachable && st.PublicURL != "" {
+					return st.PublicURL, true
+				}
+			}
+			return lanURL, false
+		},
+		Login: srv.GuestLogin,
+		UserID: func(r *http.Request) string {
+			if u := api.UserFrom(r); u != nil {
+				return u.ID
+			}
+			return ""
+		},
+	})
+	go srv.Share.Run(ctx)
 	go store.Nightly(ctx, filepath.Join(cfgDir, "backups"), 7)
 	go srv.Updates.Run(ctx, func() bool {
 		s, err := store.Settings(ctx)

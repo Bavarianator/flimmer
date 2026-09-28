@@ -76,7 +76,7 @@ func (s *Server) library(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	all := s.Lib.All()
+	all := visible(r, s.Lib.All())
 	w.Header().Set("X-Total-Count", strconv.Itoa(len(all)))
 	w.Header().Set("Access-Control-Expose-Headers", "X-Total-Count")
 	if q := r.URL.Query(); q.Has("limit") || q.Has("offset") {
@@ -107,7 +107,11 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	if writeErr(w, err) {
 		return
 	}
-	cont, next, recent := homeRows(s.Lib, prog)
+	var lib catalog = s.Lib
+	if scopeFrom(r) != nil {
+		lib = scopedLib{s.Lib, r}
+	}
+	cont, next, recent := homeRows(lib, prog)
 	rows := []homeRow{}
 	for _, row := range []homeRow{{ID: "continue", Title: "Weiterschauen"}, {ID: "nextup", Title: "Als Nächstes"}, {ID: "recent", Title: "Neu hinzugefügt"}} {
 		list := map[string][]*scan.Item{"continue": cont, "nextup": next, "recent": recent}[row.ID]

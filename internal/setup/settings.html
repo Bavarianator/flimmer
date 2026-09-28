@@ -85,6 +85,21 @@
     </section>
 
     <section class="card">
+      <h3>Einladungen</h3>
+      <p class="lead">Freunde oder Familie schauen mit – nur die Ordner, die du freigibst, und nur so lange, wie du willst.</p>
+      <label>Freigeben</label>
+      <div id="invDirs"></div>
+      <div class="inline" style="margin-top:8px">
+        <div style="flex:2"><label for="invNote">Für wen?</label><input id="invNote" maxlength="60" placeholder="z. B. Oma und Opa"></div>
+        <div style="flex:1"><label for="invDays">gültig</label><select id="invDays"><option value="24">1 Tag</option><option value="168" selected>7 Tage</option><option value="720">30 Tage</option><option value="8760">1 Jahr</option></select></div>
+      </div>
+      <div class="error" id="inverr"></div>
+      <div class="actions"><span></span><button class="primary" id="invCreate">Einladung erstellen</button></div>
+      <div class="row" id="invNew" hidden><img id="invQr" alt="" width="120" height="120" style="border-radius:8px;background:#fff"><div class="grow"><strong>Link zum Weitergeben</strong><small><code id="invUrl" style="word-break:break-all"></code></small><small id="invHint"></small><button class="small" id="invCopy" style="margin-top:6px">Link kopieren</button></div></div>
+      <div id="invList"></div>
+    </section>
+
+    <section class="card">
       <h3>Fernseher koppeln</h3>
       <p class="lead">Öffne Flimmer auf dem Fernseher und wähle „Mit Code anmelden“. Gib hier den angezeigten Code ein.</p>
       <div class="inline"><input id="code" inputmode="numeric" maxlength="6" placeholder="6-stelliger Code"><button class="primary" id="pair">Koppeln</button></div>
@@ -182,6 +197,7 @@ function load() {
     $('updateCard').hidden = !s.update;
     if (s.update) { $('updateText').textContent = 'Flimmer ' + s.update.version + ' ist erschienen (installiert: ' + s.version + ').'; $('updateLink').href = s.update.url }
     if (s.lanUrl) { $('lanRow').hidden = false; $('lan').textContent = s.lanUrl; $('qr').src = '/api/qr' }
+    renderInvDirs(s.dirs); loadInvites();
     loadUsers(); loadReview(); status(); loadDiag();
   }).catch(function () {});
 }
@@ -266,6 +282,46 @@ $('addUser').onclick = function () {
   api('POST', '/api/users', { name: $('nuName').value, password: $('nuPass').value, admin: $('nuAdmin').checked, color: Math.floor(Math.random() * 360) })
     .then(function () { $('nuName').value = $('nuPass').value = ''; $('nuAdmin').checked = false; toast('Hinzugefügt'); loadUsers() })
     .catch(err('uerr'));
+};
+
+// --- Einladungen ---
+function renderInvDirs(ds) {
+  $('invDirs').innerHTML = ds.map(function (d, i) {
+    return '<label style="display:flex;align-items:center;gap:8px;margin:4px 0;color:var(--text)"><input type="checkbox" style="width:auto" value="' + esc(d) + '"' + (i === 0 ? ' checked' : '') + '> <code>' + esc(d) + '</code></label>';
+  }).join('') || '<p class="hint">Erst einen Medienordner hinzufügen.</p>';
+}
+function loadInvites() {
+  api('GET', '/api/invites').then(function (list) {
+    $('invList').innerHTML = '';
+    (list || []).forEach(function (inv) {
+      var row = document.createElement('div'); row.className = 'row';
+      var left = inv.maxUses ? ' · ' + inv.uses + ' von ' + inv.maxUses + ' genutzt' : '';
+      row.innerHTML = '<div class="grow"><strong></strong><small></small></div><button class="small">Zurücknehmen</button>';
+      row.querySelector('strong').textContent = inv.note || 'Einladung';
+      row.querySelector('small').textContent = 'gültig bis ' + new Date(inv.expires).toLocaleDateString() + ' · ' + inv.guests + ' Gäste' + left;
+      row.querySelector('button').onclick = function () {
+        if (!confirm('Einladung zurücknehmen? Gäste dieser Einladung verlieren sofort den Zugang.')) return;
+        api('DELETE', '/api/invites/' + inv.id).then(function () { toast('Zurückgenommen'); loadInvites() }).catch(function (e) { toast(e.message) });
+      };
+      $('invList').appendChild(row);
+    });
+  }).catch(function () {});
+}
+$('invCreate').onclick = function () {
+  $('inverr').textContent = '';
+  var libs = Array.prototype.map.call(document.querySelectorAll('#invDirs input:checked'), function (c) { return c.value });
+  if (!libs.length) { $('inverr').textContent = 'Bitte mindestens einen Ordner freigeben.'; return }
+  api('POST', '/api/invites', { note: $('invNote').value, libraries: libs, hours: +$('invDays').value })
+    .then(function (r) {
+      $('invNew').hidden = false; $('invUrl').textContent = r.url; $('invHint').textContent = r.hint || '';
+      if (r.qr) $('invQr').src = r.qr;
+      $('invNote').value = ''; loadInvites();
+    }).catch(err('inverr'));
+};
+$('invCopy').onclick = function () {
+  var t = $('invUrl').textContent;
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(function () { toast('Link kopiert') });
+  else { var a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); document.execCommand('copy'); a.remove(); toast('Link kopiert') }
 };
 
 // --- Koppeln ---

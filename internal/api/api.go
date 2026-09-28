@@ -21,9 +21,11 @@ import (
 	"github.com/flimmer-media/flimmer/internal/images"
 	"github.com/flimmer-media/flimmer/internal/meta"
 	"github.com/flimmer-media/flimmer/internal/optimize"
+	"github.com/flimmer-media/flimmer/internal/party"
 	"github.com/flimmer-media/flimmer/internal/probe"
 	"github.com/flimmer-media/flimmer/internal/remote"
 	"github.com/flimmer-media/flimmer/internal/scan"
+	"github.com/flimmer-media/flimmer/internal/share"
 	"github.com/flimmer-media/flimmer/internal/transcode"
 	"github.com/flimmer-media/flimmer/internal/update"
 )
@@ -49,6 +51,8 @@ type Server struct {
 	HW           atomic.Pointer[hwaccel.Accel] // gesetzt, sobald hwaccel.Detect fertig ist
 
 	Optimizer atomic.Pointer[optimize.Optimizer] // gesetzt, sobald die Hardware gemessen ist
+	Share     *share.Share                       // Einladungen; nil = aus
+	party     *party.Hub
 
 	alt     altCache
 	pairing auth.Pairing
@@ -91,6 +95,35 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/settings/review", adminOnly(s.review))
 	mux.HandleFunc("POST /api/rescan", adminOnly(s.rescan))
 	mux.HandleFunc("GET /api/diagnostics", adminOnly(s.diagnostics))
+
+	// Gemeinsam schauen: Uhrenabgleich, Räume, SSE; jeder holt seinen Plan über die normale play-Route.
+	s.party = &party.Hub{
+		User: func(r *http.Request) (string, string, bool) {
+			u := userFrom(r)
+			if u == nil {
+				return "", "", false
+			}
+			return u.ID, u.Name, true
+		},
+		Allowed: func(r *http.Request, mediaID string) bool {
+			it := s.Lib.Get(mediaID)
+			return it != nil && allowed(r, it)
+		},
+		EventsURL: func(r *http.Request, id string) string {
+			return "/api/m/" + auth.MediaToken(s.secret(), userFrom(r).ID, mediaTTL) + "/party/" + id + "/events"
+		},
+	}
+	mux.HandleFunc("GET /api/time", party.Time)
+	mux.HandleFunc("POST /api/party", s.party.Create)
+	mux.HandleFunc("GET /api/party/{id}", s.party.Get)
+	mux.HandleFunc("GET /api/party/{id}/events", s.party.Events)
+	mux.HandleFunc("POST /api/party/{id}/actions", s.party.Action)
+	if s.Share != nil {
+		mux.HandleFunc("POST /api/invites", adminOnly(s.Share.CreateHandler))
+		mux.HandleFunc("GET /api/invites", adminOnly(s.Share.ListHandler))
+		mux.HandleFunc("DELETE /api/invites/{id}", adminOnly(s.Share.RevokeHandler))
+		mux.HandleFunc("POST /api/invites/redeem", s.Share.RedeemHandler) // ohne Anmeldung, eigenes Rate-Limit
+	}
 	mux.HandleFunc("GET /api/settings/optimize", adminOnly(s.optimizeStatus))
 	mux.HandleFunc("GET /api/settings/backup", adminOnly(s.backupDownload))
 	mux.HandleFunc("POST /api/settings/restore", adminOnly(s.restore))
@@ -333,10 +366,13 @@ func (s *Server) rescan(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 }
 
+// item liefert den Titel der Anfrage – für Gäste nur, wenn ihre Einladung ihn erlaubt (sonst 404).
+// Alle Titel-Routen (play, file, hls, subs, progress, watched) gehen hier durch.
 func (s *Server) item(w http.ResponseWriter, r *http.Request) *scan.Item {
 	it := s.Lib.Get(r.PathValue("id"))
-	if it == nil {
+	if it == nil || !allowed(r, it) {
 		http.NotFound(w, r)
+		return nil
 	}
 	return it
 }

@@ -26,6 +26,9 @@ const (
 type ctxKey struct{}
 
 // userFrom liefert den angemeldeten Benutzer (Kopie) oder nil.
+// UserFrom liefert den angemeldeten Benutzer einer Anfrage (für Pakete, die Handler bereitstellen).
+func UserFrom(r *http.Request) *db.User { return userFrom(r) }
+
 func userFrom(r *http.Request) *db.User {
 	u, _ := r.Context().Value(ctxKey{}).(*db.User)
 	return u
@@ -33,17 +36,18 @@ func userFrom(r *http.Request) *db.User {
 
 // Ohne Anmeldung erreichbar. Alles andere unter /api/ braucht Session, Bearer-Token oder Medien-Token.
 var public = map[string]bool{
-	"GET /api/status":        true,
-	"GET /api/users":         true,
-	"POST /api/login":        true,
-	"POST /api/logout":       true,
-	"POST /api/pair":         true,
-	"GET /api/remote/ping":   true, // Erreichbarkeitstest des Relays
-	"GET /api/setup":         true, // Setup-Routen prüfen selbst: offen nur, solange kein Admin existiert
-	"GET /api/setup/dirs":    true,
-	"GET /api/setup/count":   true,
-	"POST /api/setup":        true,
-	"POST /api/setup/ffmpeg": true,
+	"GET /api/status":          true,
+	"GET /api/users":           true,
+	"POST /api/login":          true,
+	"POST /api/logout":         true,
+	"POST /api/pair":           true,
+	"GET /api/remote/ping":     true, // Erreichbarkeitstest des Relays
+	"POST /api/invites/redeem": true, // Einladung einlösen legt erst den Gast an
+	"GET /api/setup":           true, // Setup-Routen prüfen selbst: offen nur, solange kein Admin existiert
+	"GET /api/setup/dirs":      true,
+	"GET /api/setup/count":     true,
+	"POST /api/setup":          true,
+	"POST /api/setup/ffmpeg":   true,
 }
 
 // authenticate hängt den Benutzer an den Request. Medien-URLs tragen das Token im Pfad
@@ -55,18 +59,28 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			tok, path, _ := strings.Cut(rest, "/")
 			uid, ok := auth.CheckMediaToken(s.secret(), tok)
 			u := s.user(r.Context(), uid)
-			if !ok || u == nil || r.Method != http.MethodGet || !strings.HasPrefix(path, "items/") {
+			// Medien-Token gilt nur lesend für Titel und die Ereignisse eines Raums (EventSource auf TVs).
+			media := strings.HasPrefix(path, "items/") || (strings.HasPrefix(path, "party/") && strings.HasSuffix(path, "/events"))
+			if !ok || u == nil || r.Method != http.MethodGet || !media {
 				http.Error(w, "Link abgelaufen – bitte neu starten", http.StatusUnauthorized)
 				return
 			}
-			r2 := r.WithContext(context.WithValue(r.Context(), ctxKey{}, u))
+			r2, ok := s.withScope(r.WithContext(context.WithValue(r.Context(), ctxKey{}, u)), u)
+			if !ok {
+				http.Error(w, "Link abgelaufen – bitte neu starten", http.StatusUnauthorized)
+				return
+			}
 			r2.URL.Path = "/api/" + path
 			r2.URL.RawPath = ""
 			next.ServeHTTP(w, r2)
 			return
 		}
 		if u := s.sessionUser(r); u != nil {
-			r = r.WithContext(context.WithValue(r.Context(), ctxKey{}, u))
+			var ok bool
+			if r, ok = s.withScope(r.WithContext(context.WithValue(r.Context(), ctxKey{}, u)), u); !ok {
+				http.Error(w, "Die Einladung ist abgelaufen oder wurde zurückgenommen.", http.StatusUnauthorized)
+				return
+			}
 		}
 		// GET /api/pair/{code} pollt der TV vor der Anmeldung.
 		isPoll := r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/pair/") && strings.Count(r.URL.Path, "/") == 3
@@ -152,7 +166,9 @@ func (s *Server) users(w http.ResponseWriter, r *http.Request) {
 	}
 	out := []publicUser{}
 	for _, u := range all {
-		out = append(out, toPublic(u))
+		if !s.isGuest(r.Context(), u.ID) { // Gäste nicht in der Profilauswahl – sonst könnte sie jeder im LAN anklicken
+			out = append(out, toPublic(u))
+		}
 	}
 	writeJSON(w, out)
 }
@@ -199,7 +215,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	ok := u != nil && ((u.PassHash == "" && !u.Admin && inLAN(r)) || (u.PassHash != "" && auth.CheckPassword(u.PassHash, req.Password)))
+	ok := u != nil && ((u.PassHash == "" && !u.Admin && inLAN(r) && !s.isGuest(r.Context(), u.ID)) || (u.PassHash != "" && auth.CheckPassword(u.PassHash, req.Password)))
 	if !ok {
 		s.limiter.Fail(ip)
 		http.Error(w, "Name oder Passwort falsch", http.StatusUnauthorized)
