@@ -69,12 +69,26 @@ func (s *Server) items(r *http.Request, p playback.Profile, list []*scan.Item) [
 	return out
 }
 
-// library gibt alle Titel mit Ampel für genau das anfragende Gerät zurück.
+// library gibt die Titel mit Ampel für genau das anfragende Gerät zurück.
+// Mit ?offset=&limit= seitenweise (X-Total-Count nennt die Gesamtzahl), ohne Parameter alles.
 func (s *Server) library(w http.ResponseWriter, r *http.Request) {
 	p, ok := readProfile(w, r)
-	if ok {
-		writeJSON(w, s.items(r, p, s.Lib.All()))
+	if !ok {
+		return
 	}
+	all := s.Lib.All()
+	w.Header().Set("X-Total-Count", strconv.Itoa(len(all)))
+	w.Header().Set("Access-Control-Expose-Headers", "X-Total-Count")
+	if q := r.URL.Query(); q.Has("limit") || q.Has("offset") {
+		offset, _ := strconv.Atoi(q.Get("offset"))
+		limit, err := strconv.Atoi(q.Get("limit"))
+		if err != nil || limit <= 0 || limit > 1000 {
+			limit = 100
+		}
+		offset = min(max(offset, 0), len(all))
+		all = all[offset:min(offset+limit, len(all))]
+	}
+	writeJSON(w, s.items(r, p, all))
 }
 
 type homeRow struct {
@@ -93,7 +107,7 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	if writeErr(w, err) {
 		return
 	}
-	cont, next, recent := homeRows(s.Lib.All(), prog)
+	cont, next, recent := homeRows(s.Lib, prog)
 	rows := []homeRow{}
 	for _, row := range []homeRow{{ID: "continue", Title: "Weiterschauen"}, {ID: "nextup", Title: "Als Nächstes"}, {ID: "recent", Title: "Neu hinzugefügt"}} {
 		list := map[string][]*scan.Item{"continue": cont, "nextup": next, "recent": recent}[row.ID]
@@ -107,43 +121,61 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 
 const rowMax = 20
 
-// homeRows ist rein (ohne Server), damit die Regeln testbar sind. all ist nach Serie/Staffel/Episode sortiert.
-func homeRows(all []*scan.Item, prog map[string]db.Progress) (cont, next, recent []*scan.Item) {
+// catalog ist der Teil der Bibliothek, den homeRows braucht (im Test ohne Scan nachbaubar).
+type catalog interface {
+	Get(id string) *scan.Item
+	Episodes(series string) []*scan.Item // sortiert nach Staffel/Episode
+	Newest() []*scan.Item
+}
+
+// homeRows ist rein (ohne Server), damit die Regeln testbar sind. Kosten wachsen mit dem Fortschritt
+// des Benutzers, nicht mit der Bibliotheksgröße.
+func homeRows(lib catalog, prog map[string]db.Progress) (cont, next, recent []*scan.Item) {
 	type hit struct {
 		it *scan.Item
 		t  time.Time
 	}
 	var c, n []hit
 	busy := map[string]bool{} // Serien mit angefangener Episode stehen schon unter „Weiterschauen“
-	for _, it := range all {
-		if pr := prog[it.ID]; pr.Pos > 0 && !pr.Watched {
+	last := map[string]*scan.Item{}
+	lastT := map[string]time.Time{}
+	for id, pr := range prog {
+		it := lib.Get(id)
+		if it == nil {
+			continue // Datei gerade nicht da (NAS aus) oder gelöscht
+		}
+		if pr.Pos > 0 && !pr.Watched {
 			c = append(c, hit{it, pr.Updated})
 			busy[it.Series] = it.Series != ""
 		}
-	}
-	// Als Nächstes: pro Serie die Episode nach der zuletzt gesehenen.
-	last := map[string]int{}
-	lastT := map[string]time.Time{}
-	for i, it := range all {
-		if pr := prog[it.ID]; it.Series != "" && pr.Watched && pr.Updated.After(lastT[it.Series]) {
-			last[it.Series], lastT[it.Series] = i, pr.Updated
+		if it.Series != "" && pr.Watched && pr.Updated.After(lastT[it.Series]) {
+			last[it.Series], lastT[it.Series] = it, pr.Updated
 		}
 	}
-	for series, i := range last {
+	// Als Nächstes: pro Serie die erste ungesehene Episode nach der zuletzt gesehenen.
+	for series, lastEp := range last {
 		if busy[series] {
 			continue
 		}
-		for _, it := range all[i+1:] {
-			if it.Series != series {
-				break
+		eps := lib.Episodes(series)
+		after := false
+		for _, it := range eps {
+			if it == lastEp {
+				after = true
+				continue
 			}
-			if !prog[it.ID].Watched {
+			if after && !prog[it.ID].Watched {
 				n = append(n, hit{it, lastT[series]})
 				break
 			}
 		}
 	}
-	byTime := func(a, b hit) int { return b.t.Compare(a.t) }
+	byTime := func(a, b hit) int {
+		if c := b.t.Compare(a.t); c != 0 {
+			return c
+		}
+		return strings.Compare(a.it.ID, b.it.ID) // stabil trotz zufälliger Map-Reihenfolge
+	}
 	slices.SortFunc(c, byTime)
 	slices.SortFunc(n, byTime)
 	for _, h := range c[:min(len(c), rowMax)] {
@@ -154,10 +186,8 @@ func homeRows(all []*scan.Item, prog map[string]db.Progress) (cont, next, recent
 	}
 
 	// Neu hinzugefügt: jüngste Dateien, pro Serie nur einmal.
-	byAdded := slices.Clone(all)
-	slices.SortStableFunc(byAdded, func(a, b *scan.Item) int { return b.Added.Compare(a.Added) })
 	seen := map[string]bool{}
-	for _, it := range byAdded {
+	for _, it := range lib.Newest() {
 		if len(recent) == rowMax {
 			break
 		}

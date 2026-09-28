@@ -99,6 +99,9 @@ type Library struct {
 
 	mu       sync.RWMutex
 	items    map[string]*Item
+	sorted   []*Item            // Cache für All(), nil = neu sortieren
+	byAdded  []*Item            // Cache für Newest()
+	series   map[string][]*Item // Cache für Episodes()
 	metas    map[string]*meta.Meta
 	metaErr  map[string]bool // Netzfehler bei TMDB → nächster Lauf versucht es erneut
 	colors   map[string]string
@@ -127,7 +130,7 @@ func (l *Library) Load(ctx context.Context) error {
 		items[it.ID] = it
 	}
 	l.mu.Lock()
-	l.items = items
+	l.items, l.sorted, l.byAdded, l.series = items, nil, nil, nil
 	l.metas, l.colors, l.metaErr, l.kf = nil, nil, nil, nil // nach einem Restore neu auflösen
 	l.mu.Unlock()
 	return nil
@@ -194,22 +197,84 @@ func (l *Library) Get(id string) *Item {
 	return l.items[id]
 }
 
+// Episodes liefert die Folgen einer Serie nach Staffel/Episode (zwischengespeichert; nicht verändern).
+func (l *Library) Episodes(series string) []*Item {
+	all := l.All()
+	l.mu.RLock()
+	m := l.series
+	l.mu.RUnlock()
+	if m == nil {
+		m = map[string][]*Item{}
+		for _, it := range all {
+			if it.Series != "" {
+				m[it.Series] = append(m[it.Series], it)
+			}
+		}
+		l.mu.Lock()
+		if l.series == nil {
+			l.series = m
+		}
+		l.mu.Unlock()
+	}
+	return m[series]
+}
+
+// Newest liefert alle Titel, neueste zuerst (zwischengespeichert wie All; nicht verändern).
+func (l *Library) Newest() []*Item {
+	all := l.All()
+	l.mu.RLock()
+	out := l.byAdded
+	l.mu.RUnlock()
+	if out != nil {
+		return out
+	}
+	out = slices.Clone(all)
+	slices.SortStableFunc(out, func(a, b *Item) int { return b.Added.Compare(a.Added) })
+	l.mu.Lock()
+	if l.byAdded == nil {
+		l.byAdded = out
+	}
+	l.mu.Unlock()
+	return out
+}
+
+// All liefert alle Titel sortiert (Serie, Staffel, Episode bzw. Titel). Die Liste wird zwischengespeichert,
+// bis sich der Katalog ändert – bei 50 000 Titeln kostet das Sortieren sonst jede Anfrage ~1 s.
+// Aufrufer dürfen die Liste nicht verändern.
 func (l *Library) All() []*Item {
 	l.mu.RLock()
-	defer l.mu.RUnlock()
-	out := make([]*Item, 0, len(l.items))
-	for _, it := range l.items {
-		out = append(out, it)
+	out := l.sorted
+	l.mu.RUnlock()
+	if out != nil {
+		return out
 	}
-	slices.SortFunc(out, func(a, b *Item) int {
-		if c := strings.Compare(a.Series+a.Title, b.Series+b.Title); a.Series != b.Series || a.Series == "" {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.sorted != nil {
+		return l.sorted
+	}
+	type keyed struct {
+		key string
+		it  *Item
+	}
+	ks := make([]keyed, 0, len(l.items))
+	for _, it := range l.items {
+		ks = append(ks, keyed{it.Series + it.Title, it})
+	}
+	slices.SortFunc(ks, func(a, b keyed) int {
+		if c := strings.Compare(a.key, b.key); a.it.Series != b.it.Series || a.it.Series == "" {
 			return c
 		}
-		if a.Season != b.Season {
-			return a.Season - b.Season
+		if a.it.Season != b.it.Season {
+			return a.it.Season - b.it.Season
 		}
-		return a.Episode - b.Episode
+		return a.it.Episode - b.it.Episode
 	})
+	out = make([]*Item, len(ks))
+	for i, k := range ks {
+		out[i] = k.it
+	}
+	l.sorted = out
 	return out
 }
 
@@ -277,7 +342,7 @@ func (l *Library) Scan(ctx context.Context) error {
 			}
 			items[it.ID] = it
 			l.mu.Lock()
-			l.items[it.ID] = it
+			l.items[it.ID], l.sorted, l.byAdded, l.series = it, nil, nil, nil
 			l.mu.Unlock()
 			l.found.Add(1)
 			return ctx.Err()
@@ -302,7 +367,7 @@ func (l *Library) Scan(ctx context.Context) error {
 		return err
 	}
 	l.mu.Lock()
-	l.items = items
+	l.items, l.sorted, l.byAdded, l.series = items, nil, nil, nil
 	l.kf = nil // Dateien können sich geändert haben
 	l.mu.Unlock()
 	return nil

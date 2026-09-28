@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -167,13 +168,40 @@ func TestEndToEnd(t *testing.T) {
 	}
 }
 
+type fakeLib []*scan.Item
+
+func (f fakeLib) Get(id string) *scan.Item {
+	for _, it := range f {
+		if it.ID == id {
+			return it
+		}
+	}
+	return nil
+}
+
+func (f fakeLib) Episodes(series string) (out []*scan.Item) {
+	for _, it := range f {
+		if it.Series == series {
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
+func (f fakeLib) Newest() []*scan.Item {
+	out := slices.Clone(f)
+	slices.SortStableFunc(out, func(a, b *scan.Item) int { return b.Added.Compare(a.Added) })
+	return out
+}
+
 func TestHomeRows(t *testing.T) {
 	now := time.Now()
 	ep := func(id string, e int) *scan.Item { return &scan.Item{ID: id, Series: "Dark", Season: 1, Episode: e} }
-	all := []*scan.Item{ep("e1", 1), ep("e2", 2), ep("e3", 3), {ID: "film", Title: "Heat", Added: now}}
+	all := fakeLib{ep("e1", 1), ep("e2", 2), ep("e3", 3), {ID: "film", Title: "Heat", Added: now}}
 	prog := map[string]db.Progress{
 		"e1":   {Watched: true, Updated: now.Add(-time.Hour)},
 		"film": {Pos: 600, Updated: now},
+		"weg":  {Pos: 100, Updated: now}, // Datei nicht mehr da
 	}
 	cont, next, recent := homeRows(all, prog)
 	if len(cont) != 1 || cont[0].ID != "film" || len(next) != 1 || next[0].ID != "e2" || len(recent) != 2 || recent[0].ID != "film" {
