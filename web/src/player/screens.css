@@ -1,0 +1,131 @@
+/* Lage und Kleinteile der Screens von ui-player. Die Bausteine selbst (.fl-avatar, .fl-pin, .fl-code, .fl-tasten,
+   .fl-zeile, .fl-gruppe, .fl-feld, .fl-schalter, .fl-messwert, .fl-toast) kommen aus design/komponenten.css.
+   Chromium 53: Flexbox mit margin, kein Grid/gap; nur transform/opacity animiert. */
+
+/* --- Bildschirmtastatur --- */
+.tastatur { width: 720px; max-width: 100%; }
+.tastatur-ziffern { width: 216px; }
+html.tv .tastatur-ziffern { width: 232px; }
+html.dt .fl-taste:hover { background: var(--flaeche-3); }
+
+/* --- Eingabefelder (roh) --- */
+.feld { background: var(--flaeche-1); border: 0; box-shadow: inset 0 0 0 1px var(--linie-stark); border-radius: var(--radius-s); padding: 0 var(--abstand-4); height: 52px; color: var(--text); font: var(--t-text); max-width: 100%; }
+html.tv .feld { height: 80px; }
+html.hd .feld { height: var(--ziel-touch); font-size: 16px; }
+.feld:focus { box-shadow: inset 0 0 0 1px var(--text), 0 0 0 2px var(--fokus-innen), 0 0 0 4px var(--marke); }
+.fl-feld input { height: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit; -webkit-appearance: none; min-width: 0; }
+
+/* --- Kopf ohne Navigation (Profilauswahl, PIN, Kopplung) --- */
+.login-kopf { padding-top: var(--abstand-6); }
+html.tv .login-kopf { padding-top: var(--tv-rand-oben); }
+html.hd .login-kopf { padding-top: var(--abstand-4); }
+
+/* --- Profilauswahl (screens/01) --- */
+.profile { padding-top: 96px; text-align: center; }
+html.tv .profile { padding-top: 120px; }
+html.hd .profile { padding-top: 48px; }
+.profile h1 { margin-bottom: var(--abstand-8); }
+html.hd .profile h1 { margin-bottom: var(--abstand-6); }
+.profile .fl-avatar .zusatz .icon { width: 20px; height: 20px; }
+html.tv .profile .fl-avatar .zusatz .icon { width: 28px; height: 28px; }
+html.hd .fl-avatar { width: 96px; margin: 0 8px 16px; }
+html.hd .fl-avatar .kachel { width: 96px; height: 96px; line-height: 104px; font-size: 56px; }
+.login-koppeln { position: fixed; left: 0; right: 0; bottom: var(--tv-rand-oben); }
+.login-koppeln-innen { padding: 24px 32px; background: var(--flaeche-1); border-radius: var(--radius-s); }
+.login-koppeln-text { margin: 0 32px; }
+.login-koppeln .kopplung-qr { width: 160px; height: 160px; }
+.login-koppeln .fl-code { font-size: 64px; line-height: 72px; }
+
+/* --- PIN (screens/02) --- */
+.pin { padding-top: 96px; text-align: center; }
+html.tv .pin { padding-top: 72px; }
+html.hd .pin { padding-top: 48px; }
+.pin h1 { margin-bottom: var(--abstand-7); }
+.pin-felder { min-height: 68px; }
+.pin-text { font: var(--t-code); letter-spacing: var(--t-code-ls); }
+.pin-block { display: inline-block; margin-top: var(--abstand-7); text-align: left; }
+.pin-fehler { margin-top: var(--abstand-4); }
+.pin-form { display: inline-block; text-align: left; width: 420px; max-width: 100%; }
+.pin-form .feld { width: 100%; }
+.pin-aktionen { margin-top: var(--abstand-5); -webkit-justify-content: center; justify-content: center; }
+.pin-form .pin-aktionen { -webkit-justify-content: flex-start; justify-content: flex-start; }
+.pin-text-absatz { margin: 0 auto var(--abstand-5); max-width: 32em; }
+
+/* --- Kopplung (screens/16) --- */
+.kopplung-code-gross { font-size: 96px; line-height: 104px; letter-spacing: 8px; }
+.kopplung-qr { width: 240px; height: 240px; padding: 10px; background: #ece7dd; border-radius: var(--radius-s); -webkit-flex: 0 0 auto; flex: 0 0 auto; }
+.koppeln-seite { padding-top: 140px; }
+html.hd .koppeln-seite { padding-top: 72px; }
+.koppeln-karte { width: 540px; max-width: 100%; margin: 0 auto; padding: 40px; background: var(--flaeche-1); border-radius: var(--radius-s); }
+html.hd .koppeln-karte { width: auto; padding: 0; background: none; }
+.koppeln-absatz { margin: var(--abstand-2) 0 var(--abstand-5); }
+.koppeln-eingabe { width: 100%; height: 72px; font: 500 40px/72px var(--schrift-mono); letter-spacing: 8px; text-align: center; }
+.toast-inline { margin-top: var(--abstand-5); padding: var(--abstand-3) var(--abstand-4); background: var(--flaeche-2); border-radius: var(--radius-s); }
+.toast-inline .icon { margin-right: var(--abstand-3); color: var(--ampel-gruen); }
+.koppeln-tv-inhalt { padding-top: 120px; text-align: center; }
+.koppeln-tv-unter { margin: var(--abstand-3) 0 56px; }
+.koppeln-tv-reihe { -webkit-justify-content: center; justify-content: center; -webkit-align-items: flex-start; align-items: flex-start; }
+.koppeln-schritte { list-style: none; margin: 0 96px 0 0; padding: 0; width: 560px; text-align: left; }
+.koppeln-schritte li { -webkit-align-items: flex-start; align-items: flex-start; margin-bottom: 28px; }
+.koppeln-nr { width: 48px; height: 48px; line-height: 48px; margin-right: 20px; text-align: center; background: var(--flaeche-2); border-radius: var(--radius-s); -webkit-flex: 0 0 auto; flex: 0 0 auto; }
+.koppeln-tv-code { margin-right: 96px; }
+.koppeln-ablauf { width: 420px; height: 2px; margin: 28px auto 12px; background: var(--linie); overflow: hidden; }
+.koppeln-ablauf i { display: block; width: 100%; height: 100%; background: var(--text-2); -webkit-transform-origin: 0 0; transform-origin: 0 0; }
+.koppeln-tv-fuss { position: fixed; left: 0; right: 0; bottom: var(--tv-rand-oben); text-align: center; }
+
+/* --- Suche (screens/07) --- */
+.suche { padding-top: 104px; }
+html.tv .suche { padding-top: 140px; }
+html.hd .suche { padding-top: 72px; }
+html.tv .suche-seite { -webkit-align-items: flex-start; align-items: flex-start; }
+html.dt .suche-seite, html.hd .suche-seite { display: block; }
+.suche-links { width: 720px; max-width: 100%; margin-right: 184px; -webkit-flex: 0 0 auto; flex: 0 0 auto; }
+html.dt .suche-links, html.hd .suche-links { margin-right: 0; }
+.suche-wert { margin-bottom: 28px; }
+.suche-wert-leer span { color: var(--text-3); }
+.suche-feld { height: 60px; font-size: 20px; margin-bottom: var(--abstand-4); }
+html.hd .suche-feld { height: var(--ziel-touch); font-size: 16px; }
+.suche-feld input { margin-left: var(--abstand-3); }
+.suche-filter { margin-bottom: var(--abstand-4); }
+.suche-info { margin: 10px 0 24px; }
+.suche-tv-hinweis { margin-top: 20px; }
+.suche-treffer .raster { padding-left: 0; padding-right: 0; }
+
+/* --- Einstellungen (screens/14) --- */
+.einst { padding-top: 104px; }
+html.tv .einst { padding-top: 140px; }
+html.hd .einst { padding-top: 72px; }
+.einst-seite { -webkit-align-items: flex-start; align-items: flex-start; }
+html.hd .einst-seite { display: block; }
+.einst-nav { width: 260px; margin-right: 56px; -webkit-flex: 0 0 auto; flex: 0 0 auto; }
+html.tv .einst-nav { width: 460px; margin-right: 184px; }
+html.hd .einst-nav { width: auto; margin: 0 0 var(--abstand-5); }
+.einst-titel { margin-bottom: 24px; }
+.einst-punkt { display: -webkit-flex; display: flex; width: 100%; padding: 10px 14px; margin-bottom: 2px; border-radius: var(--radius-s); font-weight: 700; font-size: 15px; color: var(--text-2); text-align: left; }
+.einst-punkt .icon { margin-right: 8px; }
+html.tv .einst-punkt { min-height: 72px; padding: 0 20px; margin-bottom: 6px; font-size: 28px; }
+html.tv .einst-punkt .icon { width: 32px; height: 32px; margin-right: 20px; }
+.einst-punkt-aktiv { background: var(--flaeche-2); color: var(--text); }
+.einst-punkt.ist-fokus { box-shadow: 0 0 0 2px var(--fokus-innen), 0 0 0 4px var(--marke); color: var(--text); -webkit-transform: none; transform: none; }
+html.dt .einst-punkt:hover { color: var(--text); }
+html.hd .einst-nav .einst-punkt { display: inline-block; width: auto; margin-right: var(--abstand-2); }
+.einst-inhalt { max-width: 820px; }
+html.tv .einst-inhalt { max-width: none; }
+.einst-bereich-titel { margin: 8px 0 28px; }
+.einst-zeile-knopf { width: 100%; text-align: left; color: var(--text); }
+.einst-absatz { margin: 4px 0 12px; }
+.einst-knoepfe .fl-btn { margin-left: var(--abstand-3); }
+.einst-unterform { padding: 0 0 var(--abstand-4) 40px; }
+.einst-feld { width: 280px; margin: 0 12px 12px 0; }
+.einst-feld-breit { width: 460px; }
+html.tv .einst-feld { width: 360px; }
+.fl-gruppe .fl-chip, .fl-gruppe > .fl-btn { margin-top: var(--abstand-2); }
+.einst-messwerte { display: block; border-top: 0; }
+.einst-link { word-break: break-all; margin: 4px 0; }
+.einst-einladung { margin-top: var(--abstand-4); }
+.einladung-qr { width: 180px; height: 180px; background: #ece7dd; padding: 8px; margin-right: var(--abstand-5); -webkit-flex: 0 0 auto; flex: 0 0 auto; }
+.wert { font-family: var(--schrift-mono); }
+.protokoll { font: 400 13px/18px var(--schrift-mono); color: var(--text-2); background: var(--flaeche-1); padding: var(--abstand-4); border-radius: var(--radius-s); max-height: 420px; overflow: auto; white-space: pre-wrap; word-break: break-all; margin: 0 0 12px; }
+html.tv .protokoll { font-size: 24px; line-height: 32px; }
+.einst-toast { position: fixed; left: 50%; bottom: var(--abstand-7); z-index: 20; -webkit-transform: translateX(-50%); transform: translateX(-50%); box-shadow: var(--schatten-overlay); }
+html.hd .einst-toast { bottom: 96px; }
