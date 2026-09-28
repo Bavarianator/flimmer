@@ -13,7 +13,7 @@ import { Filme } from './screens/Filme'
 import { Serien } from './screens/Serien'
 import { DetailFilm } from './screens/DetailFilm'
 import { DetailSerie } from './screens/DetailSerie'
-import { Login } from './screens/Login'
+import { Einladung, Login } from './screens/Login'
 import { Profile } from './screens/Profile'
 
 starteFokus()
@@ -87,4 +87,5 @@ function App() {
   return <Start />
 }
 
-render(<App />, document.getElementById('app')!)
+// Einladungslinks: /einladung#<token> – das Fragment ist der Token, kein Hash-Pfad.
+render(location.pathname === '/einladung' ? <Einladung /> : <App />, document.getElementById('app')!)

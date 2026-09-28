@@ -85,6 +85,29 @@ function beobachte(el: Element, fn: () => void) {
   }
 }
 
+// Chromium 53 trennt nicht selbst: lange Wörter (ab 10 Zeichen) bekommen weiche Trennstellen (U+00AD)
+// nach den Silbenregeln V|KV und VK|KV, spätestens nach 8 Zeichen, mindestens 3 Zeichen vom Wortrand. Sonst laufen
+// Versalien-Titel auf Platzhaltern über den Rand.
+const vokal = /[aeiouäöüyAEIOUÄÖÜY]/
+export function trenne(titel: string): string {
+  return titel.replace(/[^\s\-–]{10,}/g, (w) => {
+    let out = ''
+    let seit = 0
+    for (let i = 0; i < w.length; i++) {
+      out += w[i]
+      seit++
+      const rest = w.length - i - 1
+      const v = (k: number) => vokal.test(w[k] || '')
+      const silbe = (v(i) && !v(i + 1) && v(i + 2)) || (v(i - 1) && !v(i) && !v(i + 1) && v(i + 2)) // V|CV, VC|CV
+      if (rest >= 3 && ((seit >= 3 && silbe) || seit >= 8)) {
+        out += '\u00ad'
+        seit = 0
+      }
+    }
+    return out
+  })
+}
+
 // Bild in fester Box (.bild der Karte bzw. .vorschau der Episode). Ohne Bild: Tonfläche mit dem Titel
 // in Plakat-Versalien und Jahr/Laufzeit am Fuß.
 export function Bild({ src, titel, farbe, fuss }: { src?: string; titel: string; farbe?: string; fuss?: [string?, string?] }) {
@@ -95,7 +118,7 @@ export function Bild({ src, titel, farbe, fuss }: { src?: string; titel: string;
   if (!src || !ok)
     return (
       <div class="fl-platzhalter" style={{ background: farbe || tonFuer(titel) }}>
-        <div class="t">{titel}</div>
+        <div class="t">{trenne(titel)}</div>
         {fuss && (fuss[0] || fuss[1]) && (
           <div class="f">
             {fuss[0]}

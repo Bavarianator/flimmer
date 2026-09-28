@@ -68,14 +68,14 @@ html.hd .raster > .fl-karte:nth-child(3n) { margin-right: 0; }
 
 /* --- Seiten ohne Hero: Titel unter der Kopfzeile --- */
 .seitenkopf { padding-top: 104px; margin-bottom: var(--abstand-5); }
-html.tv .seitenkopf { padding-top: 136px; }
+html.tv .seitenkopf { padding-top: 150px; }
 html.hd .seitenkopf { padding-top: 76px; }
 .seitenkopf h1 { font: var(--t-titel); margin-bottom: var(--abstand-5); }
 .seitenkopf h1 small { font: var(--t-text); color: var(--text-2); }
 
 /* --- Serie: Info links, Folgen rechts (TV, Desktop); Handy untereinander --- */
 .serie-spalten { position: relative; padding-top: 104px; }
-html.tv .serie-spalten { padding-top: 136px; }
+html.tv .serie-spalten { padding-top: 150px; }
 .serie-spalten.fl-reihe-flex { -webkit-align-items: flex-start; align-items: flex-start; }
 .serie .held { position: static; min-height: 0; margin-bottom: 0; }
 .serie .held .kulisse { left: 47%; opacity: 0.8; }
