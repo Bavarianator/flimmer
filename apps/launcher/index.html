@@ -1,49 +1,94 @@
 <!doctype html>
-<!-- Starter: merkt sich die Server-Adresse und lädt dann die Oberfläche direkt vom Server.
-     So bekommt der TV jedes Server-Update ohne neue App-Version. -->
+<!-- Starter für LG webOS und Samsung Tizen: merkt sich die Server-Adresse und lädt dann die Oberfläche
+     direkt vom Server. So bekommt der TV jedes Server-Update ohne neue App-Version.
+     Bewusst ES5 und ohne Build-Schritt – läuft auch auf webOS 3 / Tizen 3. -->
 <html lang="de">
 <head>
 <meta charset="utf-8">
 <title>Flimmer</title>
 <style>
-  body { margin: 0; background: #0b0d12; color: #eef1f7; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; }
-  form { width: 720px; text-align: center; }
-  h1 { font-size: 64px; margin: 0 0 24px; }
-  input { width: 100%; font-size: 36px; padding: 16px 20px; border-radius: 12px; border: 3px solid #7c9cff; background: #151923; color: #fff; }
-  button { margin-top: 24px; font-size: 32px; padding: 14px 48px; border-radius: 12px; border: 0; background: #7c9cff; color: #0b0d12; }
-  p { color: #8b93a7; font-size: 24px; }
+  body { margin: 0; background: #0b0d12; color: #eef1f7; font-family: sans-serif; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; height: 100vh; }
+  form { width: 760px; text-align: center; }
+  h1 { font-size: 72px; margin: 0 0 24px; }
+  input { box-sizing: border-box; width: 100%; font-size: 36px; padding: 16px 20px; border-radius: 12px; border: 3px solid #2a3040; background: #151923; color: #fff; }
+  input:focus { border-color: #7c9cff; outline: none; }
+  button { margin-top: 24px; font-size: 32px; padding: 14px 48px; border-radius: 12px; border: 3px solid transparent; background: #eef1f7; color: #0b0d12; }
+  button:focus { border-color: #7c9cff; outline: none; }
+  p { color: #8b93a7; font-size: 26px; }
+  #err { color: #ff5d5d; min-height: 32px; }
 </style>
 </head>
 <body>
 <form id="f">
   <h1>Flimmer</h1>
-  <p>Adresse deines Flimmer-Servers</p>
-  <input id="url" placeholder="http://192.168.178.20:8096" autofocus>
-  <button type="submit">Verbinden</button>
+  <p id="hint">Suche Flimmer-Server im Heimnetz …</p>
+  <input id="url" placeholder="192.168.178.20">
+  <button type="submit" id="go">Verbinden</button>
   <p id="err"></p>
 </form>
 <script>
   var KEY = 'flimmer.server';
-  var saved = localStorage.getItem(KEY);
-  function go(url) {
-    url = url.replace(/\/+$/, '');
-    if (!/^https?:\/\//.test(url)) url = 'http://' + url;
-    if (!/:\d+$/.test(url)) url += ':8096';
-    var x = new XMLHttpRequest();
-    x.open('POST', url + '/api/library');
-    x.timeout = 5000;
-    x.onload = function () {
-      if (x.status !== 200) return fail();
-      localStorage.setItem(KEY, url);
-      location.href = url + '/';
-    };
-    x.onerror = x.ontimeout = fail;
-    x.send('{}');
+  var PORT = 8096;
+  var $ = function (id) { return document.getElementById(id); };
+
+  // Samsung: Medientasten müssen angemeldet werden, sonst kommen sie nie an.
+  if (window.tizen && tizen.tvinputdevice) {
+    ['MediaPlayPause', 'MediaPlay', 'MediaPause', 'MediaFastForward', 'MediaRewind', 'MediaStop'].forEach(function (k) {
+      try { tizen.tvinputdevice.registerKey(k); } catch (e) {}
+    });
   }
-  function fail() { document.getElementById('err').textContent = 'Server nicht erreichbar. Adresse prüfen.'; }
-  document.getElementById('url').value = saved || '';
-  document.getElementById('f').onsubmit = function (e) { e.preventDefault(); go(document.getElementById('url').value); };
-  if (saved) go(saved);
+
+  function normalize(url) {
+    url = url.replace(/\s+/g, '').replace(/\/+$/, '');
+    if (!/^https?:\/\//.test(url)) url = 'http://' + url;
+    if (!/:\d+$/.test(url.replace(/^https?:\/\//, ''))) url += ':' + PORT;
+    return url;
+  }
+
+  // Prüft, ob unter url ein Flimmer-Server antwortet (öffentliche Route, keine Anmeldung nötig).
+  function check(url, ok, fail) {
+    var x = new XMLHttpRequest();
+    x.open('GET', url + '/api/users');
+    x.timeout = 3000;
+    x.onload = function () { x.status === 200 ? ok(url) : fail(); };
+    x.onerror = x.ontimeout = fail;
+    x.send();
+  }
+
+  function open(url) {
+    try { localStorage.setItem(KEY, url); } catch (e) {}
+    location.href = url + '/';
+  }
+
+  function tryList(list, i) {
+    if (i >= list.length) {
+      $('hint').textContent = 'Adresse deines Flimmer-Servers (steht beim Start im Server-Fenster):';
+      $('url').focus();
+      return;
+    }
+    check(list[i], open, function () { tryList(list, i + 1); });
+  }
+
+  $('f').onsubmit = function (e) {
+    e.preventDefault();
+    var url = normalize($('url').value);
+    $('err').textContent = 'Verbinde …';
+    check(url, open, function () { $('err').textContent = 'Kein Flimmer-Server unter ' + url + ' gefunden.'; });
+  };
+  $('url').onkeydown = function (e) { if (e.keyCode === 40) { $('go').focus(); e.preventDefault(); } };
+  $('go').onkeydown = function (e) { if (e.keyCode === 38) { $('url').focus(); e.preventDefault(); } };
+  document.addEventListener('keydown', function (e) {
+    if (e.keyCode === 10009 || e.keyCode === 461) { // Zurück auf der Startseite: App beenden
+      if (window.tizen) try { tizen.application.getCurrentApplication().exit(); } catch (x) {}
+      if (window.webOS && webOS.platformBack) webOS.platformBack();
+    }
+  });
+
+  var saved = null;
+  try { saved = localStorage.getItem(KEY); } catch (e) {}
+  if (saved) $('url').value = saved.replace(/^http:\/\//, '').replace(':' + PORT, '');
+  // Zuerst die zuletzt genutzte Adresse, dann der Standardname im Heimnetz.
+  tryList([saved, 'http://flimmer.local:' + PORT, 'http://flimmer:' + PORT].filter(Boolean), 0);
 </script>
 </body>
 </html>

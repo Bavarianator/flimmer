@@ -228,7 +228,8 @@ export function Player({ id, start, onBack }: { id: string; start?: number; onBa
       }
       const seek = (d: number) => (v.currentTime = Math.max(0, Math.min(v.duration || Infinity, v.currentTime + d)))
       switch (k) {
-        case 13: case 32: case 415: case 19: case 463: v.paused ? v.play() : v.pause(); break
+        case 13: case 32: case 415: case 19: case 463: case 10252: v.paused ? v.play() : v.pause(); break // 10252 = Samsung Play/Pause
+        case 413: onBack(); break // Stopp
         case 37: case 412: seek(-10); break
         case 39: case 417: seek(10); break
         case 38: if (cols[0].length > 1 || cols[1].length > 1) setPanel({ col: cols[0].length > 1 ? 0 : 1, row: 0 }); break
