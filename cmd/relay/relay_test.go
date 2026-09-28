@@ -7,8 +7,10 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/flimmer-media/flimmer/internal/remote"
 )
@@ -53,7 +55,7 @@ func TestRelay(t *testing.T) {
 	key, _ := remote.LoadKey(keyFile)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/remote/ping", rem.PingHandler)
-	flimmer := httptest.NewServer(mux)
+	flimmer := httptest.NewTLSServer(mux) // Rückruf über HTTPS mit selbst signiertem Zertifikat
 	defer flimmer.Close()
 
 	// ACME vor der Registrierung: abgelehnt.
@@ -131,5 +133,42 @@ func TestCheckTarget(t *testing.T) {
 		if _, err := rl.checkTarget(raw, from); (err == nil) != ok {
 			t.Errorf("%s: %v", raw, err)
 		}
+	}
+}
+
+func TestLimiter(t *testing.T) {
+	var l limiter
+	now := time.Now()
+	a, b := net.ParseIP("2001:db8::1"), net.ParseIP("2001:db8::ffff") // gleiches /64
+	for i := range burst {
+		if !l.allow(a, now) {
+			t.Fatalf("Anfrage %d abgelehnt", i)
+		}
+	}
+	if l.allow(b, now) {
+		t.Fatal("gleiches /64 muss mitgezählt werden")
+	}
+	if !l.allow(net.ParseIP("203.0.113.7"), now) {
+		t.Fatal("anderer Absender betroffen")
+	}
+	if !l.allow(a, now.Add(time.Second)) || l.allow(a, now.Add(time.Second)) {
+		t.Fatal("nach 1 s genau ein neues Token erwartet")
+	}
+}
+
+func TestClientIP(t *testing.T) {
+	req := httptest.NewRequest("GET", "/", nil)
+	req.RemoteAddr = "10.0.0.5:4000"
+	req.Header.Set("X-Forwarded-For", "6.6.6.6, 203.0.113.7")
+	if ip := (&relay{}).clientIP(req); ip.String() != "10.0.0.5" {
+		t.Fatalf("ohne -trusted-proxy: %v", ip)
+	}
+	rl := &relay{trusted: netip.MustParsePrefix("10.0.0.0/24")}
+	if ip := rl.clientIP(req); ip.String() != "203.0.113.7" {
+		t.Fatalf("vom Proxy: %v", ip)
+	}
+	req.RemoteAddr = "198.51.100.9:4000"
+	if ip := rl.clientIP(req); ip.String() != "198.51.100.9" {
+		t.Fatalf("fremder Absender mit XFF: %v", ip)
 	}
 }

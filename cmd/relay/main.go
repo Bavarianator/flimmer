@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -14,8 +15,10 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/flimmer-media/flimmer/internal/remote"
@@ -27,13 +30,26 @@ func main() {
 	dbPath := flag.String("db", "relay.db", "SQLite-Datei")
 	zone := flag.String("zone", "flimmer.direct", "DNS-Zone für <id>.<zone>")
 	dev := flag.Bool("dev", false, "Rückrufe auch an private Adressen erlauben (nur zum Testen im LAN)")
+	proxy := flag.String("trusted-proxy", "", "IP oder Netz (CIDR) des Reverse-Proxys; nur von dort wird X-Forwarded-For ausgewertet")
 	flag.Parse()
+
+	var trusted netip.Prefix
+	if *proxy != "" {
+		var err error
+		if trusted, err = netip.ParsePrefix(*proxy); err != nil {
+			a, err2 := netip.ParseAddr(*proxy)
+			if err2 != nil {
+				log.Fatalf("-trusted-proxy: %v", err)
+			}
+			trusted = netip.PrefixFrom(a, a.BitLen())
+		}
+	}
 
 	db, err := openDB(*dbPath)
 	if err != nil {
 		log.Fatal(err)
 	}
-	rl := &relay{db: db, zone: *zone, allowPrivate: *dev}
+	rl := &relay{db: db, zone: *zone, allowPrivate: *dev, trusted: trusted}
 	log.Printf("Relay lauscht auf %s", *addr)
 	srv := &http.Server{Addr: *addr, Handler: rl.routes(), ReadHeaderTimeout: 10 * time.Second}
 	log.Fatal(srv.ListenAndServe())
@@ -52,6 +68,8 @@ type relay struct {
 	zone         string
 	dns          DNS
 	allowPrivate bool
+	trusted      netip.Prefix // Reverse-Proxy, dem X-Forwarded-For geglaubt wird
+	limiter      limiter
 	now          func() time.Time
 }
 
@@ -77,7 +95,63 @@ func (rl *relay) routes() http.Handler {
 	mux.HandleFunc("POST /v1/pair", rl.pair)
 	mux.HandleFunc("GET /v1/pair/{code}", rl.resolve)
 	mux.HandleFunc("POST /v1/acme", rl.acme)
-	return mux
+	return http.MaxBytesHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !rl.limiter.allow(rl.clientIP(r), rl.clock()) {
+			w.Header().Set("Retry-After", "10")
+			fail(w, http.StatusTooManyRequests, "zu viele Anfragen, bitte kurz warten")
+			return
+		}
+		mux.ServeHTTP(w, r)
+	}), 8<<10)
+}
+
+// limiter ist ein Token-Bucket pro Absender (IPv4-Adresse bzw. IPv6-/64): 20 Anfragen am Stück, dann 1 pro Sekunde.
+// Das bremst auch das Raten von Pairing-Codes.
+type limiter struct {
+	mu sync.Mutex
+	m  map[netip.Addr]*bucket
+}
+
+type bucket struct {
+	tokens float64
+	last   time.Time
+}
+
+const (
+	burst = 20
+	rate  = 1.0 // pro Sekunde
+)
+
+func (l *limiter) allow(ip net.IP, now time.Time) bool {
+	a, _ := netip.AddrFromSlice(ip)
+	a = a.Unmap()
+	if a.Is6() {
+		a = netip.PrefixFrom(a, 64).Masked().Addr()
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.m == nil {
+		l.m = map[netip.Addr]*bucket{}
+	}
+	if len(l.m) > 100_000 { // volle Buckets vergessen; ponytail: O(n) Aufräumen, das nur unter Last läuft
+		for k, b := range l.m {
+			if now.Sub(b.last).Seconds()*rate >= burst {
+				delete(l.m, k)
+			}
+		}
+	}
+	b := l.m[a]
+	if b == nil {
+		b = &bucket{tokens: burst, last: now}
+		l.m[a] = b
+	}
+	b.tokens = min(burst, b.tokens+now.Sub(b.last).Seconds()*rate)
+	b.last = now
+	if b.tokens < 1 {
+		return false
+	}
+	b.tokens--
+	return true
 }
 
 func (rl *relay) clock() time.Time {
@@ -107,7 +181,7 @@ func (rl *relay) register(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	observed := clientIP(r)
+	observed := rl.clientIP(r)
 	target, err := rl.checkTarget(req.Data, observed)
 	if err != nil {
 		fail(w, http.StatusBadRequest, err.Error())
@@ -153,7 +227,10 @@ func (rl *relay) checkTarget(raw string, observed net.IP) (net.IP, error) {
 }
 
 var callbackClient = &http.Client{
-	Timeout:       5 * time.Second,
+	Timeout: 5 * time.Second,
+	// Das Zertifikat ist anfangs selbst signiert und auf den Namen ausgestellt, nicht auf die IP.
+	// Die Identität beweist die signierte Ping-Antwort, nicht TLS.
+	Transport:     &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
 	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 }
 
@@ -212,7 +289,6 @@ func (rl *relay) pair(w http.ResponseWriter, r *http.Request) {
 }
 
 // resolve löst einen Code einmalig in Server-ID und URL auf.
-// ponytail: keine Drosselung; 40 Bit Code × 10 min Gültigkeit reichen gegen Raten, Rate-Limit pro IP wenn öffentlich betrieben
 func (rl *relay) resolve(w http.ResponseWriter, r *http.Request) {
 	code := strings.ToUpper(strings.ReplaceAll(r.PathValue("code"), "-", ""))
 	var id, u string
@@ -254,10 +330,20 @@ func (rl *relay) acme(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]bool{"ok": true})
 }
 
-// ponytail: nimmt RemoteAddr; hinter einem Reverse-Proxy braucht es eine vertrauenswürdige X-Forwarded-For-Auswertung
-func clientIP(r *http.Request) net.IP {
+// clientIP ist die Absender-IP; X-Forwarded-For zählt nur, wenn die Verbindung vom vertrauten Proxy kommt
+// (dann gilt der letzte Eintrag, den der Proxy selbst angehängt hat).
+func (rl *relay) clientIP(r *http.Request) net.IP {
 	host, _, _ := net.SplitHostPort(r.RemoteAddr)
-	return net.ParseIP(host)
+	ip := net.ParseIP(host)
+	if a, ok := netip.AddrFromSlice(ip); ok && rl.trusted.IsValid() && rl.trusted.Contains(a.Unmap()) {
+		if xff := r.Header.Values("X-Forwarded-For"); len(xff) > 0 {
+			parts := strings.Split(xff[len(xff)-1], ",")
+			if fwd := net.ParseIP(strings.TrimSpace(parts[len(parts)-1])); fwd != nil {
+				return fwd
+			}
+		}
+	}
+	return ip
 }
 
 func fail(w http.ResponseWriter, code int, msg string) {

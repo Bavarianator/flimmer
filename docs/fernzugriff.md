@@ -23,6 +23,18 @@ Der Server prüft beim Einschalten und danach alle 30 Minuten (bzw. zur halben L
 
 Das Ergebnis ist `Status{method, publicUrl, reachable, hint}`. Der Hinweis sagt auf Deutsch, was zu tun ist.
 
+### HTTPS
+
+Mit `TLSPort` gesetzt, gibt Flimmer nur den HTTPS-Port nach außen frei. HTTP bleibt im Heimnetz, damit
+Passwörter nie unverschlüsselt durchs Internet gehen. Der zweite Listener nutzt `rem.TLSConfig()`:
+
+- Solange es kein Zertifikat gibt, antwortet er mit einem selbst signierten. Das reicht für den Rückruf des Relays,
+  weil die Identität über den signierten Ping bewiesen wird.
+- Ist der Server erreichbar, holt `ensureCert` per ACME DNS-01 ein Zertifikat für `<id>.flimmer.direct`
+  (`golang.org/x/crypto/acme`, Let's Encrypt). Unter `<data>/tls/` liegen dann `account.key`, `key.pem` und `cert.pem`.
+- Erneuert wird, sobald die Restlaufzeit unter 30 Tage fällt. Die Prüfung läuft bei jedem `Check`, also etwa alle 30 Minuten.
+- `publicUrl` wird dann `https://<id>.flimmer.direct:<port>`.
+
 Server-Schlüssel: `<data>/remote.key` (ed25519-Seed, Rechte 0600). Die Server-ID sind die ersten 80 Bit von
 SHA-256(öffentlicher Schlüssel), base32-kodiert, also 16 Zeichen, die als DNS-Label taugen.
 
@@ -49,8 +61,13 @@ passiert nie ungefragt.
 ## Rendezvous-Dienst `cmd/relay`
 
 ```
-go run ./cmd/relay -addr :8098 -db relay.db -zone flimmer.direct
+go run ./cmd/relay -addr :8098 -db relay.db -zone flimmer.direct [-trusted-proxy 10.0.0.2] [-dev]
 ```
+
+- **Rate-Limit:** Token-Bucket pro IPv4-Adresse bzw. IPv6-/64, 20 Anfragen am Stück, danach 1 pro Sekunde (sonst 429).
+- **`-trusted-proxy`** (IP oder CIDR): Nur Verbindungen von dort dürfen per `X-Forwarded-For` eine andere Absender-IP
+  angeben. Es zählt der letzte Eintrag. Ohne das Flag wird der Header ignoriert.
+- **Body-Limit:** 8 KiB für jede Anfrage, 4 KiB für signierte JSON-Anfragen und Ping-Antworten.
 
 Das Relay ist eine einzelne Binary und speichert in SQLite. Es sieht kein Video. Alle schreibenden Anfragen
 sind `remote.Request`-JSON `{id, pub, data, ts, sig}` mit einer ed25519-Signatur über
@@ -67,7 +84,7 @@ sind `remote.Request`-JSON `{id, pub, data, ts, sig}` mit einer ed25519-Signatur
 Schutz gegen Missbrauch als Scanner: Gemeldet werden darf nur `http(s)://IP:Port` mit einer öffentlichen IP,
 bei IPv4 genau die Absender-IP. Weiterleitungen folgt das Relay nicht. `-dev` hebt die Prüfung für Tests im LAN auf.
 
-Offen, bevor das Relay öffentlich läuft: Rate-Limit pro IP und, hinter einem Reverse-Proxy, die Auswertung von `X-Forwarded-For`.
+Der Rückruf läuft auch über HTTPS mit selbst signiertem Zertifikat (TLS-Prüfung aus). Die Identität beweist die Signatur.
 
 ### ACME DNS-01 für `<id>.flimmer.direct` (vorbereitet, noch ohne Domain)
 
@@ -80,8 +97,18 @@ Das Zertifikat und sein Schlüssel entstehen **auf dem Server**. Das Relay setzt
 4. Let's Encrypt prüft den TXT-Record, und der Server holt das Zertifikat ab. Danach löscht er den Record wieder mit einem leeren Wert.
 5. Die Verlängerung läuft genauso, rund 30 Tage vor Ablauf.
 
-Dafür fehlt noch:
-- eine Implementierung von `DNS` für den Anbieter der Zone (z. B. per RFC 2136 oder eine Anbieter-API),
-- auf der Server-Seite ein ACME-Client. Ob dafür eine Bibliothek hinzukommt, wird vorher abgestimmt.
+Es fehlt noch eine Implementierung von `DNS` für den Anbieter der Zone (z. B. per RFC 2136 oder eine Anbieter-API).
+`SetTXT` darf erst zurückkehren, wenn die autoritativen Nameserver den Record ausliefern. Ohne DNS-Anbieter
+antwortet `/v1/acme` mit 501.
 
-Ohne DNS-Anbieter antwortet `/v1/acme` mit 501.
+Die Tests (`go test ./internal/remote -run TestACME`) laufen gegen einen Fake-ACME-Server. Gegen
+[Pebble](https://github.com/letsencrypt/pebble), den Test-CA von Let's Encrypt, geht es so:
+
+```
+# Pebble mit eigenem DNS-Server für die Challenges (pebble-challtestsrv)
+docker run -d --name challtest -p 8055:8055 -p 8053:8053/udp ghcr.io/letsencrypt/pebble-challtestsrv -defaultIPv4 127.0.0.1
+docker run -d --name pebble --network host -e PEBBLE_VA_NOSLEEP=1 ghcr.io/letsencrypt/pebble -dnsserver 127.0.0.1:8053
+# Relay mit einer DNS-Implementierung, die challtestsrv befüllt (POST :8055/set-txt {"host","value"}),
+# Server mit ACMEURL https://localhost:14000/dir; Pebbles CA-Zertifikat muss dem Server vertraut sein
+# (SSL_CERT_FILE=pebble.minica.pem).
+```

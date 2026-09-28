@@ -7,16 +7,20 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/crypto/acme"
 )
 
 // Status ist das Ergebnis für die Einstellungsseite.
@@ -31,6 +35,13 @@ type Options struct {
 	Port     int    // lokaler HTTP-Port des Servers
 	KeyFile  string // z. B. <data>/remote.key, wird beim ersten Start angelegt
 	RelayURL string // z. B. https://relay.flimmer.direct; leer = keine Prüfung von außen
+
+	// Mit TLSPort > 0 wird statt Port der HTTPS-Port (zweiter Listener mit TLSConfig) freigegeben und gemeldet;
+	// der HTTP-Port bleibt dann im Heimnetz. Das Zertifikat für <id>.<Zone> holt der Server per ACME DNS-01.
+	TLSPort int
+	TLSDir  string // z. B. <data>/tls
+	Zone    string // Standard flimmer.direct
+	ACMEURL string // Standard Let's Encrypt
 }
 
 type Remote struct {
@@ -43,6 +54,9 @@ type Remote struct {
 
 	mu sync.Mutex
 	st Status
+
+	certMu sync.Mutex
+	cert   *tls.Certificate
 }
 
 // mapping ist eine eingerichtete Portfreigabe.
@@ -66,6 +80,12 @@ func New(opts Options) (*Remote, error) {
 			return "", err
 		}
 		return net.JoinHostPort(ip.String(), "5351"), nil
+	}
+	if opts.Zone == "" {
+		opts.Zone = "flimmer.direct"
+	}
+	if opts.ACMEURL == "" {
+		opts.ACMEURL = acme.LetsEncryptURL
 	}
 	return &Remote{opts: opts, key: key, gw: gw, st: Status{Method: "none", Hint: "Noch nicht geprüft."}}, nil
 }
@@ -127,7 +147,7 @@ func (r *Remote) Check(ctx context.Context) Status {
 		r.m, errs = r.tryMap(ctx)
 	}
 
-	in := input{port: r.opts.Port, v6: publicIPv6(), m: r.m, mapErrs: errs, relay: r.opts.RelayURL != ""}
+	in := input{port: r.port(), scheme: r.scheme(), v6: publicIPv6(), m: r.m, mapErrs: errs, relay: r.opts.RelayURL != ""}
 	for _, u := range in.candidates() {
 		ok, observed, err := r.register(ctx, u)
 		if err != nil {
@@ -141,17 +161,43 @@ func (r *Remote) Check(ctx context.Context) Status {
 		}
 	}
 	st := in.status()
+	if st.Reachable && r.opts.TLSPort > 0 {
+		c, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Minute) // ACME dauert länger als die 30 s oben
+		err := r.ensureCert(c)
+		cancel()
+		if err != nil {
+			log.Printf("Fernzugriff: Zertifikat: %v", err)
+			st.Hint += " Ein HTTPS-Zertifikat für " + r.Domain() + " gibt es noch nicht (" + err.Error() + "); bis dahin warnt der Browser."
+		} else if u, err := url.Parse(st.PublicURL); err == nil {
+			st.PublicURL = "https://" + net.JoinHostPort(r.Domain(), u.Port())
+		}
+	}
 	r.mu.Lock()
 	r.st = st
 	r.mu.Unlock()
 	return st
 }
 
+// port ist der Port, der nach außen freigegeben wird.
+func (r *Remote) port() int {
+	if r.opts.TLSPort > 0 {
+		return r.opts.TLSPort
+	}
+	return r.opts.Port
+}
+
+func (r *Remote) scheme() string {
+	if r.opts.TLSPort > 0 {
+		return "https"
+	}
+	return "http"
+}
+
 func (r *Remote) tryMap(ctx context.Context) (*mapping, []error) {
 	var errs []error
 	sub := func() (context.Context, context.CancelFunc) { return context.WithTimeout(ctx, 5*time.Second) }
 	c, cancel := sub()
-	m, err := upnpMap(c, r.opts.Port)
+	m, err := upnpMap(c, r.port())
 	cancel()
 	if err == nil {
 		return m, nil
@@ -163,7 +209,7 @@ func (r *Remote) tryMap(ctx context.Context) (*mapping, []error) {
 	}
 	for _, f := range []func(context.Context, string, int) (*mapping, error){pcpMap, pmpMap} {
 		c, cancel := sub()
-		m, err := f(c, gw, r.opts.Port)
+		m, err := f(c, gw, r.port())
 		cancel()
 		if err == nil {
 			return m, nil
@@ -236,6 +282,7 @@ var cgnatNet = &net.IPNet{IP: net.IPv4(100, 64, 0, 0), Mask: net.CIDRMask(10, 32
 // input sammelt alles, woraus status() Methode und Hinweis ableitet (reine Funktion, tabellengetestet).
 type input struct {
 	port         int
+	scheme       string
 	v6           net.IP
 	m            *mapping
 	mapErrs      []error
@@ -252,10 +299,10 @@ func (in input) candidates() []string {
 	}
 	var c []string
 	if in.v6 != nil {
-		c = append(c, "http://"+net.JoinHostPort(in.v6.String(), strconv.Itoa(in.port)))
+		c = append(c, in.scheme+"://"+net.JoinHostPort(in.v6.String(), strconv.Itoa(in.port)))
 	}
 	if in.m != nil && in.m.extIP != nil && !in.m.extIP.IsUnspecified() {
-		c = append(c, "http://"+net.JoinHostPort(in.m.extIP.String(), strconv.Itoa(in.m.extPort)))
+		c = append(c, in.scheme+"://"+net.JoinHostPort(in.m.extIP.String(), strconv.Itoa(in.m.extPort)))
 	}
 	return c
 }
