@@ -44,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
@@ -114,6 +115,8 @@ class PlayerActivity : ComponentActivity() {
     private val aktion = mutableLongStateOf(0L) // letzte Bedienung, für das Ausblenden
     private val qualitaet = mutableIntStateOf(0)
     private val quelleHoehe = mutableIntStateOf(0) // Bildhöhe der Quelle, 0 = unbekannt
+    private val laeuftHoehe = mutableIntStateOf(0) // Bildhöhe, die gerade wirklich dekodiert wird
+    private val laedt = mutableStateOf(false) // puffert (z. B. Server wandelt nach einem Qualitätswechsel erst um)
     private val modus = mutableStateOf(BildModus.Auto)
     private val hinweis = mutableStateOf<String?>(null) // kurzer Hinweis in der Mitte (Bildmodus nach Pinch)
 
@@ -161,7 +164,8 @@ class PlayerActivity : ComponentActivity() {
         // Plattform-Decoder zuerst, ffmpeg nur für das, was das Gerät nicht kann (DTS, TrueHD …).
         val renderers = DefaultRenderersFactory(this).setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
         // Anmeldung auch als Header (Live-TV-Streams); die Pfade von /play tragen ihr Token ohnehin
-        val http = DefaultHttpDataSource.Factory().setDefaultRequestProperties(mapOf("Authorization" to "Bearer ${api.token}"))
+        // Lesezeit 30 s statt 8: ein langsamer Server (NAS) braucht fürs erste umgewandelte Segment länger, sonst bricht ExoPlayer ab und fragt neu an
+        val http = DefaultHttpDataSource.Factory().setReadTimeoutMs(30_000).setDefaultRequestProperties(mapOf("Authorization" to "Bearer ${api.token}"))
         val p = ExoPlayer.Builder(this, renderers).setSeekBackIncrementMs(10_000).setSeekForwardIncrementMs(30_000)
             .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultDataSource.Factory(this, http))).build()
         player = p
@@ -183,6 +187,7 @@ class PlayerActivity : ComponentActivity() {
         setContentView(rahmen)
         p.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
+                laedt.value = state == Player.STATE_BUFFERING
                 if (state == Player.STATE_ENDED && party.value == null) naechster()
                 if (party.value != null) when (state) {
                     Player.STATE_BUFFERING -> send("buffering", buffering = true)
@@ -196,6 +201,7 @@ class PlayerActivity : ComponentActivity() {
                 if (v.width == 0 || v.height == 0) return
                 videoB = v.width * v.pixelWidthHeightRatio.toDouble()
                 videoH = v.height.toDouble()
+                laeuftHoehe.intValue = v.height
                 anpassen()
             }
 
@@ -496,6 +502,7 @@ class PlayerActivity : ComponentActivity() {
                     else if (zoom < 0.87f && modus.value != BildModus.Auto) bildModus(BildModus.Auto, true)
                 }
             }) {
+            if (laedt.value) CircularProgressIndicator(Modifier.align(Alignment.Center).size(if (tv) 72.dp else 48.dp), color = K.Text)
             hinweis.value?.let { text ->
                 LaunchedEffect(text) { delay(1500); hinweis.value = null }
                 T(text, if (tv) 28.sp else 15.sp, K.Text, FontWeight.Medium, modifier = Modifier.align(Alignment.Center).offset(y = if (tv) (-160).dp else (-88).dp)
@@ -690,12 +697,12 @@ class PlayerActivity : ComponentActivity() {
                             }
                         }
                         if (file == null && live == null) {
-                            item { Label("Qualität", Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp)) }
-                            // nur Stufen unter der Quelle; eine Grenze darüber ist das Original
+                            item { Label("Qualität" + (laeuftHoehe.intValue.takeIf { it > 0 }?.let { " · läuft in ${it}p" } ?: ""), Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp)) }
+                            // nur Stufen bis zur Quelle; eine Grenze darüber ist das Original
                             val h = quelleHoehe.intValue
-                            val stufen = listOf(0 to "Automatisch (Original)", 1080 to "1080p", 720 to "720p", 480 to "480p – spart Daten").filter { (q, _) -> q == 0 || h == 0 || q < h }
+                            val stufen = listOf(0 to "Automatisch (Original)", 1080 to "1080p", 720 to "720p", 480 to "480p – spart Daten").filter { (q, _) -> q == 0 || h == 0 || q <= h }
                             items(stufen) { (q, name) ->
-                                SpurEintrag(name, q == qualitaet.intValue || q == 0 && h > 0 && qualitaet.intValue >= h) { qualitaetWaehlen(q); panel.value = null }
+                                SpurEintrag(name, q == qualitaet.intValue || q == 0 && h > 0 && qualitaet.intValue > h) { qualitaetWaehlen(q); panel.value = null }
                             }
                         }
                         item { Label("Bild", Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp)) }

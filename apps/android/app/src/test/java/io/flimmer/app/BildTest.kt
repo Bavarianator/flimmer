@@ -24,16 +24,18 @@ class BildTest {
         assertEquals(1998.0, f.breite, 0.5) // ragt links und rechts heraus
     }
 
-    @Test fun cinemascopeAufTvPasstEin() {
+    @Test fun cinemascopeAufTvVergroessertTeilweise() {
+        // Füllen kostete 25 %: so weit vergrößern, dass 12 % fehlen – schmalere Balken oben und unten
         val f = auto(2390.0, 1000.0, null, tv)
-        assertEquals(1920.0, f.breite, 0.5)
-        assertEquals(1920 / 2.39, f.hoehe, 0.5) // Balken oben und unten
+        assertEquals(1920 / 2.39 / 0.88, f.hoehe, 0.5)
+        assertEquals(0.88, 1920 / f.breite, 1e-3) // sichtbarer Anteil der Breite
     }
 
-    @Test fun sechzehnNeuntelAufHandyPasstEin() {
+    @Test fun sechzehnNeuntelAufHandyVergroessertTeilweise() {
+        // Füllen kostete 20 %: 12 % oben/unten weg, Balken links und rechts nur noch je ~110 px statt 240
         val f = auto(1920.0, 1080.0, null, handy)
-        assertEquals(1080.0, f.hoehe, 0.5)
-        assertEquals(1920.0, f.breite, 0.5) // Balken links und rechts
+        assertEquals(1080 / 0.88, f.hoehe, 0.5)
+        assertEquals(1920 / 0.88, f.breite, 0.5)
     }
 
     @Test fun cropAussermittigWirdZentriert() {

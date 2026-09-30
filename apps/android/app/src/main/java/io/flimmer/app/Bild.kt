@@ -13,7 +13,7 @@ enum class BildModus(val label: String) { Auto("Automatisch"), Einpassen("Einpas
  */
 data class Flaeche(val breite: Double, val hoehe: Double, val dx: Double, val dy: Double)
 
-/** Automatisch füllt aus, wenn dabei höchstens so viel vom Bild verloren geht. */
+/** Automatisch vergrößert, bis höchstens so viel vom Bild verloren geht: ganz füllen, sonst so weit es geht (schmalere Balken). */
 const val AUTO_VERLUST = 0.12
 
 /**
@@ -30,8 +30,8 @@ fun bildFlaeche(modus: BildModus, vw: Double, vh: Double, crop: Crop?, w: Double
         BildModus.Strecken -> w / rw to h / rh
         BildModus.Fuellen -> fuellen to fuellen
         BildModus.Einpassen -> einpassen to einpassen
-        // sichtbarer Anteil von R beim Füllen = (w·h) / (s²·rw·rh)
-        BildModus.Auto -> (if (1 - (w * h) / (fuellen * fuellen * rw * rh) <= AUTO_VERLUST) fuellen else einpassen).let { it to it }
+        // zwischen Einpassen und Füllen ragt nur eine Seite hinaus: sichtbarer Anteil = einpassen / s
+        BildModus.Auto -> min(fuellen, einpassen / (1 - AUTO_VERLUST)).let { it to it }
     }
     // Mitte von R in die Bildschirmmitte: Abstand der R-Mitte zur Video-Mitte, skaliert und umgekehrt
     val cx = (r.x + r.w / 2 - 0.5) * vw

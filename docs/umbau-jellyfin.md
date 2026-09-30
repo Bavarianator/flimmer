@@ -212,11 +212,12 @@ Das Videobild passt sich automatisch an den Bildschirm an. Web-Player und Androi
 - **Anteile:** Anteile statt Pixel, damit anamorphe Videos (SAR ≠ 1) und umgewandelte HLS-Streams mit anderer Auflösung stimmen.
 
 **Modi** (pro Gerät gespeichert, Standard „Automatisch“):
-- **Automatisch:** schneidet eingebrannte Balken weg (`crop`). Kostet Ausfüllen höchstens 12 % des Bildes, wird ausgefüllt, sonst eingepasst. Beispiele:
+- **Automatisch:** schneidet eingebrannte Balken weg (`crop`) und vergrößert, bis höchstens 12 % des Bildes fehlen:
+  ganz ausfüllen, wenn das reicht, sonst so weit wie möglich (Skalierung `min(füllen, einpassen / 0,88)`). Beispiele:
   - 2,39:1 auf einem 20:9-Handy: ausfüllen
   - 1,85:1 auf 16:9: ausfüllen
-  - 2,39:1 auf einem 16:9-TV: einpassen, mit Balken
-  - 16:9 auf einem 20:9-Handy: einpassen
+  - 2,39:1 auf einem 16:9-TV: teilweise, schmalere Balken oben und unten, links und rechts je 6 % weg
+  - 16:9 auf einem 20:9-Handy: teilweise, schmalere Balken links und rechts, oben und unten je 6 % weg
 - **Einpassen:** Das ganze Bild ist sichtbar, `crop` wird ignoriert.
 - **Füllen:** Das Bild füllt den Bildschirm, die Ränder werden abgeschnitten (nach `crop`).
 - **Strecken:** Das Bild wird verzerrt auf den ganzen Bildschirm gezogen (nach `crop`).

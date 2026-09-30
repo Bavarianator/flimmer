@@ -450,11 +450,11 @@ export function Player(p: {
     // Qualität: kleinere Stufen wandelt der Server auf diese Höhe um (nur wenn die Quelle größer ist).
     {
       titel: t('player.qualitaet'),
-      // nur Stufen unter der Quelle; eine 720p-Datei auf „1080p“ zu stellen ändert nichts
-      eintraege: [0, 1080, 720, 480].filter((h) => !h || !quelleHoehe || h < quelleHoehe).map<Eintrag>((h) => ({
+      // nur Stufen bis zur Quelle; eine 720p-Datei auf „1080p“ zu stellen ändert nichts
+      eintraege: [0, 1080, 720, 480].filter((h) => !h || !quelleHoehe || h <= quelleHoehe).map<Eintrag>((h) => ({
         label: h ? h + 'p' : t('player.qualitaet.auto'),
         unter: h === 0 ? t('player.qualitaet.auto.text') : h === 480 ? t('player.qualitaet.sparen') : undefined,
-        aktiv: qualitaet === h || (!h && !!quelleHoehe && qualitaet >= quelleHoehe), // Grenze über der Quelle = Original
+        aktiv: qualitaet === h || (!h && !!quelleHoehe && qualitaet > quelleHoehe), // Grenze über der Quelle = Original
         tun: () => {
           if (h === qualitaet) return
           setVorlieben({ maxHeight: h })

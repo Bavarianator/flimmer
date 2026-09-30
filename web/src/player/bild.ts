@@ -22,7 +22,7 @@ export interface Lage {
   modus: BildModus // tatsächlich gewählt; bei auto: fuellen oder einpassen
 }
 
-// Automatisch füllt, solange dabei höchstens so viel vom Ausschnitt verloren geht.
+// Automatisch vergrößert, bis höchstens so viel vom Ausschnitt verloren geht: ganz füllen, sonst so weit es geht (schmalere Balken).
 export const AUTO_VERLUST = 0.12
 
 // W×H Bildschirm, vw×vh Video (Anzeigegröße, videoWidth/videoHeight), crop optional.
@@ -31,18 +31,19 @@ export function bildLage(modus: BildModus, W: number, H: number, vw: number, vh:
   const rw = c.w * vw
   const rh = c.h * vh
   let m = modus
-  if (m === 'auto') {
-    const s = Math.max(W / rw, H / rh)
-    const verlust = 1 - (W * H) / (rw * s * rh * s)
-    m = verlust <= AUTO_VERLUST ? 'fuellen' : 'einpassen'
-  }
+  const fuellen = Math.max(W / rw, H / rh)
+  const einpassen = Math.min(W / rw, H / rh)
   let sx: number
   let sy: number
   if (m === 'strecken') {
     sx = W / rw
     sy = H / rh
+  } else if (m === 'auto') {
+    // zwischen Einpassen und Füllen ragt nur eine Seite hinaus: sichtbarer Anteil = einpassen / s
+    sx = sy = Math.min(fuellen, einpassen / (1 - AUTO_VERLUST))
+    m = sx === fuellen ? 'fuellen' : 'einpassen'
   } else {
-    sx = sy = m === 'fuellen' ? Math.max(W / rw, H / rh) : Math.min(W / rw, H / rh)
+    sx = sy = m === 'fuellen' ? fuellen : einpassen
   }
   return {
     links: W / 2 - (c.x * vw + rw / 2) * sx,
