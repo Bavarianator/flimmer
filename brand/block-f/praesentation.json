@@ -1,0 +1,31 @@
+{
+  "brand": "Flimmer",
+  "tagline": "Filme und Serien auf jedem Gerät",
+  "brief": "Ein schlanker Open-Source-Medienserver als Alternative zu Jellyfin und Plex. Das Zeichen soll technisch, ruhig und selbstverständlich wirken und im Terminal, auf GitHub und auf dem Fernseher gleich aussehen.",
+  "adjectives": ["schlank", "technisch", "ruhig", "offen"],
+  "criteria": "Erfolg: lesbar bei 16 px, funktioniert einfarbig und umgekehrt, gehört erkennbar zu Entwickler-Werkzeugen, bleibt im Kino-Ton von Flimmer.",
+  "industry": "software",
+  "brand_color": "#78716a",
+  "tile_color": "#11100e",
+  "greyscale": false,
+  "designer": "Flimmer",
+  "round": 2,
+  "concepts": [
+    {
+      "name": "Block-F",
+      "symbol": "flimmer-symbol-hell.svg",
+      "lockup": "flimmer-quer-hell.svg",
+      "symbol_on_tile": "flimmer-symbol-dunkel.svg",
+      "symbol_on_dark": "flimmer-symbol-dunkel.svg",
+      "lockup_on_dark": "flimmer-quer-dunkel.svg",
+      "idea": "Ein heller Block mit ausgestanztem F, die untere Hälfte im Schatten, gebaut aus Pixelblöcken wie ein Terminal.",
+      "rationale": [
+        "Der Block liest sich bei 16 px als klares Quadrat mit F",
+        "Zweifarbig aus Papier und Grau, ohne neue Farbe",
+        "Wortmarke und Zeichen teilen dasselbe Pixelraster"
+      ]
+    }
+  ],
+  "recommendation": "Block-F: ein Raster, drei Farben, überall gleich.",
+  "next_steps": ["Dateien in web/ und apps/android/ einsetzen", "Wortmarke im Kopf der Web-UI ersetzen", "Markenrecherche vor einer öffentlichen Veröffentlichung"]
+}

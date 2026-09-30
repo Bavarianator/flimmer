@@ -15,5 +15,11 @@
     <genre>Science Fiction</genre>
     <genre>Drama</genre>
     <premiered>2017-10-04</premiered>
+    <tagline>Das Geheimnis</tagline>
+    <studio>Alcon</studio>
+    <country>USA</country>
+    <set><name>Blade Runner</name></set>
+    <director>Denis Villeneuve</director>
+    <actor><name>Ryan Gosling</name><role>K</role><thumb>https://example.org/gosling.jpg</thumb></actor>
 </movie>
 https://www.themoviedb.org/movie/335984

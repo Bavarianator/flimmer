@@ -53,9 +53,102 @@ type details struct {
 	IMDBID        string  `json:"imdb_id"`
 	SeasonNumber  int     `json:"season_number"`
 	EpisodeNumber int     `json:"episode_number"`
-	Genres        []struct {
+	Genres        []named `json:"genres"`
+	Tagline       string  `json:"tagline"`
+	Status        string  `json:"status"`
+	LastAirDate   string  `json:"last_air_date"`
+	Companies     []named `json:"production_companies"`
+	Networks      []named `json:"networks"`
+	Countries     []named `json:"production_countries"`
+	Collection    *struct {
+		ID   int    `json:"id"`
 		Name string `json:"name"`
-	} `json:"genres"`
+	} `json:"belongs_to_collection"`
+	// Personen: nur mit append_to_response=credits
+	Credits struct {
+		Cast []credit `json:"cast"`
+		Crew []credit `json:"crew"`
+	} `json:"credits"`
+	// FSK: nur mit append_to_response (Filme: release_dates, Serien: content_ratings)
+	ReleaseDates struct {
+		Results []struct {
+			Country string `json:"iso_3166_1"`
+			Dates   []struct {
+				Certification string `json:"certification"`
+			} `json:"release_dates"`
+		} `json:"results"`
+	} `json:"release_dates"`
+	ContentRatings struct {
+		Results []struct {
+			Country string `json:"iso_3166_1"`
+			Rating  string `json:"rating"`
+		} `json:"results"`
+	} `json:"content_ratings"`
+}
+
+type named struct {
+	Name string `json:"name"`
+}
+
+type credit struct {
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	Character   string `json:"character"`
+	Job         string `json:"job"`
+	ProfilePath string `json:"profile_path"`
+}
+
+// Aus der Crew zählen nur diese Aufgaben; die Besetzung wird auf castMax gekürzt (Speicher: alle Metadaten liegen im RAM).
+var crewKinds = map[string]string{"Director": "director", "Screenplay": "writer", "Writer": "writer", "Novel": "writer",
+	"Author": "writer", "Original Music Composer": "composer", "Producer": "producer"}
+
+const castMax = 20
+
+// people macht aus credits die Personenliste: erst Regie, Buch und Produktion, dann die Besetzung in TMDB-Reihenfolge.
+func (t *TMDB) people(d *details) []Person {
+	var out []Person
+	img := func(p string) string {
+		if p == "" {
+			return ""
+		}
+		return t.ImageURL + "/w185" + p
+	}
+	seen := map[string]bool{}
+	for _, c := range d.Credits.Crew {
+		if k := crewKinds[c.Job]; k != "" && !seen[k+c.Name] {
+			seen[k+c.Name] = true
+			out = append(out, Person{Name: c.Name, Role: c.Job, Kind: k, Image: img(c.ProfilePath), TMDBID: c.ID})
+		}
+	}
+	for _, c := range d.Credits.Cast[:min(len(d.Credits.Cast), castMax)] {
+		out = append(out, Person{Name: c.Name, Role: c.Character, Kind: "actor", Image: img(c.ProfilePath), TMDBID: c.ID})
+	}
+	return out
+}
+
+func names(list []named) []string {
+	var out []string
+	for _, n := range list {
+		out = append(out, n.Name)
+	}
+	return out
+}
+
+// age liefert die deutsche Freigabe aus release_dates bzw. content_ratings.
+func (d *details) age() *int {
+	for _, r := range d.ReleaseDates.Results {
+		for _, x := range r.Dates {
+			if a := fsk(x.Certification); r.Country == "DE" && a != nil {
+				return a
+			}
+		}
+	}
+	for _, r := range d.ContentRatings.Results {
+		if r.Country == "DE" {
+			return fsk(r.Rating)
+		}
+	}
+	return nil
 }
 
 // get ruft path auf; 404 ergibt found=false ohne Fehler.
@@ -101,7 +194,14 @@ func (t *TMDB) get(ctx context.Context, path string, q url.Values, language stri
 // fetch holt Details auf Deutsch und füllt fehlende Texte aus der englischen Fassung.
 func (t *TMDB) fetch(ctx context.Context, path string) (*Meta, error) {
 	var d details
-	if ok, err := t.get(ctx, path, nil, lang, &d); !ok || err != nil {
+	q := url.Values{}
+	switch {
+	case strings.HasPrefix(path, "/movie/"):
+		q.Set("append_to_response", "release_dates,credits")
+	case strings.HasPrefix(path, "/tv/") && !strings.Contains(path, "/season/"):
+		q.Set("append_to_response", "content_ratings,credits")
+	}
+	if ok, err := t.get(ctx, path, q, lang, &d); !ok || err != nil {
 		return nil, err
 	}
 	if d.Overview == "" || cmp(d.Title, d.Name) == "" {
@@ -111,6 +211,7 @@ func (t *TMDB) fetch(ctx context.Context, path string) (*Meta, error) {
 		}
 		d.Overview = cmp(d.Overview, en.Overview)
 		d.Title, d.Name = cmp(d.Title, en.Title), cmp(d.Name, en.Name)
+		d.Tagline = cmp(d.Tagline, en.Tagline)
 	}
 	m := &Meta{
 		Title:         cmp(d.Title, d.Name),
@@ -122,7 +223,23 @@ func (t *TMDB) fetch(ctx context.Context, path string) (*Meta, error) {
 		TMDBID:        d.ID,
 		IMDBID:        d.IMDBID,
 		Rating:        d.VoteAverage,
+		Age:           d.age(),
 		Source:        "tmdb",
+		Tagline:       d.Tagline,
+		Studios:       names(d.Companies),
+		Countries:     names(d.Countries),
+		People:        t.people(&d),
+		Status:        d.Status,
+		EndYear:       year0(d.LastAirDate),
+	}
+	if len(d.Networks) > 0 { // Serien: Sender statt Produktionsfirmen
+		m.Studios = names(d.Networks)
+	}
+	if d.Collection != nil && d.Collection.Name != "" {
+		m.Collection = &Collection{TMDBID: d.Collection.ID, Name: d.Collection.Name}
+	}
+	if m.Status != "Ended" && m.Status != "Canceled" {
+		m.EndYear = 0 // läuft noch
 	}
 	if m.OriginalTitle == m.Title {
 		m.OriginalTitle = ""
@@ -255,6 +372,22 @@ func (t *TMDB) TV(ctx context.Context, id int) (*Meta, error) {
 		return nil, nil
 	}
 	return t.fetch(ctx, "/tv/"+strconv.Itoa(id))
+}
+
+// Biography liefert den Lebenslauf einer Person (deutsch, sonst englisch); "" wenn unbekannt.
+func (t *TMDB) Biography(ctx context.Context, id int) (string, error) {
+	if !t.Enabled() || id == 0 {
+		return "", nil
+	}
+	var p struct {
+		Biography string `json:"biography"`
+	}
+	for _, l := range []string{lang, fallbackLang} {
+		if _, err := t.get(ctx, "/person/"+strconv.Itoa(id), nil, l, &p); err != nil || p.Biography != "" {
+			return p.Biography, err
+		}
+	}
+	return "", nil
 }
 
 // Episode liefert Titel, Beschreibung und Standbild einer Episode (ohne Serien-Poster/Genres).

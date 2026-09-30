@@ -33,7 +33,7 @@ VALUES('it1', '/media/privat/urlaub.mkv', 1, 1, 1, 'movie', 'Urlaub', 'mkv', 60,
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := New(Options{DB: d, Port: 8097, Login: func(http.ResponseWriter, *http.Request, db.User) error { return nil }})
+	s := New(Options{DB: d, Port: 8097, Login: func(http.ResponseWriter, *http.Request, db.User) (string, error) { return "tok", nil }})
 	return s, d
 }
 
@@ -62,10 +62,10 @@ func TestInviteLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Redeem(ctx, token[:len(token)-2]+"AA", "x"); !errors.Is(err, ErrInvalid) {
+	if _, err := s.Redeem(ctx, token[:len(token)-2]+"AA", "x", ""); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("gefälschte Signatur: %v", err)
 	}
-	u, err := s.Redeem(ctx, token, "  Oma\x07 ")
+	u, err := s.Redeem(ctx, token, "  Oma\x07 ", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,10 +91,10 @@ func TestInviteLifecycle(t *testing.T) {
 		t.Error("normaler Benutzer darf keinen Scope haben")
 	}
 
-	if _, err := s.Redeem(ctx, token, "Opa"); err != nil {
+	if _, err := s.Redeem(ctx, token, "Opa", ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Redeem(ctx, token, "Dritter"); !errors.Is(err, ErrInvalid) {
+	if _, err := s.Redeem(ctx, token, "Dritter", ""); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("max. 2 Nutzungen: %v", err)
 	}
 	list, _ := s.List(ctx)
@@ -122,7 +122,7 @@ func TestExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	u, err := s.Redeem(ctx, token, "Gast")
+	u, err := s.Redeem(ctx, token, "Gast", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestExpiry(t *testing.T) {
 	if _, err := s.Scope(ctx, u.ID); !errors.Is(err, ErrExpired) {
 		t.Fatalf("abgelaufen: %v", err)
 	}
-	if _, err := s.Redeem(ctx, token, "Spät"); !errors.Is(err, ErrInvalid) {
+	if _, err := s.Redeem(ctx, token, "Spät", ""); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("abgelaufen einlösen: %v", err)
 	}
 	if err := s.Cleanup(ctx); err != nil {
@@ -152,7 +152,7 @@ func TestRedeemConcurrent(t *testing.T) {
 	var wg sync.WaitGroup
 	for range 12 {
 		wg.Go(func() {
-			if _, err := s.Redeem(ctx, token, "x"); err == nil {
+			if _, err := s.Redeem(ctx, token, "x", ""); err == nil {
 				ok.Add(1)
 			}
 		})
@@ -166,7 +166,10 @@ func TestRedeemConcurrent(t *testing.T) {
 func TestHandlers(t *testing.T) {
 	s, _ := setup(t)
 	var loggedIn string
-	s.opts.Login = func(_ http.ResponseWriter, _ *http.Request, u db.User) error { loggedIn = u.ID; return nil }
+	s.opts.Login = func(_ http.ResponseWriter, _ *http.Request, u db.User) (string, error) {
+		loggedIn = u.ID
+		return "tok", nil
+	}
 	s.opts.UserID = func(*http.Request) string { return "admin1" }
 
 	body, _ := json.Marshal(map[string]any{"note": "Kino", "items": []string{"it1"}, "hours": 24, "maxUses": 0})

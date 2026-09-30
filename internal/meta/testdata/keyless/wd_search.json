@@ -1,0 +1,109 @@
+{
+ "searchinfo": {
+  "search": "Nosferatu"
+ },
+ "search": [
+  {
+   "id": "Q16797260",
+   "label": "Nosferatu",
+   "description": "Gattung der Familie Buntbarsche (Cichlidae)",
+   "match": {
+    "type": "label",
+    "language": "de",
+    "text": "Nosferatu"
+   }
+  },
+  {
+   "id": "Q7061794",
+   "label": "Nosferatu",
+   "description": "Computerspiel aus dem Jahr 1994",
+   "match": {
+    "type": "label",
+    "language": "de",
+    "text": "Nosferatu"
+   }
+  },
+  {
+   "id": "Q151895",
+   "label": "Nosferatu – Eine Symphonie des Grauens",
+   "description": "Film von Friedrich Wilhelm Murnau (1922)",
+   "match": {
+    "type": "label",
+    "language": "de",
+    "text": "Nosferatu – Eine Symphonie des Grauens"
+   }
+  },
+  {
+   "id": "Q160259",
+   "label": "Nosferatu – Phantom der Nacht",
+   "description": "Film von Werner Herzog (1979)",
+   "match": {
+    "type": "label",
+    "language": "de",
+    "text": "Nosferatu – Phantom der Nacht"
+   }
+  },
+  {
+   "id": "Q2719527",
+   "label": "Nosferatu",
+   "description": "englische Gothic-Rock-Band",
+   "match": {
+    "type": "label",
+    "language": "de",
+    "text": "Nosferatu"
+   }
+  },
+  {
+   "id": "Q2001593",
+   "label": "Nosferatu",
+   "description": "niederländischer Hardcore Techno-DJ und -produzent",
+   "match": {
+    "type": "label",
+    "language": "de",
+    "text": "Nosferatu"
+   }
+  },
+  {
+   "id": "Q127735",
+   "label": "Nosferatu",
+   "description": "Album von Popol Vuh",
+   "match": {
+    "type": "label",
+    "language": "de",
+    "text": "Nosferatu"
+   }
+  },
+  {
+   "id": "Q3344348",
+   "label": "Nosferatu",
+   "description": "Album von John Zorn",
+   "match": {
+    "type": "label",
+    "language": "de",
+    "text": "Nosferatu"
+   }
+  },
+  {
+   "id": "Q2875690",
+   "label": "Nosferatu",
+   "description": "Album von Art Zoyd",
+   "match": {
+    "type": "label",
+    "language": "de",
+    "text": "Nosferatu"
+   }
+  },
+  {
+   "id": "Q7061791",
+   "label": "Nosferatu",
+   "description": "Album von Helstar",
+   "match": {
+    "type": "label",
+    "language": "de",
+    "text": "Nosferatu"
+   }
+  }
+ ],
+ "search-continue": 10,
+ "success": 1
+}

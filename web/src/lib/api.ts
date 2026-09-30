@@ -1,6 +1,6 @@
 // Datenschicht: typisierte API, 401 → Login, Paginierung, kleiner stale-while-revalidate-Cache.
 import { useEffect, useRef, useState } from 'preact/hooks'
-import { getToken, profile, setProbe } from '../profile'
+import { deviceId, getToken, profile, setProbe } from '../profile'
 import { loadProbe, runProbe } from '../probe'
 
 // ---------- Typen (Formen wie in internal/api) ----------
@@ -17,6 +17,15 @@ export interface Meta {
   backdrop?: string
   source?: string
   uncertain?: boolean
+  age?: number | null // FSK
+  studios?: string[]
+  tags?: string[]
+  tagline?: string
+  countries?: string[]
+  collection?: { tmdbId?: number; name: string }
+  sortTitle?: string
+  tmdbId?: number
+  imdbId?: string
 }
 
 export interface Item {
@@ -40,7 +49,7 @@ export interface Item {
 }
 
 export interface HomeRow {
-  id: string // continue | nextup | recent
+  id: string // continue | nextup | recent-movies | recent-series (alt: recent)
   title: string
   items: Item[]
 }
@@ -51,13 +60,99 @@ export interface Nutzer {
   color: number | string
   admin: boolean
   hasPassword: boolean
+  upload?: boolean // darf Videos hochladen (/hochladen)
 }
+
+// Offene „Gemeinsam schauen“-Gruppen (GET /api/party): Lobby und Startseite.
+export interface OffeneGruppe {
+  id: string
+  mediaId: string
+  host: string
+  members: string[]
+  paused: boolean
+}
+export const offeneGruppen = () => api<OffeneGruppe[]>('/api/party')
 
 export interface Serie {
   name: string
   staffeln: { nummer: number; folgen: Item[] }[]
   erste: Item
   anzahl: number
+}
+
+// Neue Endpunkte (docs/umbau-jellyfin.md, „Vertrag zwischen server und web-*“)
+export interface Person {
+  name: string
+  role?: string
+  kind: 'actor' | 'director' | 'writer' | 'producer' | 'composer'
+  image?: string
+}
+
+export interface Spur {
+  index: number
+  codec: string
+  lang?: string
+  title?: string
+  channels?: number
+  default?: boolean
+  forced?: boolean
+  external?: boolean
+}
+
+export interface Details extends Item {
+  tagline?: string
+  studios?: string[]
+  countries?: string[]
+  people?: Person[]
+  tags?: string[]
+  path?: string
+  container?: string
+  bitrate?: number
+  video?: { codec: string; width: number; height: number; hdr?: string; fps?: number; crop?: { x: number; y: number; w: number; h: number } /* Anteile 0..1 */ }
+  audio: Spur[]
+  subs: Spur[]
+  chapters?: { start: number; name: string; image?: string /* Standbild-URL */ }[]
+  locked?: string[]
+}
+
+export interface SerienInfo {
+  name: string
+  title?: string
+  overview?: string
+  year?: number
+  endYear?: number
+  status?: string
+  genres?: string[]
+  studios?: string[]
+  people?: Person[]
+  age?: number
+  rating?: number
+  poster?: string
+  backdrop?: string
+  color?: string
+}
+
+export interface PersonInfo {
+  name: string
+  image?: string
+  bio?: string
+  items: Item[] // Filme; pro Serie die erste Folge
+  roles: { id: string; role: string }[]
+}
+
+// Listen-Schlüssel: Item-ID oder "serie:<Name>"
+export interface Sammlung {
+  id: string
+  name: string
+  overview?: string
+  items: string[]
+  auto?: boolean
+}
+
+export interface Wiedergabeliste {
+  id: string
+  name: string
+  items: string[]
 }
 
 // ---------- Kern ----------
@@ -169,6 +264,28 @@ export function gecacht<T>(k: string): T | undefined {
   return cache[k] && (cache[k].daten as T)
 }
 
+// Setzt einen Cache-Eintrag von Hand (optimistische Änderung) und benachrichtigt alle Hooks.
+export function setze(k: string, d: unknown) {
+  const e = eintrag(k, false)
+  e.daten = d
+  e.zeit = Date.now()
+  e.lauscher.slice().forEach((fn) => fn(d))
+}
+
+// Hook ohne Laden: folgt nur dem, was unter k im Cache liegt (Favoriten an Karten).
+export function useGecacht<T>(k: string): T | undefined {
+  const e = eintrag(k, false)
+  const [d, setD] = useState<T | undefined>(e.daten as T | undefined)
+  useEffect(() => {
+    const fn = (x: unknown) => setD(x as T)
+    e.lauscher.push(fn)
+    return () => {
+      e.lauscher.splice(e.lauscher.indexOf(fn), 1)
+    }
+  }, [k])
+  return d
+}
+
 export interface Zustand<T> {
   daten: T | undefined
   fehler: string
@@ -236,7 +353,19 @@ export async function seite(offset: number, limit: number): Promise<{ items: Ite
 }
 
 export function startseite(): Promise<HomeRow[]> {
-  return holen('start', () => api<HomeRow[]>('/api/home', profile).then((rows) => rows.filter((r) => r.items && r.items.length && merke(r.items))), { merken: true })
+  return holen('start', () => api<HomeRow[]>('/api/home', profile).then((rows) => teileNeu(rows).filter((r) => r.items && r.items.length && merke(r.items))), { merken: true })
+}
+
+// Älterer Server: „recent“ statt recent-movies/recent-series. Dann hier teilen, je Serie die neueste Folge.
+export function teileNeu(rows: HomeRow[]): HomeRow[] {
+  const i = rows.map((r) => r.id).indexOf('recent')
+  if (i < 0) return rows
+  const da: Record<string, boolean> = {}
+  const alle = rows[i].items || []
+  const serien = alle.filter((x) => x.series && !da[x.series] && (da[x.series] = true))
+  return rows
+    .slice(0, i)
+    .concat({ id: 'recent-movies', title: '', items: alle.filter((x) => !x.series) }, { id: 'recent-series', title: '', items: serien }, rows.slice(i + 1))
 }
 
 export function ich(): Promise<Nutzer> {
@@ -257,13 +386,139 @@ export function abmelden(): Promise<void> {
 }
 
 export function setGesehen(id: string, gesehen: boolean): Promise<void> {
-  const it = bekannt[id]
-  if (it) {
-    it.watched = gesehen
-    if (gesehen) it.progress = 0
-  }
+  const b = gecacht<Item[]>('bibliothek') || []
+  const kopien = b.concat(...(gecacht<HomeRow[]>('start') || []).map((r) => r.items))
+  if (bekannt[id]) kopien.push(bekannt[id])
+  for (const it of kopien)
+    if (it.id === id) {
+      it.watched = gesehen
+      if (gesehen) it.progress = 0
+    }
   vergessen('start')
+  setze('bibliothek', b.slice()) // Seiten mit der Bibliothek zeichnen neu
   return api<void>(`/api/items/${id}/watched`, { watched: gesehen })
+}
+
+// ---------- Neue Endpunkte ----------
+// Fehlt ein Endpunkt noch (404, bei PUT/POST 405 wegen der SPA-Route), liefern die Funktionen null:
+// die Seite blendet den Bereich dann aus.
+export function fehlt(err: unknown): boolean {
+  return /^40[45] /.test(String(err && (err as Error).message))
+}
+
+function oderNull<T>(p: Promise<T>): Promise<T | null> {
+  return p.catch((e) => {
+    if (fehlt(e)) return null
+    throw e
+  })
+}
+
+const enc = encodeURIComponent
+
+export function details(id: string): Promise<Details | null> {
+  return holen('detail:' + id, () => oderNull(api<Details>(`/api/items/${enc(id)}?device=${enc(deviceId())}`)), { maxAlter: 30000 })
+}
+
+export function serienInfo(name: string): Promise<SerienInfo | null> {
+  return holen('serie:' + name, () => oderNull(api<SerienInfo>('/api/series/' + enc(name))), { maxAlter: 60000 })
+}
+
+export function person(name: string): Promise<PersonInfo | null> {
+  return holen('person:' + name, () => oderNull(api<PersonInfo>('/api/people/' + enc(name) + '?device=' + enc(deviceId()))).then((p) => (p && merke(p.items || []), p)), { maxAlter: 60000 })
+}
+
+// Favoriten pro Profil. Kennt der Server sie nicht, liegen sie lokal (localStorage).
+let favLokal = false
+function lokaleFavoriten(neu?: string[]): string[] {
+  try {
+    if (neu) localStorage.setItem('flimmer.favoriten', JSON.stringify(neu))
+    return neu || JSON.parse(localStorage.getItem('flimmer.favoriten') || '[]')
+  } catch {
+    return neu || []
+  }
+}
+
+export function favoriten(): Promise<string[]> {
+  return holen(
+    'favoriten',
+    () =>
+      api<string[]>('/api/favorites').catch((e) => {
+        if (!fehlt(e)) throw e
+        favLokal = true
+        return lokaleFavoriten()
+      }),
+    { maxAlter: 30000 },
+  )
+}
+
+export function favKey(it: Item, alsSerie?: boolean): string {
+  return alsSerie && it.series ? 'serie:' + it.series : it.id
+}
+
+export function setFavorit(k: string, an: boolean): Promise<void> {
+  const alt = gecacht<string[]>('favoriten') || []
+  const neu = alt.filter((x) => x !== k)
+  if (an) neu.unshift(k)
+  setze('favoriten', neu)
+  if (favLokal) return Promise.resolve(void lokaleFavoriten(neu))
+  return api<void>('/api/favorites/' + enc(k), undefined, an ? 'PUT' : 'DELETE').catch((e) => {
+    setze('favoriten', alt)
+    throw e
+  })
+}
+
+// Sammlungen (bearbeiten nur Admin) und Wiedergabelisten (pro Profil) haben dieselbe Form.
+function crud<T extends { id: string }>(k: string, pfad: string) {
+  const ersetze = (x: T) => {
+    const alt = gecacht<T[]>(k) || []
+    setze(k, alt.some((y) => y.id === x.id) ? alt.map((y) => (y.id === x.id ? x : y)) : alt.concat(x))
+    return x
+  }
+  return {
+    alle: (): Promise<T[] | null> => holen(k, () => oderNull(api<T[]>(pfad)), { maxAlter: 30000 }),
+    neu: (body: object) => api<T>(pfad, body).then(ersetze),
+    aendern: (id: string, body: object) => api<T>(pfad + '/' + enc(id), body, 'PUT').then(ersetze),
+    loeschen: (id: string) =>
+      api<void>(pfad + '/' + enc(id), undefined, 'DELETE').then(() => setze(k, (gecacht<T[]>(k) || []).filter((y) => y.id !== id))),
+  }
+}
+export const sammlungenApi = crud<Sammlung>('sammlungen', '/api/collections')
+export const listenApi = crud<Wiedergabeliste>('listen', '/api/playlists')
+
+// Titel zu Listen-Schlüsseln; "serie:<Name>" wird zur ersten bekannten Folge (Karte zeigt die Serie).
+export function titelZu(keys: string[], alle: Item[]): Item[] {
+  const byId: Record<string, Item> = {}
+  const serie: Record<string, Item> = {}
+  for (const it of alle) {
+    byId[it.id] = it
+    if (it.series && !serie[it.series]) serie[it.series] = it
+  }
+  return keys.map((k) => (k.indexOf('serie:') === 0 ? serie[k.slice(6)] : byId[k] || bekannt[k])).filter(Boolean)
+}
+
+// Gesehen für Listen-Schlüssel: Item-ID oder "serie:<Name>" (alle Folgen).
+export function alleGesehen(keys: string[], an: boolean) {
+  return bibliothek().then((alle) =>
+    Promise.all(alle.filter((x) => keys.indexOf(x.id) >= 0 || (!!x.series && keys.indexOf('serie:' + x.series) >= 0)).map((x) => setGesehen(x.id, an))),
+  )
+}
+
+// Karten laden das einmal vor, damit Menü und Herz wissen, was es gibt (null = Endpunkt fehlt).
+export function vorladen() {
+  favoriten().catch(() => {})
+  sammlungenApi.alle().catch(() => {})
+  listenApi.alle().catch(() => {})
+}
+
+// Warteschlange für „Alle abspielen“ (sessionStorage). Der Player nimmt die nächste id daraus.
+export function warteschlange(ids?: string[]): string[] | null {
+  try {
+    if (ids) sessionStorage.setItem('flimmer.warteschlange', JSON.stringify({ ids }))
+    const s = JSON.parse(sessionStorage.getItem('flimmer.warteschlange') || 'null')
+    return s && s.ids
+  } catch {
+    return ids || null
+  }
 }
 
 // ---------- Paginierung für Listen (Filme, Serien) ----------

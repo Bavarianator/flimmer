@@ -1,0 +1,39 @@
+#EXTM3U
+# Öffentlich-rechtliche Sender als Internet-Stream (Stand 29.09.2026, alle geprüft). Meist nur in Deutschland abrufbar.
+# tvg-id passt zu epgshare01 (EPGDE in vorlagen.go). SR hat dort kein eigenes Programm.
+#EXTINF:-1 tvg-chno="1" tvg-id="Das.Erste.de" group-title="Hauptprogramme",Das Erste
+https://daserste-live.ard-mcdn.de/daserste/live/hls/de/master.m3u8
+#EXTINF:-1 tvg-chno="2" tvg-id="ZDF.de" group-title="Hauptprogramme",ZDF
+https://zdf-hls-15.akamaized.net/hls/live/2016498/de/high/master.m3u8
+#EXTINF:-1 tvg-chno="3" tvg-id="3sat.de" group-title="Hauptprogramme",3sat
+https://zdf-hls-18.akamaized.net/hls/live/2016501/dach/high/master.m3u8
+#EXTINF:-1 tvg-chno="4" tvg-id="ARTE.de" group-title="Hauptprogramme",arte
+https://artesimulcast.akamaized.net/hls/live/2030993/artelive_de/index.m3u8
+#EXTINF:-1 tvg-chno="5" tvg-id="PHOENIX.de" group-title="Information",phoenix
+https://zdf-hls-19.akamaized.net/hls/live/2016502/de/high/master.m3u8
+#EXTINF:-1 tvg-chno="6" tvg-id="ZDFneo.de" group-title="Hauptprogramme",ZDFneo
+https://zdf-hls-16.akamaized.net/hls/live/2016499/de/high/master.m3u8
+#EXTINF:-1 tvg-chno="7" tvg-id="ZDFinfo.de" group-title="Information",ZDFinfo
+https://zdf-hls-17.akamaized.net/hls/live/2016500/de/high/master.m3u8
+#EXTINF:-1 tvg-chno="8" tvg-id="tagesschau24.de" group-title="Information",tagesschau24
+https://tagesschau.akamaized.net/hls/live/2020115/tagesschau/tagesschau_1/master.m3u8
+#EXTINF:-1 tvg-chno="9" tvg-id="ARD.alpha.de" group-title="Information",ARD alpha
+https://mcdn.br.de/br/fs/ard_alpha/hls/de/master.m3u8
+#EXTINF:-1 tvg-chno="10" tvg-id="KIKA.de" group-title="Kinder",KiKA
+https://kikahls.akamaized.net/hls/live/2022690/livetvkika_ww/master.m3u8
+#EXTINF:-1 tvg-chno="11" tvg-id="BR.de" group-title="Regional",BR Fernsehen
+https://mcdn.br.de/br/fs/bfs_sued/hls/de/master.m3u8
+#EXTINF:-1 tvg-chno="12" tvg-id="HR.de" group-title="Regional",hr-fernsehen
+https://hrhls.akamaized.net/hls/live/2024525/hrhls/index.m3u8
+#EXTINF:-1 tvg-chno="13" tvg-id="MDR.de" group-title="Regional",MDR Fernsehen
+https://mdrtvsnhls.akamaized.net/hls/live/2016928/mdrtvsn/index.m3u8
+#EXTINF:-1 tvg-chno="14" tvg-id="NDR.de" group-title="Regional",NDR Fernsehen
+https://mcdn.ndr.de/ndr/hls/ndr_fs/ndr_hh/master.m3u8
+#EXTINF:-1 tvg-chno="15" tvg-id="RBB.de" group-title="Regional",rbb Fernsehen
+https://rbb-hls-berlin.akamaized.net/hls/live/2017824/rbb_berlin/index.m3u8
+#EXTINF:-1 tvg-chno="16" group-title="Regional",SR Fernsehen
+https://srfs.akamaized.net/hls/live/689649/srfsgeo/index.m3u8
+#EXTINF:-1 tvg-chno="17" tvg-id="SWR/SR.de" group-title="Regional",SWR Fernsehen
+https://swrbwd-hls.akamaized.net/hls/live/2018672/swrbwd/master.m3u8
+#EXTINF:-1 tvg-chno="18" tvg-id="WDR.de" group-title="Regional",WDR Fernsehen
+https://wdr-live.ard-mcdn.de/wdr/live/hls/de/master.m3u8

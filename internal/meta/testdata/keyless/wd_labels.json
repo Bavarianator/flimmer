@@ -1,0 +1,222 @@
+{
+ "entities": {
+  "Q55412": {
+   "labels": {
+    "de": {
+     "value": "Friedrich Wilhelm Murnau"
+    }
+   }
+  },
+  "Q97411": {
+   "labels": {
+    "de": {
+     "value": "Henrik Galeen"
+    }
+   }
+  },
+  "Q99363": {
+   "labels": {
+    "de": {
+     "value": "Hans Erdmann"
+    }
+   }
+  },
+  "Q97413": {
+   "labels": {
+    "de": {
+     "value": "Albin Grau"
+    }
+   }
+  },
+  "Q58822": {
+   "labels": {
+    "de": {
+     "value": "Max Schreck"
+    }
+   }
+  },
+  "Q89376": {
+   "labels": {
+    "de": {
+     "value": "Wolfgang Heinz"
+    }
+   }
+  },
+  "Q66097": {
+   "labels": {
+    "de": {
+     "value": "Gustav von Wangenheim"
+    }
+   }
+  },
+  "Q76656": {
+   "labels": {
+    "de": {
+     "value": "Greta Schröder"
+    }
+   }
+  },
+  "Q78817": {
+   "labels": {
+    "de": {
+     "value": "Alexander Granach"
+    }
+   }
+  },
+  "Q95681": {
+   "labels": {
+    "de": {
+     "value": "Georg H. Schnell"
+    }
+   }
+  },
+  "Q87468": {
+   "labels": {
+    "de": {
+     "value": "John Gottowt"
+    }
+   }
+  },
+  "Q114696": {
+   "labels": {
+    "de": {
+     "value": "Gustav Botz"
+    }
+   }
+  },
+  "Q1913136": {
+   "labels": {
+    "de": {
+     "value": "Max Nemetz"
+    }
+   }
+  },
+  "Q2177665": {
+   "labels": {
+    "de": {
+     "value": "Ruth Landshoff"
+    }
+   }
+  },
+  "Q1471025": {
+   "labels": {
+    "de": {
+     "value": "Albert Venohr"
+    }
+   }
+  },
+  "Q1585227": {
+   "labels": {
+    "de": {
+     "value": "Hardy von Francois"
+    }
+   }
+  },
+  "Q91159": {
+   "labels": {
+    "de": {
+     "value": "Guido Herzfeld"
+    }
+   }
+  },
+  "Q86293": {
+   "labels": {
+    "de": {
+     "value": "Karl Etlinger"
+    }
+   }
+  },
+  "Q1599343": {
+   "labels": {
+    "de": {
+     "value": "Heinrich Witte"
+    }
+   }
+  },
+  "Q89069": {
+   "labels": {
+    "de": {
+     "value": "Fanny Schreck"
+    }
+   }
+  },
+  "Q98755": {
+   "labels": {
+    "de": {
+     "value": "Loni Nest"
+    }
+   }
+  },
+  "Q226730": {
+   "labels": {
+    "de": {
+     "value": "Stummfilm"
+    }
+   }
+  },
+  "Q200092": {
+   "labels": {
+    "de": {
+     "value": "Horrorfilm"
+    }
+   }
+  },
+  "Q130232": {
+   "labels": {
+    "de": {
+     "value": "Filmdrama"
+    }
+   }
+  },
+  "Q2137852": {
+   "labels": {
+    "de": {
+     "value": "Vampirfilm"
+    }
+   }
+  },
+  "Q540172": {
+   "labels": {
+    "de": {
+     "value": "Prana Film"
+    }
+   }
+  },
+  "Q183": {
+   "labels": {
+    "de": {
+     "value": "Deutschland"
+    }
+   }
+  },
+  "Q1442062": {
+   "labels": {
+    "de": {
+     "value": "Graf Orlok"
+    }
+   }
+  },
+  "Q123697444": {
+   "labels": {
+    "de": {
+     "value": "Thomas Hutter"
+    }
+   }
+  },
+  "Q123697744": {
+   "labels": {
+    "de": {
+     "value": "Ellen Hutter"
+    }
+   }
+  },
+  "Q123704047": {
+   "labels": {
+    "de": {
+     "value": "Knock"
+    }
+   }
+  }
+ },
+ "success": 1
+}

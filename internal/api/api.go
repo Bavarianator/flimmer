@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/Bavarianator/flimmer/internal/ffmpeg"
 	"github.com/Bavarianator/flimmer/internal/hwaccel"
 	"github.com/Bavarianator/flimmer/internal/images"
+	"github.com/Bavarianator/flimmer/internal/livetv"
 	"github.com/Bavarianator/flimmer/internal/meta"
 	"github.com/Bavarianator/flimmer/internal/optimize"
 	"github.com/Bavarianator/flimmer/internal/party"
@@ -28,23 +30,25 @@ import (
 	"github.com/Bavarianator/flimmer/internal/share"
 	"github.com/Bavarianator/flimmer/internal/transcode"
 	"github.com/Bavarianator/flimmer/internal/update"
+	"github.com/Bavarianator/flimmer/internal/vpn"
 )
 
 type Server struct {
-	Lib      *scan.Library
-	HLS      *transcode.Manager
-	DB       *db.DB
-	Meta     *meta.Resolver    // nil = keine Metadaten
-	Images   *images.Store     // nil = keine Bilder
-	FF       *ffmpeg.Installer // nil = kein Download möglich
-	CacheDir string
-	Web      fs.FS
-	Pages    fs.FS           // setup.html, settings.html
-	LANURL   string          // z. B. http://192.168.1.20:8096, für QR-Code und Anzeige
-	QR       http.Handler    // PNG mit LANURL
-	Log      *LogRing        // letzte Log-Zeilen für die Diagnose, nil = keine
-	Updates  *update.Checker // nil = keine Update-Prüfung
-	Remote   *remote.Remote  // nil = kein Fernzugriff möglich
+	Lib       *scan.Library
+	HLS       *transcode.Manager
+	DB        *db.DB
+	Meta      *meta.Resolver    // nil = keine Metadaten
+	Images    *images.Store     // nil = keine Bilder
+	FF        *ffmpeg.Installer // nil = kein Download möglich
+	CacheDir  string
+	UploadDir string // Ziel von POST /api/upload (unter den Daten, nie in den Medienordnern)
+	Web       fs.FS
+	Pages     fs.FS           // setup.html, settings.html
+	LANURL    string          // z. B. http://192.168.1.20:8096, für QR-Code und Anzeige
+	QR        http.Handler    // PNG mit LANURL
+	Log       *LogRing        // letzte Log-Zeilen für die Diagnose, nil = keine
+	Updates   *update.Checker // nil = keine Update-Prüfung
+	Remote    *remote.Remote  // nil = kein Fernzugriff möglich
 	// RemoteToggle startet bzw. stoppt die Portfreigabe, wenn der Admin den Fernzugriff umschaltet.
 	RemoteToggle func(on bool)
 	FFmpeg       atomic.Bool                   // ffmpeg/ffprobe gefunden
@@ -52,12 +56,18 @@ type Server struct {
 
 	Optimizer atomic.Pointer[optimize.Optimizer] // gesetzt, sobald die Hardware gemessen ist
 	Share     *share.Share                       // Einladungen; nil = aus
+	BackupDir string                             // Ziel der Sicherungen (wie db.Nightly); leer = keine Aufgabe „Sicherung“
+	LiveTV    *livetv.TV                         // nil = kein Live-TV
+	Port      int                                // HTTP-Port, für die VPN-Adressen unter /api/vpn
 	party     *party.Hub
 
-	alt     altCache
-	pairing auth.Pairing
-	limiter auth.Limiter
-	streams streams
+	alt      altCache
+	pairing  auth.Pairing
+	limiter  auth.Limiter
+	streams  streams
+	extras   extraCache
+	activity activityLog
+	running  running
 }
 
 func (s *Server) hw() hwaccel.Accel {
@@ -77,12 +87,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/login", s.login)
 	mux.HandleFunc("POST /api/logout", s.logout)
 	mux.HandleFunc("GET /api/me", s.me)
-	mux.HandleFunc("POST /api/users", adminOnly(s.createUser))
-	mux.HandleFunc("PUT /api/users/{id}", adminOnly(s.updateUser))
-	mux.HandleFunc("DELETE /api/users/{id}", adminOnly(s.deleteUser))
+	mux.HandleFunc("POST /api/users", adminOnly(s.logged("user", "Benutzer angelegt", s.createUser)))
+	mux.HandleFunc("PUT /api/users/{id}", adminOnly(s.logged("user", "Benutzer geändert", s.updateUser)))
+	mux.HandleFunc("DELETE /api/users/{id}", adminOnly(s.logged("user", "Benutzer gelöscht", s.deleteUser)))
 	mux.HandleFunc("POST /api/pair", s.pairStart)
 	mux.HandleFunc("GET /api/pair/{code}", s.pairPoll)
 	mux.HandleFunc("POST /api/pair/{code}/confirm", s.pairConfirm)
+	mux.HandleFunc("GET /api/pair/{code}/qr", s.pairQR)
 
 	// Einrichtung und Einstellungen
 	mux.HandleFunc("GET /api/setup", s.setupInfo)
@@ -107,7 +118,7 @@ func (s *Server) Handler() http.Handler {
 		},
 		Allowed: func(r *http.Request, mediaID string) bool {
 			it := s.Lib.Get(mediaID)
-			return it != nil && allowed(r, it)
+			return it != nil && s.allowed(r, it)
 		},
 		EventsURL: func(r *http.Request, id string) string {
 			return "/api/m/" + auth.MediaToken(s.secret(), userFrom(r).ID, mediaTTL) + "/party/" + id + "/events"
@@ -115,18 +126,61 @@ func (s *Server) Handler() http.Handler {
 	}
 	mux.HandleFunc("GET /api/time", party.Time)
 	mux.HandleFunc("POST /api/party", s.party.Create)
+	mux.HandleFunc("GET /api/party", func(w http.ResponseWriter, r *http.Request) {
+		if u := userFrom(r); u == nil || s.isGuest(r.Context(), u.ID) { // Gäste kommen nur per Einladungslink in Gruppen
+			writeJSON(w, []any{})
+			return
+		}
+		s.party.List(w, r)
+	})
+	mux.HandleFunc("POST /api/upload", s.upload)
 	mux.HandleFunc("GET /api/party/{id}", s.party.Get)
 	mux.HandleFunc("GET /api/party/{id}/events", s.party.Events)
 	mux.HandleFunc("POST /api/party/{id}/actions", s.party.Action)
 	if s.Share != nil {
-		mux.HandleFunc("POST /api/invites", adminOnly(s.Share.CreateHandler))
+		mux.HandleFunc("POST /api/invites", adminOnly(s.logged("invite", "Einladung erstellt", s.Share.CreateHandler)))
 		mux.HandleFunc("GET /api/invites", adminOnly(s.Share.ListHandler))
-		mux.HandleFunc("DELETE /api/invites/{id}", adminOnly(s.Share.RevokeHandler))
-		mux.HandleFunc("POST /api/invites/redeem", s.Share.RedeemHandler) // ohne Anmeldung, eigenes Rate-Limit
+		mux.HandleFunc("DELETE /api/invites/{id}", adminOnly(s.logged("invite", "Einladung zurückgenommen", s.Share.RevokeHandler)))
+		mux.HandleFunc("POST /api/invites/redeem", s.logged("invite", "Einladung eingelöst", s.Share.RedeemHandler)) // ohne Anmeldung, eigenes Rate-Limit
 	}
 	mux.HandleFunc("GET /api/settings/optimize", adminOnly(s.optimizeStatus))
-	mux.HandleFunc("GET /api/settings/backup", adminOnly(s.backupDownload))
-	mux.HandleFunc("POST /api/settings/restore", adminOnly(s.restore))
+	mux.HandleFunc("GET /api/settings/backup", adminOnly(s.logged("backup", "Sicherung heruntergeladen", s.backupDownload)))
+	mux.HandleFunc("POST /api/settings/restore", adminOnly(s.logged("backup", "Sicherung eingespielt", s.restore)))
+
+	// Dashboard
+	mux.HandleFunc("GET /api/admin/overview", adminOnly(s.overview))
+	mux.HandleFunc("GET /api/sessions", adminOnly(s.sessions))
+	mux.HandleFunc("GET /api/activity", adminOnly(s.activities))
+	mux.HandleFunc("GET /api/devices", adminOnly(s.devices))
+	mux.HandleFunc("DELETE /api/devices/{id}", adminOnly(s.deleteDevice))
+	mux.HandleFunc("GET /api/tasks", adminOnly(s.taskList))
+	mux.HandleFunc("POST /api/tasks/{id}/run", adminOnly(s.runTask))
+	mux.HandleFunc("GET /api/logs", adminOnly(s.logs))
+	// Alle festen Nutzer (keine Gäste): die Android-App merkt sich die Adresse für unterwegs.
+	vpnH := vpn.Handler(s.Port)
+	mux.HandleFunc("GET /api/vpn", func(w http.ResponseWriter, r *http.Request) {
+		if u := userFrom(r); u == nil || s.isGuest(r.Context(), u.ID) {
+			http.Error(w, "nicht erlaubt", http.StatusForbidden)
+			return
+		}
+		vpnH.ServeHTTP(w, r)
+	})
+
+	// Live-TV (docs/livetv-vpn.md): Gäste nie; der Player holt HLS mit Medien-Token im Pfad.
+	if tv := s.LiveTV; tv != nil {
+		tv.Allow = func(r *http.Request) bool { u := userFrom(r); return u != nil && !s.isGuest(r.Context(), u.ID) }
+		tv.URL = func(r *http.Request, id string) string {
+			return "/api/m/" + auth.MediaToken(s.secret(), userFrom(r).ID, mediaTTL) + "/livetv/channels/" + id + "/index.m3u8"
+		}
+		mux.HandleFunc("GET /api/livetv", adminOnly(tv.StatusHandler))
+		mux.HandleFunc("PUT /api/livetv", adminOnly(tv.ConfigHandler))
+		mux.HandleFunc("POST /api/livetv/refresh", adminOnly(tv.RefreshHandler))
+		mux.HandleFunc("GET /api/livetv/vorlagen", adminOnly(tv.PresetsHandler))
+		mux.HandleFunc("GET /api/livetv/channels", tv.ChannelsHandler)
+		mux.HandleFunc("GET /api/livetv/guide", tv.GuideHandler)
+		mux.HandleFunc("POST /api/livetv/channels/{id}/play", tv.PlayHandler)
+		mux.HandleFunc("GET /api/livetv/channels/{id}/{file}", tv.FileHandler)
+	}
 	if s.Remote != nil {
 		mux.HandleFunc("GET /api/remote", adminOnly(s.Remote.StatusHandler))
 		mux.HandleFunc("POST /api/remote/check", adminOnly(s.Remote.CheckHandler))
@@ -137,6 +191,21 @@ func (s *Server) Handler() http.Handler {
 	// Bibliothek und Wiedergabe
 	mux.HandleFunc("POST /api/library", s.library)
 	mux.HandleFunc("POST /api/home", s.home)
+	mux.HandleFunc("GET /api/search", s.search)
+	mux.HandleFunc("GET /api/favorites", s.favorites)
+	mux.HandleFunc("PUT /api/favorites/{key}", s.setFavorite)
+	mux.HandleFunc("DELETE /api/favorites/{key}", s.setFavorite)
+	mux.HandleFunc("GET /api/collections", s.collections)
+	mux.HandleFunc("POST /api/collections", adminOnly(s.createList(db.Collection)))
+	mux.HandleFunc("PUT /api/collections/{id}", adminOnly(s.updateList(db.Collection)))
+	mux.HandleFunc("DELETE /api/collections/{id}", adminOnly(s.deleteList(db.Collection)))
+	mux.HandleFunc("GET /api/playlists", s.playlists)
+	mux.HandleFunc("POST /api/playlists", s.createList(db.Playlist))
+	mux.HandleFunc("PUT /api/playlists/{id}", s.updateList(db.Playlist))
+	mux.HandleFunc("DELETE /api/playlists/{id}", s.deleteList(db.Playlist))
+	mux.HandleFunc("GET /api/items/{id}", s.itemDetails)
+	mux.HandleFunc("GET /api/series/{name}", s.series)
+	mux.HandleFunc("GET /api/people/{name}", s.person)
 	mux.HandleFunc("POST /api/items/{id}/play", s.play)
 	mux.HandleFunc("POST /api/items/{id}/progress", s.progress)
 	mux.HandleFunc("POST /api/items/{id}/watched", s.watched)
@@ -151,9 +220,14 @@ func (s *Server) Handler() http.Handler {
 	if s.Meta != nil {
 		mux.Handle("GET /api/items/{id}/search", adminOnly(s.Meta.SearchHandler(s.metaLookup)))
 		mux.Handle("POST /api/items/{id}/identify", adminOnly(s.Meta.IdentifyHandler(s.metaLookup, s.identified)))
+		mux.HandleFunc("PUT /api/items/{id}/meta", adminOnly(s.editMeta))
 	}
 	if s.Images != nil {
 		mux.Handle("GET /api/images/{id}/{kind}", s.Images.Handler(s.imageLookup))
+		mux.HandleFunc("GET /api/images/{id}/frame", s.frameImage)
+		if s.Meta != nil {
+			mux.HandleFunc("GET /api/images/person/{name}/profile", s.personImage)
+		}
 	}
 
 	// Seiten
@@ -165,6 +239,17 @@ func (s *Server) Handler() http.Handler {
 	}
 	mux.Handle("GET /", s.root(spa(s.Web)))
 	return cors(s.authenticate(mux))
+}
+
+// BaseURL ist die Adresse für Links und QR-Codes: die öffentliche, wenn der Fernzugriff von außen bestätigt ist
+// (public=true), sonst die LAN-Adresse.
+func (s *Server) BaseURL() (string, bool) {
+	if s.Remote != nil {
+		if st := s.Remote.Status(); st.Reachable && st.PublicURL != "" {
+			return st.PublicURL, true
+		}
+	}
+	return s.LANURL, false
 }
 
 // root schickt auf die Einrichtung, solange es keinen Admin gibt.
@@ -217,10 +302,14 @@ func cors(h http.Handler) http.Handler {
 	})
 }
 
-// spa liefert statische Dateien und fällt für Client-Routen auf index.html zurück.
+// spa liefert statische Dateien und fällt für Client-Routen auf index.html zurück. Unbekannte API-Pfade sind 404.
 func spa(web fs.FS) http.Handler {
 	files := http.FileServerFS(web)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			http.NotFound(w, r)
+			return
+		}
 		if _, err := fs.Stat(web, r.URL.Path[1:]); err != nil || r.URL.Path == "/" {
 			http.ServeFileFS(w, r, web, "index.html")
 			return
@@ -370,7 +459,7 @@ func (s *Server) rescan(w http.ResponseWriter, r *http.Request) {
 // Alle Titel-Routen (play, file, hls, subs, progress, watched) gehen hier durch.
 func (s *Server) item(w http.ResponseWriter, r *http.Request) *scan.Item {
 	it := s.Lib.Get(r.PathValue("id"))
-	if it == nil || !allowed(r, it) {
+	if it == nil || !s.allowed(r, it) {
 		http.NotFound(w, r)
 		return nil
 	}

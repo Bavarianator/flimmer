@@ -1,4 +1,5 @@
 import { applyProbe, loadProbe, type ProbeResult } from './probe'
+import { isHisense } from './lib/hisense'
 
 // Ermittelt, was dieses Gerät abspielen kann. Der Server entscheidet damit pro Titel über
 // Direct Play / Remux / Ton-Transcoding und zeigt die Ampel passend zu genau diesem Gerät.
@@ -15,9 +16,17 @@ export interface Profile {
 }
 
 const ua = navigator.userAgent
-export const isWebOS = /Web0S|webOS/i.test(ua)
+// PalmSystem/webOSSystem: webOS-Hüllen, auch wenn der User-Agent schweigt.
+export const isWebOS = /Web0S|webOS/i.test(ua) || 'PalmSystem' in window || 'webOSSystem' in window
 export const isTizen = /Tizen/i.test(ua)
-export const isTV = isWebOS || isTizen || /SMART-TV|SmartTV|AFT|BRAVIA/i.test(ua)
+// Der LG-Browser meldet sich wie Desktop-Chrome (Sitzung vom 30.09.: „Chrome“, kein Web0S). TV-Chips sind ARM,
+// navigator.platform verrät das auch dann, wenn der User-Agent „X11; Linux x86_64“ behauptet. Ohne Touch, sonst wären
+// Android-Tablets im Desktop-Modus (User-Agent ohne „Android“) auch Fernseher.
+// ponytail: ARM-Linux ohne Android/ChromeOS gilt als TV; Raspberry-Pi- oder Asahi-Desktops wählen in
+// Einstellungen › Anzeige › Ansicht „Computer“.
+const armLinux = /^Linux (arm|aarch64)/i.test(navigator.platform || '') && !/Android|CrOS/i.test(ua) && !navigator.maxTouchPoints
+export const isTV =
+  isWebOS || isTizen || isHisense || armLinux || /SMART-TV|SmartTV|HbbTV|NetCast|NETTV|Viera|BRAVIA|AFT|Large Screen|LG Browser/i.test(ua)
 
 const videoTypes: Record<string, string> = {
   h264: 'video/mp4; codecs="avc1.640028"',
@@ -43,7 +52,7 @@ function can(type: string): boolean {
 
 export function detectProfile(): Profile {
   const p: Profile = {
-    name: isWebOS ? 'LG webOS' : isTizen ? 'Samsung Tizen' : 'Browser',
+    name: isWebOS ? 'LG webOS' : isTizen ? 'Samsung Tizen' : isHisense ? 'Hisense VIDAA' : 'Browser',
     containers: ['mp4'],
     video: Object.keys(videoTypes).filter((k) => can(videoTypes[k])),
     audio: Object.keys(audioTypes).filter((k) => audioTypes[k].some(can)),
@@ -117,7 +126,7 @@ export function setProbe(r: ProbeResult) {
     method: 'PUT',
     credentials: 'same-origin',
     headers,
-    body: JSON.stringify({ name: profile.name, probe: r }),
+    body: JSON.stringify({ name: profile.name, probe: r, platform: navigator.platform, tv: isTV }), // platform/tv: Diagnose der TV-Erkennung
   }).catch(() => {})
 }
 

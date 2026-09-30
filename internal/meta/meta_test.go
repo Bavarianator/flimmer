@@ -23,7 +23,9 @@ func TestParseNFO(t *testing.T) {
 	want := Meta{Title: "Blade Runner 2049", OriginalTitle: "Blade Runner 2049", Year: 2017,
 		Overview: "Dreißig Jahre nach den Ereignissen des ersten Films …", TMDBID: 335984, IMDBID: "tt1856101",
 		Rating: 7.5, Genres: []string{"Science Fiction", "Drama"}, Source: "nfo",
-		posterURL: "https://example.org/poster.jpg", backdropURL: "https://example.org/fanart.jpg"}
+		posterURL: "https://example.org/poster.jpg", backdropURL: "https://example.org/fanart.jpg",
+		Tagline: "Das Geheimnis", Studios: []string{"Alcon"}, Countries: []string{"USA"}, Collection: &Collection{Name: "Blade Runner"},
+		People: []Person{{Name: "Denis Villeneuve", Kind: "director"}, {Name: "Ryan Gosling", Role: "K", Kind: "actor", Image: "https://example.org/gosling.jpg"}}}
 	if !reflect.DeepEqual(*m, want) {
 		t.Errorf("\n got %+v\nwant %+v", *m, want)
 	}
@@ -66,11 +68,17 @@ func fakeTMDB(t *testing.T) (*TMDB, *atomic.Int32) {
 			}
 		case "/movie/603":
 			body = `{"id":603,"title":"Matrix","original_title":"The Matrix","overview":"Neo …","release_date":"1999-03-30",
-				"poster_path":"/p.jpg","backdrop_path":"/b.jpg","vote_average":8.2,"imdb_id":"tt0133093","genres":[{"name":"Action"}]}`
+				"poster_path":"/p.jpg","backdrop_path":"/b.jpg","vote_average":8.2,"imdb_id":"tt0133093","genres":[{"name":"Action"}],
+				"tagline":"Willkommen in der realen Welt","production_companies":[{"name":"Warner Bros."}],
+				"production_countries":[{"iso_3166_1":"US","name":"United States of America"}],
+				"belongs_to_collection":{"id":2344,"name":"Matrix Filmreihe"},
+				"credits":{"cast":[{"id":6384,"name":"Keanu Reeves","character":"Neo","profile_path":"/k.jpg"}],
+					"crew":[{"id":9339,"name":"Lana Wachowski","job":"Director"},{"id":1,"name":"Jemand","job":"Grip"}]}}`
 		case "/search/tv":
 			body = `{"results":[{"id":70523,"name":"Dark","first_air_date":"2017-12-01"}]}`
 		case "/tv/70523":
-			body = `{"id":70523,"name":"Dark","overview":"Serie","first_air_date":"2017-12-01","poster_path":"/dark.jpg","backdrop_path":"/darkb.jpg","genres":[{"name":"Drama"}]}`
+			body = `{"id":70523,"name":"Dark","overview":"Serie","first_air_date":"2017-12-01","poster_path":"/dark.jpg","backdrop_path":"/darkb.jpg","genres":[{"name":"Drama"}],
+				"status":"Ended","last_air_date":"2020-06-27","networks":[{"name":"Netflix"}],"credits":{"cast":[{"id":5,"name":"Louis Hofmann","character":"Jonas"}]}}`
 		case "/tv/70523/season/1/episode/2":
 			if de {
 				body = `{"name":"Lügen","overview":"","air_date":"2017-12-01","still_path":"/s.jpg","season_number":1,"episode_number":2,"vote_average":7}`
@@ -304,5 +312,37 @@ func TestImportJSON(t *testing.T) {
 	}
 	if _, err := New(d.DB, cache, ""); err != nil { // zweiter Start: nichts mehr zu tun
 		t.Fatal(err)
+	}
+}
+
+func TestCreditsUndGesperrteFelder(t *testing.T) {
+	tm, _ := fakeTMDB(t)
+	r := resolver(t, tm)
+	ctx := context.Background()
+	q := Query{ID: "abc", Path: filepath.Join(t.TempDir(), "The Matrix (1999).mkv"), Title: "The Matrix", Year: 1999}
+	m, err := r.Resolve(ctx, q)
+	if err != nil || m.Tagline == "" || len(m.Studios) != 1 || m.Collection == nil || m.Collection.TMDBID != 2344 ||
+		len(m.People) != 2 || m.People[0].Kind != "director" || m.People[1].Role != "Neo" || !strings.HasSuffix(m.People[1].Image, "/w185/k.jpg") {
+		t.Fatalf("Credits: %+v %v", m, err)
+	}
+	// Von Hand geänderter Titel ist gesperrt und übersteht „Aktualisieren“, der Rest kommt neu.
+	e, err := Edit(m, map[string]json.RawMessage{"title": json.RawMessage(`"Matrix (Director's Cut)"`)}, nil)
+	if err != nil || !reflect.DeepEqual(e.Locked, []string{"title"}) {
+		t.Fatalf("Edit: %+v %v", e, err)
+	}
+	e.Overview = "alt"
+	r.Save(ctx, q.ID, e)
+	m, err = r.Refresh(ctx, q)
+	if err != nil || m.Title != "Matrix (Director's Cut)" || m.Overview != "Neo …" || len(m.Locked) != 1 {
+		t.Errorf("Refresh: %+v %v", m, err)
+	}
+	if _, err := Edit(m, map[string]json.RawMessage{"source": json.RawMessage(`"manual"`)}, nil); err == nil {
+		t.Error("source darf nicht bearbeitbar sein")
+	}
+	// Serien: Sender, Personen und Laufzeit am Serien-Eintrag, nicht an der Folge.
+	ep, _ := r.Resolve(ctx, Query{ID: "ep", Path: "/nirgends/Dark/Staffel 1/S01E02.mkv", Series: "Dark", Season: 1, Episode: 2})
+	show := r.Show(ctx, "Dark")
+	if len(ep.People) != 0 || show == nil || show.Overview != "Serie" || show.EndYear != 2020 || show.Studios[0] != "Netflix" || len(show.People) != 1 {
+		t.Errorf("Serie: ep=%+v show=%+v", ep, show)
 	}
 }

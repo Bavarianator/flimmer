@@ -31,6 +31,9 @@ type Profile struct {
 	AudioLangs   []string `json:"audioLangs,omitempty"`
 	SubtitleMode string   `json:"subtitleMode,omitempty"` // "" automatisch, "always", "off" (siehe subs.Mode)
 	Night        bool     `json:"night,omitempty"`        // Nachtmodus: Dynamik komprimieren, erzwingt Ton-Transcode
+	// Qualitätswahl im Player: höchstens so viele Bildzeilen (1080, 720, 480), 0 = automatisch.
+	// Größere Quellen werden auf diese Höhe umgewandelt (z. B. unterwegs oder bei schwachem WLAN).
+	MaxHeight int `json:"maxHeight,omitempty"`
 }
 
 // AudioTrack beschreibt eine wählbare Tonspur.
@@ -75,7 +78,7 @@ type Plan struct {
 	Reasons    []string     `json:"reasons,omitempty"`
 	AudioIndex int          `json:"audioIndex"`
 	AudioCodec string       `json:"audioCodec"` // Ziel-Codec, "copy" wenn unverändert
-	VideoCodec string       `json:"videoCodec"` // "copy" oder "h264[-720|-1080][-sdr]" (siehe transcode.ParseVideo)
+	VideoCodec string       `json:"videoCodec"` // "copy" oder "h264[-480|-720|-1080][-sdr]" (siehe transcode.ParseVideo)
 	Subtitles  []Subtitle   `json:"subtitles"`
 	Audio      []AudioTrack `json:"audio"`
 	// SubtitleIndex ist die vorgeschlagene Untertitelspur (Stream-Index) oder -1: volle Untertitel nur,
@@ -187,6 +190,12 @@ func Decide(m *probe.Media, p Profile, speed float64) Plan {
 	if !bitrateOK {
 		plan.Reasons = append(plan.Reasons, "Bitrate zu hoch für die Verbindung")
 	}
+	limit := 0 // Höhe aus der Qualitätswahl, nur wenn die Quelle größer ist
+	if v != nil && p.MaxHeight > 0 && v.Height > p.MaxHeight {
+		limit = p.MaxHeight
+		bitrateOK = false // wie eine zu hohe Bitrate: Video muss neu kodiert werden
+		plan.Reasons = append(plan.Reasons, "Qualität im Player auf "+itoa(limit)+"p begrenzt")
+	}
 
 	switch {
 	case videoOK && audioOK && containerOK && bitrateOK && !otherTrack && !night:
@@ -223,6 +232,9 @@ func Decide(m *probe.Media, p Profile, speed float64) Plan {
 				msg += " – für 4K/HDR die Hintergrund-Optimierung nutzen"
 			}
 			plan.Reasons = append(plan.Reasons, msg)
+		}
+		if limit > 0 && (height == 0 || height > limit) {
+			height = limit
 		}
 		plan.VideoCodec = "h264"
 		if height > 0 {

@@ -48,7 +48,7 @@ func New(db *sql.DB, dir string) *TV {
 
 // Config liegt als Schlüssel livetv_* in der Tabelle settings.
 type Config struct {
-	Source string // M3U-URL, lineup.json eines HDHomeRun oder Dateipfad
+	Source string // M3U-URL, lineup.json eines HDHomeRun, Dateipfad oder FreeSource
 	EPG    string // XMLTV-URL oder Dateipfad (auch .gz), leer = kein Programm
 	Video  string // "copy" (Standard) oder "h264"
 }
@@ -132,6 +132,13 @@ func (tv *TV) Refresh(ctx context.Context) error {
 	return nil
 }
 
+// Updated liefert den letzten erfolgreichen Ladezeitpunkt und den letzten Fehler ("" = keiner), fürs Dashboard.
+func (tv *TV) Updated() (time.Time, string) {
+	tv.mu.RLock()
+	defer tv.mu.RUnlock()
+	return tv.updated, tv.lastErr
+}
+
 func (tv *TV) fail(err error) {
 	tv.mu.Lock()
 	tv.lastErr = err.Error()
@@ -142,7 +149,7 @@ func (tv *TV) set(chs []Channel, g *guide, msg string) {
 	if g != nil { // Kanäle ohne tvg-id über den Anzeigenamen dem XMLTV-Kanal zuordnen
 		for i, c := range chs {
 			if _, ok := g.progs[c.epg]; !ok {
-				chs[i].epg = g.names[strings.ToLower(c.Name)]
+				chs[i].epg = g.names[nameKey(c.Name)]
 			}
 		}
 	}
@@ -207,7 +214,7 @@ func (tv *TV) ConfigHandler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		v := strings.TrimSpace(*f.in)
-		if u, err := url.Parse(v); v != "" && (err != nil || (u.Scheme != "http" && u.Scheme != "https" && !strings.HasPrefix(v, "/"))) {
+		if u, err := url.Parse(v); v != "" && v != FreeSource && (err != nil || (u.Scheme != "http" && u.Scheme != "https" && !strings.HasPrefix(v, "/"))) {
 			http.Error(w, "Adresse muss mit http://, https:// oder einem absoluten Dateipfad beginnen", http.StatusBadRequest)
 			return
 		}

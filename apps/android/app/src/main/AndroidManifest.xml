@@ -6,6 +6,8 @@
     <!-- Eine App für Handy, Tablet, Android TV und Fire TV -->
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.software.leanback" android:required="false" />
+    <!-- Unterwegs die NetBird-App starten, wenn der Server nur übers VPN erreichbar ist -->
+    <queries><package android:name="io.netbird.client" /></queries>
 
     <application
         android:label="Flimmer"
@@ -13,6 +15,13 @@
         android:banner="@drawable/banner"
         android:usesCleartextTraffic="true"
         android:theme="@android:style/Theme.Material.NoActionBar">
+        <meta-data
+            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
+            android:value="io.flimmer.app.CastOptionsProvider" />
+        <!-- QR-Scanner der Play-Dienste schon bei der Installation laden statt beim ersten Scannen -->
+        <meta-data
+            android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="barcode_ui" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

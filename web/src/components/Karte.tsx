@@ -1,6 +1,8 @@
+import type { ComponentChildren } from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
 import type { Ampel } from '../lib/api'
 import { useFokus } from '../lib/focus'
+import { trenne } from '../lib/trenne'
 import { t } from '../lib/i18n'
 import { Icon } from './Icon'
 
@@ -22,10 +24,16 @@ export function AmpelZeile({ stufe, kurz }: { stufe: Ampel; kurz?: boolean }) {
 }
 
 // Badges oben rechts auf Bildern: Gesehen-Haken und Ampel, auf dunklem Grund (badge-grund).
-export function Badges({ ampel, gesehen }: { ampel?: Ampel; gesehen?: boolean }) {
-  if (!ampel && !gesehen) return null
+// zahl: ungesehene Folgen einer Serie (papierweißes Kästchen).
+export function Badges({ ampel, gesehen, zahl }: { ampel?: Ampel; gesehen?: boolean; zahl?: number }) {
+  if (!ampel && !gesehen && !zahl) return null
   return (
     <div class="oben">
+      {!!zahl && !gesehen && (
+        <span class="fl-badge zahl" title={t('karte.ungesehen', { n: zahl })}>
+          {zahl}
+        </span>
+      )}
       {gesehen && (
         <span class="fl-badge" title={t('karte.gesehen')}>
           <Icon name="haken" class="haken" />
@@ -85,28 +93,7 @@ function beobachte(el: Element, fn: () => void) {
   }
 }
 
-// Chromium 53 trennt nicht selbst: lange Wörter (ab 10 Zeichen) bekommen weiche Trennstellen (U+00AD)
-// nach den Silbenregeln V|KV und VK|KV, spätestens nach 8 Zeichen, mindestens 3 Zeichen vom Wortrand. Sonst laufen
-// Versalien-Titel auf Platzhaltern über den Rand.
-const vokal = /[aeiouäöüyAEIOUÄÖÜY]/
-export function trenne(titel: string): string {
-  return titel.replace(/[^\s\-–]{10,}/g, (w) => {
-    let out = ''
-    let seit = 0
-    for (let i = 0; i < w.length; i++) {
-      out += w[i]
-      seit++
-      const rest = w.length - i - 1
-      const v = (k: number) => vokal.test(w[k] || '')
-      const silbe = (v(i) && !v(i + 1) && v(i + 2)) || (v(i - 1) && !v(i) && !v(i + 1) && v(i + 2)) // V|CV, VC|CV
-      if (rest >= 3 && ((seit >= 3 && silbe) || seit >= 8)) {
-        out += '\u00ad'
-        seit = 0
-      }
-    }
-    return out
-  })
-}
+export { trenne } // Start.tsx (Kacheln)
 
 // Bild in fester Box (.bild der Karte bzw. .vorschau der Episode). Ohne Bild: Tonfläche mit dem Titel
 // in Plakat-Versalien und Jahr/Laufzeit am Fuß.
@@ -145,24 +132,40 @@ export interface KarteProps {
   fortschritt?: number // 0..1
   ampel?: Ampel
   gesehen?: boolean
+  zahl?: number // ungesehene Folgen
+  gewaehlt?: boolean // Mehrfachauswahl: undefined = aus
+  ueber?: ComponentChildren // Knöpfe über dem Bild beim Hover (nur Desktop)
+  onKontext?: (e: MouseEvent) => void // Rechtsklick bzw. langes Drücken
+  children?: ComponentChildren // z. B. das offene Kontextmenü (Portal)
   onPress: () => void
   onFocus?: () => void
 }
 
+// Die Karte ist ein div mit dem eigentlichen Knopf; die Hover-Knöpfe liegen daneben, weil Knöpfe
+// nicht in Knöpfen stehen dürfen.
 export function Karte(p: KarteProps) {
   const f = useFokus<HTMLButtonElement>({ fokusKey: p.fokusKey, onPress: p.onPress, onFocus: p.onFocus })
   const label = [p.titel, p.unter, p.ampel && t('ampel.' + p.ampel), p.gesehen && t('karte.gesehen')].filter(Boolean).join(', ')
+  const wahl = p.gewaehlt !== undefined
   return (
-    <button ref={f.ref} {...f.dom} type="button" aria-label={label} class={'fl-karte' + (p.breit ? ' breit' : '') + (f.fokus ? ' ist-fokus' : '')}>
-      <div class="rahmen">
-        <Bild src={p.bild} titel={p.titel} farbe={p.farbe} fuss={p.fuss} />
-        <Badges ampel={p.ampel} gesehen={p.gesehen} />
-      </div>
-      <Fortschritt anteil={p.fortschritt || 0} />
-      <div class="meta" aria-hidden="true">
-        <b>{p.titel}</b>
-        {p.unter && <small>{p.unter}</small>}
-      </div>
-    </button>
+    <div
+      class={'fl-karte' + (p.breit ? ' breit' : '') + (f.fokus ? ' ist-fokus' : '') + (wahl ? ' waehlbar' : '') + (p.gewaehlt ? ' gewaehlt' : '')}
+      onContextMenu={p.onKontext}
+    >
+      <button ref={f.ref} {...f.dom} type="button" aria-label={label} aria-pressed={wahl ? !!p.gewaehlt : undefined} class="karte-knopf">
+        <div class="rahmen">
+          <Bild src={p.bild} titel={p.titel} farbe={p.farbe} fuss={p.fuss} />
+          <Badges ampel={p.ampel} gesehen={p.gesehen} zahl={p.zahl} />
+          {wahl && <span class="karte-wahl">{p.gewaehlt && <Icon name="haken" />}</span>}
+        </div>
+        <Fortschritt anteil={p.fortschritt || 0} />
+        <div class="meta" aria-hidden="true">
+          <b>{p.titel}</b>
+          {p.unter && <small>{p.unter}</small>}
+        </div>
+      </button>
+      {p.ueber && !wahl && <div class="karte-ueber">{p.ueber}</div>}
+      {p.children}
+    </div>
   )
 }

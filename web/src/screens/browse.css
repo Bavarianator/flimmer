@@ -1,0 +1,259 @@
+/* Browse-Seiten im Jellyfin-Aufbau (Start, Bibliotheken, Details, Listen, Suche).
+   Chromium 53: kein gap, kein Grid, kein inset, Flexbox mit -webkit-, Abstände per margin. */
+
+/* Desktop: Inhalt bündig mit der Kopfzeile (32 px) statt des alten 64-px-Rands */
+html.dt .browse { --rand: 32px; }
+html.dt .browse .kopfzeile { margin-bottom: 24px; }
+html.hd .browse .kopfzeile, html.hd .browse .kopf-tabs-hd { margin-bottom: 16px; }
+html.hd .browse .kopfzeile + .kopf-tabs-hd { margin-top: -16px; }
+
+/* ---------- Start ---------- */
+.start .held.start-held { min-height: 480px; margin-bottom: 24px; }
+.medien h2 { margin-bottom: 12px; }
+.kacheln { white-space: normal; padding-right: var(--rand); }
+.kachel { position: relative; display: inline-block; vertical-align: top; width: 176px; height: 104px; margin: 0 16px 16px 0; padding: 12px 14px; border-radius: var(--radius-s); color: #ece7dd; text-decoration: none; overflow: hidden; }
+.kachel .fl-icon { position: absolute; top: 12px; right: 12px; color: rgba(236, 231, 221, 0.7); }
+.kachel-name { position: absolute; left: 14px; right: 36px; bottom: 30px; font-family: var(--font-plakat); font-weight: 800; text-transform: uppercase; font-size: 24px; line-height: 22px; letter-spacing: 0.5px; }
+.kachel-zahl { position: absolute; left: 14px; bottom: 10px; font-family: var(--font-mono); font-size: 11px; line-height: 16px; letter-spacing: 1px; text-transform: uppercase; color: #c9c2b6; }
+html.tv .kachel { width: 260px; height: 150px; margin: 0 24px 24px 0; padding: 18px; }
+html.tv .kachel-name { font-size: 34px; line-height: 32px; bottom: 44px; left: 18px; right: 52px; }
+html.tv .kachel-zahl { font-size: 18px; bottom: 16px; left: 18px; }
+html.hd .kachel { width: calc(50% - 6px); height: 88px; margin: 0 12px 12px 0; }
+html.hd .kachel:nth-child(2n) { margin-right: 0; }
+html.hd .kachel-name { font-size: 22px; line-height: 21px; }
+
+/* ---------- Bildbox: Bild aus Karte.tsx in beliebiger Box ---------- */
+.bildbox { position: relative; overflow: hidden; background: var(--flaeche-2); border-radius: var(--radius-s); }
+.bildbox .bild { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
+.bildbox img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; -webkit-transition: opacity var(--dauer-langsam) var(--kurve-standard); transition: opacity var(--dauer-langsam) var(--kurve-standard); }
+.bildbox img.da { opacity: 1; }
+.initialen { position: absolute; left: 0; top: 0; right: 0; bottom: 0; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; font-family: var(--font-plakat); font-weight: 800; font-size: 48px; color: #ece7dd; }
+.mehr-text { color: var(--text-2); font-size: 14px; text-decoration: underline; text-underline-position: under; }
+
+/* ---------- Werkzeugleiste der Bibliothek ---------- */
+.werkzeug { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; min-height: 48px; margin-bottom: 16px; white-space: nowrap; }
+.werkzeug .fl-btn { margin: 0 8px 0 0; height: 36px; line-height: 36px; padding: 0 12px; font-size: 14px; -webkit-flex: none; flex: none; }
+.werkzeug .fl-btn.primaer { padding: 0 16px; }
+.werkzeug .fl-btn.rund { width: 36px; padding: 0; }
+.werkzeug .fl-btn .fl-icon { width: 20px; height: 20px; }
+.werkzeug-zahl { margin-right: 12px; font-size: 14px; color: var(--text-2); }
+.werkzeug-strich { width: 1px; height: 24px; margin: 0 12px 0 4px; background: var(--linie); }
+html.tv .werkzeug { min-height: 72px; margin-bottom: 24px; }
+html.tv .werkzeug .fl-btn { height: 64px; line-height: 64px; padding: 0 24px; font-size: 26px; margin-right: 16px; }
+html.tv .werkzeug .fl-btn.rund { width: 64px; padding: 0; }
+html.tv .werkzeug .fl-btn .fl-icon { width: 32px; height: 32px; }
+html.tv .werkzeug-zahl { font-size: 24px; margin-right: 24px; }
+html.hd .werkzeug { min-height: 44px; margin-bottom: 8px; }
+html.hd .werkzeug .fl-btn { margin-right: 4px; }
+html.hd .werkzeug .fl-btn.rund { width: 40px; height: 40px; line-height: 40px; }
+.schnellfilter { white-space: nowrap; overflow-x: auto; margin-bottom: 8px; }
+.fl-chip .fl-ampel { width: 8px; height: 8px; margin: -2px 2px 0 0; }
+
+/* Raster mit Buchstabenleiste rechts (Desktop, Handy) bzw. oben (TV) */
+.bib-flaeche.mit-abc { display: -webkit-flex; display: flex; -webkit-align-items: flex-start; align-items: flex-start; }
+.bib-flaeche.mit-abc > .raster { -webkit-flex: 1; flex: 1; min-width: 0; padding-right: 8px; }
+.abc-hoch { position: -webkit-sticky; position: sticky; top: 72px; -webkit-flex: none; flex: none; width: 28px; margin-right: 8px; }
+.abc-z { display: block; width: 28px; height: 22px; border-radius: var(--radius-s); font-family: var(--font-mono); font-size: 12px; line-height: 22px; color: var(--text-3); text-align: center; }
+.abc-z.an { background: var(--marke-leise); color: var(--text); }
+.abc-z:disabled { opacity: 0.35; cursor: default; }
+.abc-z:hover:not(:disabled) { color: var(--text); }
+html.hd .abc-hoch { top: 112px; width: 20px; margin-right: 0; }
+html.hd .abc-z { width: 20px; height: 17px; line-height: 17px; font-size: 10px; }
+.abc-quer { white-space: nowrap; margin-bottom: 24px; }
+html.tv .abc-quer .abc-z { display: inline-block; width: 48px; height: 48px; margin-right: 6px; font-size: 22px; line-height: 48px; }
+html.tv .abc-quer .abc-z.ist-fokus { background: var(--marke); color: var(--auf-marke); box-shadow: none; }
+
+/* Seitenzahlen unter dem Raster */
+.seiten { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; margin-top: 8px; }
+.seiten .fl-btn { margin: 0 4px 0 0; height: 40px; line-height: 40px; min-width: 40px; padding: 0 6px; font-family: var(--font-mono); font-size: 13px; text-align: center; }
+.seiten .fl-btn.rund { width: 40px; }
+.seiten .fl-btn .fl-icon { width: 20px; height: 20px; }
+.seiten-luecke { margin: 0 8px 0 4px; color: var(--text-3); }
+
+/* Seitenblatt „Sortieren & Filtern“ */
+.fl-blatt .fl-tabs { margin: -16px -24px 0; padding: 0 24px; }
+.blatt-gruppe { margin: 16px 0 0; }
+.blatt-gruppe h3 { margin: 0 0 8px; font-size: 12px; line-height: 16px; color: var(--text-3); }
+.blatt-chips { white-space: normal; }
+.direkt-zeile { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; width: 100%; margin: 16px 0 0; padding: 10px 16px; border-radius: var(--radius-s); background: var(--flaeche-2); text-align: left; }
+.direkt-zeile .fl-ampel { margin-right: 12px; -webkit-flex: none; flex: none; }
+.direkt-zeile b { display: block; font-size: 15px; line-height: 22px; font-weight: 500; }
+.direkt-zeile small { display: block; font-size: 13px; line-height: 18px; color: var(--text-3); }
+.direkt-zeile .fl-schalter { -webkit-flex: none; flex: none; margin-left: 12px; }
+html.tv .fl-blatt .fl-tabs { margin: -24px -48px 0; padding: 0 48px; }
+html.tv .blatt-gruppe h3 { font-size: 20px; line-height: 28px; }
+html.tv .direkt-zeile { padding: 16px 24px; }
+html.tv .direkt-zeile b { font-size: 26px; line-height: 34px; }
+html.tv .direkt-zeile small { font-size: 22px; line-height: 30px; }
+
+/* ---------- Abschnitte (Favoriten, Sammlung, Suche) ---------- */
+.abschnitt { margin-bottom: 32px; }
+.abschnitt-titel { margin: 0 0 12px; font: var(--t-reihe); }
+.abschnitt-titel small { margin-left: 12px; font-family: var(--font-mono); font-size: 14px; font-weight: 400; color: var(--text-3); }
+html.tv .abschnitt-titel small { font-size: 24px; }
+
+/* ---------- Detailseiten: Kopf über der Kulisse ---------- */
+.held.detail-held { min-height: 100vh; margin-bottom: 24px; }
+.detail-held .kulisse { left: 20%; }
+.fl-hero .inhalt.detail-inhalt { max-width: none; min-height: 100vh; padding: 96px var(--rand) 40px; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-justify-content: flex-end; justify-content: flex-end; box-sizing: border-box; }
+.detail-inhalt > .fl-label { color: #c9c2b6; margin-bottom: 0; }
+.detail-held h1 { max-width: 1100px; margin: 8px 0 0; }
+.fl-hero .detail-fakten { margin: 16px 0 0; color: #ece7dd; font-size: 15px; line-height: 28px; }
+.detail-fakten span { margin-right: 16px; }
+.detail-fakten .fl-ampel-zeile { color: #ece7dd; }
+.fsk { display: inline-block; height: 22px; padding: 0 7px; border-radius: var(--radius-s); box-shadow: inset 0 0 0 1px #a8a195; font-family: var(--font-mono); font-size: 12px; line-height: 22px; letter-spacing: 1px; vertical-align: middle; }
+.detail-unter { margin-top: 4px; font-size: 14px; line-height: 20px; color: #a8a195; }
+.detail-knoepfe { margin-top: 24px; }
+.spielen-block { display: inline-block; vertical-align: top; margin-right: 12px; }
+.spielen-block .fl-btn { margin-right: 0; }
+.spielen-block .fl-fortschritt { height: 4px; margin: -4px 0 12px; background: rgba(236, 231, 221, 0.22); }
+.detail-info { width: 280px; -webkit-flex: none; flex: none; margin: 0 0 12px 32px; padding: 4px 0 4px 24px; border-left: 1px solid rgba(236, 231, 221, 0.2); }
+.info-paar { display: -webkit-flex; display: flex; -webkit-align-items: baseline; align-items: baseline; margin-bottom: 12px; font-size: 15px; line-height: 22px; }
+.info-paar .fl-label { width: 76px; -webkit-flex: none; flex: none; margin: 0 12px 0 0; font-size: 12px; letter-spacing: 1.5px; color: #c9c2b6; }
+.verweis { color: inherit; text-decoration: none; box-shadow: inset 0 -1px 0 #78716a; }
+.verweis:hover { box-shadow: inset 0 -1px 0 currentColor; }
+.verweis.link { margin-right: 14px; }
+.tag { display: inline-block; height: 26px; line-height: 26px; padding: 0 10px; margin: 0 6px 6px 0; border-radius: var(--radius-s); box-shadow: inset 0 0 0 1px #78716a; font-size: 13px; }
+.detail-text { max-width: 760px; margin-top: 16px; }
+.fl-hero .detail-text p { margin: 0 0 8px; }
+.detail-text p.kurz { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.detail-text .leitsatz { font-style: italic; color: #ece7dd; }
+.detail-held .mehr-text { color: #a8a195; }
+.detail-technik { margin-top: 12px; font-family: var(--font-mono); font-size: 12px; line-height: 18px; letter-spacing: 1px; color: #a8a195; }
+html.tv .fl-hero .inhalt.detail-inhalt { padding: 96px var(--rand) 48px; }
+html.tv .fl-hero .detail-fakten { font-size: 24px; line-height: 40px; }
+html.tv .detail-fakten span { margin-right: 24px; }
+html.tv .fsk { height: 34px; line-height: 34px; padding: 0 10px; font-size: 20px; }
+html.tv .detail-unter, html.tv .detail-technik { font-size: 20px; line-height: 28px; }
+html.hd .held.detail-held { min-height: 0; }
+html.hd .fl-hero .inhalt.detail-inhalt { min-height: 0; padding: 200px 16px 16px; }
+html.hd .detail-held h1 { font-size: 44px; line-height: 42px; }
+html.hd .detail-knoepfe .fl-btn { margin: 0 8px 8px 0; }
+
+/* Als Nächstes (Serie) */
+.naechste-zeile { display: -webkit-flex; display: flex; -webkit-align-items: flex-start; align-items: flex-start; padding-right: var(--rand); }
+.naechste-bild { width: 400px; height: 225px; -webkit-flex: none; flex: none; margin-right: 24px; }
+.naechste-bild .oben { position: absolute; top: 8px; right: 8px; }
+.naechste-bild .fl-fortschritt { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; }
+.naechste-bild.ist-fokus { overflow: visible; }
+.naechste-text h3 { margin: 6px 0 4px; font-size: 22px; line-height: 28px; font-weight: 600; }
+.naechste-text .folge-text { margin-top: 8px; max-width: 640px; color: var(--text-2); }
+html.tv .naechste-bild { width: 560px; height: 315px; margin-right: 32px; }
+html.tv .naechste-text h3 { font-size: 34px; line-height: 44px; }
+html.hd .naechste-zeile { display: block; }
+html.hd .naechste-bild { width: 100%; height: 0; padding-top: 56.25%; margin: 0 0 12px; }
+
+/* Personen */
+.person-karte .rahmen { padding-top: 150%; }
+.person-karte .initialen { font-size: 40px; }
+
+/* ---------- Kopf ohne Kulisse: Staffel, Sammlung, Liste, Person ---------- */
+.info-kopf { display: -webkit-flex; display: flex; -webkit-align-items: flex-end; align-items: flex-end; margin-bottom: 32px; }
+.info-bild { width: 240px; height: 360px; -webkit-flex: none; flex: none; margin-right: 32px; }
+.info-bild.person { height: 300px; }
+.info-text { -webkit-flex: 1; flex: 1; min-width: 0; }
+.info-titel { margin: 8px 0 12px; font-family: var(--font-plakat); font-weight: 800; text-transform: uppercase; font-size: 72px; line-height: 66px; letter-spacing: 1px; }
+.info-zeile2 { margin-bottom: 8px; font-size: 15px; line-height: 22px; }
+.info-text .detail-text p { color: var(--text-2); margin-bottom: 8px; }
+.info-text .detail-knoepfe { margin-top: 20px; }
+.mosaik { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
+.mosaik-teil { float: left; width: 50%; height: 50%; border-radius: 0; }
+html.tv .info-bild { width: 320px; height: 480px; margin-right: 48px; }
+html.tv .info-bild.person { height: 400px; }
+html.tv .info-titel { font-size: 104px; line-height: 96px; }
+html.tv .info-zeile2 { font-size: 26px; line-height: 36px; }
+html.hd .info-kopf { display: block; margin-bottom: 24px; }
+html.hd .info-bild { width: 160px; height: 240px; margin: 0 0 16px; }
+html.hd .info-bild.person { height: 200px; }
+html.hd .info-titel { font-size: 40px; line-height: 38px; }
+
+/* Staffel: Folgenzeilen mit Knöpfen */
+.staffel-tabs { margin-bottom: 8px; }
+.folge-zeile { display: -webkit-flex; display: flex; -webkit-align-items: flex-start; align-items: flex-start; border-top: 1px solid var(--linie); }
+.folge-zeile:first-child { border-top: 0; }
+.folge-zeile .fl-episode { -webkit-flex: 1; flex: 1; min-width: 0; border-top: 0; }
+.folge-knoepfe { -webkit-flex: none; flex: none; padding-top: 16px; white-space: nowrap; }
+.folge-knoepfe .fl-btn { margin: 0 0 0 4px; }
+.folge-knoepfe > span { display: inline-block; }
+html.hd .folge-knoepfe { display: none; }
+.staffel-fuss { margin-top: 16px; }
+
+/* ---------- Wiedergabeliste als Tabelle ---------- */
+.listen-kopf, .lz-knopf, .listen-zeile { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
+.listen-kopf { height: 36px; padding: 0 64px 0 16px; border-bottom: 1px solid var(--linie); font-size: 12px; }
+.listen-zeile { border-bottom: 1px solid var(--linie); border-radius: var(--radius-s); }
+.listen-zeile:hover { background: var(--flaeche-1); }
+.lz-knopf { -webkit-flex: 1; flex: 1; min-width: 0; height: 64px; padding: 0 16px; text-align: left; }
+.lz-nr { width: 40px; -webkit-flex: none; flex: none; font-family: var(--font-mono); font-size: 13px; color: var(--text-3); }
+.lz-bild { width: 80px; height: 45px; -webkit-flex: none; flex: none; margin-right: 16px; }
+.lz-titel { -webkit-flex: 2; flex: 2; min-width: 0; font-weight: 500; }
+.lz-info { -webkit-flex: 1.5; flex: 1.5; min-width: 0; margin-left: 16px; }
+.lz-dauer { width: 120px; -webkit-flex: none; flex: none; text-align: right; font-family: var(--font-mono); font-size: 13px; }
+.listen-zeile .fl-btn { margin: 0 8px; }
+.listen-hinweis { margin-top: 12px; }
+html.hd .lz-info, html.hd .lz-dauer, html.hd .lz-nr { display: none; }
+html.hd .lz-knopf { padding: 0 4px; }
+html.tv .lz-knopf { height: 96px; }
+html.tv .lz-nr { width: 64px; font-size: 22px; }
+html.tv .lz-bild { width: 128px; height: 72px; margin-right: 24px; }
+html.tv .lz-titel { font-size: 26px; }
+html.tv .lz-info, html.tv .lz-dauer { font-size: 22px; }
+html.tv .lz-dauer { width: 180px; }
+
+/* ---------- Suche ---------- */
+.su-seite { display: -webkit-flex; display: flex; -webkit-align-items: flex-start; align-items: flex-start; }
+html.dt .su-seite, html.hd .su-seite { display: block; }
+.su-links { width: 720px; -webkit-flex: none; flex: none; margin-right: 64px; }
+.su-rechts { -webkit-flex: 1; flex: 1; min-width: 0; }
+.su-rechts .raster { padding-left: 0; padding-right: 0; }
+.su-oben { max-width: 900px; }
+.su-feld { height: 52px; margin-bottom: 16px; }
+html.hd .su-feld { height: 48px; }
+.su-feld input { margin-left: 12px; padding: 0; background: none; border: 0; outline: 0; color: var(--text); font: inherit; min-width: 0; }
+.su-filter { margin-bottom: 8px; }
+html.hd .su-filter { white-space: nowrap; overflow-x: auto; }
+.su-info { margin: 8px 0 20px; }
+.su-wert { margin-bottom: 28px; }
+.su-wert.leer span { color: var(--text-3); }
+.su-hinweis { margin-top: 20px; }
+.su-verlauf { max-width: 480px; margin: 8px 0 24px; }
+.su-verlauf-kopf { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: space-between; justify-content: space-between; margin-bottom: 8px; }
+.verlauf-punkt { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; width: 100%; height: 40px; padding: 0 8px; border-radius: var(--radius-s); text-align: left; }
+.verlauf-punkt .fl-icon { width: 18px; height: 18px; margin-right: 12px; -webkit-flex: none; flex: none; color: var(--text-3); }
+.verlauf-punkt:hover { background: var(--flaeche-1); }
+html.tv .verlauf-punkt { height: 64px; font-size: 26px; }
+html.tv .verlauf-punkt .fl-icon { width: 28px; height: 28px; }
+.fl-episode .vorschau .fl-fortschritt { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; margin: 0; max-width: none; background: rgba(236, 231, 221, 0.22); }
+.fl-hero .detail-fakten { display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; -webkit-align-items: center; align-items: center; }
+/* TV: Knöpfe ohne Verschieben der Seite im oberen Drittel, Kulisse nur so hoch wie der Inhalt */
+html.tv .held.detail-held { min-height: 0; }
+html.tv .fl-hero .inhalt.detail-inhalt { min-height: 0; padding-top: 64px; }
+html.tv .fl-karte.ist-fokus { box-shadow: none; }
+html.tv .start .held.start-held { min-height: 420px; }
+html.tv .start .held.start-held .inhalt { padding-top: 72px; }
+.lz-bild .fl-platzhalter { padding: 4px; }
+.lz-bild .fl-platzhalter .t { margin-top: 0; font-size: 11px; line-height: 11px; }
+.lz-info { font-size: 14px; }
+.detail-fakten .fsk { margin-right: 0; }
+
+/* Detail ohne Lücken: Beschreibung links, Fakten rechts daneben (Handy, TV: darunter). Ohne Kulisse kein Vollbild. */
+.detail-unten { display: -webkit-flex; display: flex; -webkit-align-items: flex-start; align-items: flex-start; }
+.detail-textblock { -webkit-flex: 1; flex: 1; min-width: 0; max-width: 760px; }
+.detail-unten .detail-info { width: 320px; margin: 16px 0 0 48px; }
+.detail-fakten .verweis.link { margin-right: 12px; }
+.held.detail-held.ohne-bild { min-height: 0; }
+.fl-hero.detail-held.ohne-bild .inhalt.detail-inhalt { min-height: 0; padding-top: 96px; }
+html.hd .fl-hero.detail-held.ohne-bild .inhalt.detail-inhalt { padding-top: 80px; }
+html.tv .fl-hero.detail-held.ohne-bild .inhalt.detail-inhalt { padding-top: 64px; }
+html.hd .detail-unten, html.tv .detail-unten { display: block; }
+html.hd .detail-unten .detail-info, html.tv .detail-unten .detail-info { width: auto; max-width: 760px; margin: 16px 0 0; padding: 0; border-left: 0; }
+html.hd .info-paar .fl-label { width: 96px; }
+html.tv .info-paar { font-size: 24px; line-height: 34px; margin-bottom: 8px; }
+html.tv .info-paar .fl-label { width: 200px; font-size: 18px; }
+
+/* Videos hochladen (Hochladen.tsx) */
+.hochladen { max-width: 760px; }
+.hochladen .fl-btn { margin-top: var(--abstand-4); }
+.hochladen-datei { margin-top: var(--abstand-4); }
+.hochladen-datei .zeile { margin-bottom: var(--abstand-2); }
+.hochladen-datei .leise, .hochladen-datei .fehlertext { margin-left: var(--abstand-4); }

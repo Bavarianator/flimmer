@@ -67,7 +67,7 @@ func TestParseXMLTV(t *testing.T) {
 	if !p[1].Start.Equal(time.Date(2026, 9, 28, 20, 15, 0, 0, time.UTC)) { // +0200 wird umgerechnet
 		t.Errorf("Zeitzone: %v", p[1].Start)
 	}
-	if g.names["das erste hd"] != "das.erste" {
+	if g.names[nameKey("Das Erste")] != "das.erste" { // XMLTV „Das Erste HD“ passt auch zu „Das Erste“
 		t.Error("Anzeigename fehlt")
 	}
 }

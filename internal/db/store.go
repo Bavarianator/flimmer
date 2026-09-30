@@ -153,13 +153,14 @@ type User struct {
 	Color    int
 	Admin    bool
 	PassHash string // leer = Profil ohne Passwort (nur im Heimnetz)
+	Upload   bool   // darf Videos hochladen (Admins immer)
 }
 
-const userCols = "id, name, color, admin, pass_hash"
+const userCols = "id, name, color, admin, pass_hash, upload"
 
 func scanUser(sc interface{ Scan(...any) error }) (User, error) {
 	var u User
-	err := sc.Scan(&u.ID, &u.Name, &u.Color, &u.Admin, &u.PassHash)
+	err := sc.Scan(&u.ID, &u.Name, &u.Color, &u.Admin, &u.PassHash, &u.Upload)
 	return u, err
 }
 
@@ -223,8 +224,8 @@ func (d *DB) Setup(ctx context.Context, admin User, f func(s *Settings)) error {
 func (d *DB) CreateUser(ctx context.Context, u User) error { return insertUser(ctx, d.DB, u) }
 
 func insertUser(ctx context.Context, q querier, u User) error {
-	_, err := q.ExecContext(ctx, "INSERT INTO users("+userCols+", created_at) VALUES(?, ?, ?, ?, ?, ?)",
-		u.ID, u.Name, u.Color, b2i(u.Admin), u.PassHash, now())
+	_, err := q.ExecContext(ctx, "INSERT INTO users("+userCols+", created_at) VALUES(?, ?, ?, ?, ?, ?, ?)",
+		u.ID, u.Name, u.Color, b2i(u.Admin), u.PassHash, b2i(u.Upload), now())
 	return err
 }
 
@@ -242,8 +243,8 @@ func (d *DB) UpdateUser(ctx context.Context, id string, f func(u *User, admins i
 			return err
 		}
 		out = u
-		_, err = tx.ExecContext(ctx, "UPDATE users SET name = ?, color = ?, admin = ?, pass_hash = ? WHERE id = ?",
-			u.Name, u.Color, b2i(u.Admin), u.PassHash, id)
+		_, err = tx.ExecContext(ctx, "UPDATE users SET name = ?, color = ?, admin = ?, pass_hash = ?, upload = ? WHERE id = ?",
+			u.Name, u.Color, b2i(u.Admin), u.PassHash, b2i(u.Upload), id)
 		return err
 	})
 	return out, err
@@ -293,9 +294,9 @@ func (d *DB) CreateSession(ctx context.Context, hash, userID, device string, ttl
 // SessionUser liefert den Benutzer einer gültigen Session (nil, wenn keine) und hält sie am Leben.
 func (d *DB) SessionUser(ctx context.Context, hash string, ttl time.Duration) (*User, error) {
 	var lastSeen int64
-	row := d.QueryRowContext(ctx, "SELECT u.id, u.name, u.color, u.admin, u.pass_hash, s.last_seen FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.hash = ?", hash)
+	row := d.QueryRowContext(ctx, "SELECT u.id, u.name, u.color, u.admin, u.pass_hash, u.upload, s.last_seen FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.hash = ?", hash)
 	var u User
-	err := row.Scan(&u.ID, &u.Name, &u.Color, &u.Admin, &u.PassHash, &lastSeen)
+	err := row.Scan(&u.ID, &u.Name, &u.Color, &u.Admin, &u.PassHash, &u.Upload, &lastSeen)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}

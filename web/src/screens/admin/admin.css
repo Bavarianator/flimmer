@@ -1,0 +1,147 @@
+/* Dashboard, Benutzer-Einstellungen, Metadaten-Editor. Chromium 53: kein gap, kein Grid, Flexbox mit Präfixen.
+   Farben und Abstände nur aus design/tokens.css. */
+
+.admin { padding-top: var(--abstand-6); padding-bottom: var(--abstand-8); max-width: 1180px; }
+html.tv .admin { max-width: none; padding-top: 0; }
+html.hd .admin { padding-top: var(--abstand-4); }
+.admin-laedt { min-height: 120px; }
+.admin-absatz { margin: 4px 0 12px; }
+.admin-fehler, .admin-fehler .fl-icon, .admin-fehler .text b { color: var(--ampel-rot); }
+.admin-warn .fl-icon { color: var(--ampel-gelb); }
+
+/* Abschnitte und Zeilen */
+.admin .fl-gruppe h3, .admin-editor .fl-gruppe h3, .admin-feld-label { margin-top: 16px; }
+.admin-kopf { min-height: 48px; }
+.admin-kopf h3 { margin: 16px 0 4px; }
+.admin-kopf .fl-btn { margin: 8px 0 0 12px; height: 36px; line-height: 36px; font-size: 14px; padding: 0 14px; }
+.admin-kopf .fl-mini-avatar { margin: 8px 0 0 12px; }
+.admin-zeile-knopf { width: 100%; background: none; border: 0; border-top: 1px solid var(--linie); text-align: left; color: var(--text); font: inherit; cursor: pointer; }
+.admin-zeile-knopf:first-child { border-top: 0; }
+html.dt .admin-zeile-knopf:hover { background: var(--flaeche-1); }
+.fl-zeile.admin-an { background: var(--marke-leise); padding-left: 12px; padding-right: 12px; }
+.fl-zeile .text b .fl-reihe-flex { display: -webkit-flex; display: flex; }
+.admin-rechts { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-flex: none; flex: none; margin-left: 8px; }
+.admin-rechts .fl-btn { margin: 0 0 0 8px; }
+.fl-zeile .admin-rechts .fl-btn.rund { width: 36px; padding: 0; }
+html.tv .fl-zeile .admin-rechts .fl-btn.rund { width: 56px; }
+.admin-avatar { width: 28px; height: 28px; line-height: 32px; font-size: 18px; margin-right: 12px; -webkit-flex: none; flex: none; }
+.admin-avatar.gross { width: 48px; height: 48px; line-height: 54px; font-size: 30px; margin-right: 0; }
+html.tv .admin-avatar { width: 44px; height: 44px; line-height: 50px; font-size: 28px; margin-right: 20px; }
+
+/* Formulare */
+.admin-feld { display: block; margin: 0 16px 12px 0; }
+.admin-feld .fl-feld { width: 280px; max-width: 100%; box-sizing: border-box; }
+.admin-feld.breit .fl-feld { width: 460px; }
+.admin-feld.mehrzeilig .fl-feld { width: 100%; height: auto; padding: 12px 16px; }
+.admin-feld .fl-feld input, .admin-feld .fl-feld textarea { width: 100%; height: 100%; padding: 0; border: 0; outline: 0; background: none; color: inherit; font: inherit; -webkit-appearance: none; min-width: 0; resize: vertical; }
+.admin-feld .fl-feld textarea { min-height: 96px; line-height: 24px; }
+.admin-feld-label { display: block; margin-bottom: 6px; font-size: 14px; line-height: 20px; color: var(--text-2); }
+html.tv .admin-feld .fl-feld { width: 420px; }
+html.tv .admin-feld.breit .fl-feld { width: 720px; }
+html.tv .admin-feld-label { font-size: 22px; line-height: 30px; }
+html.hd .admin-feld, html.hd .admin-feld .fl-feld, html.hd .admin-feld.breit .fl-feld { width: 100%; margin-right: 0; }
+.admin-formzeile { display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; -webkit-align-items: flex-end; align-items: flex-end; }
+.admin-formzeile .fl-btn { margin: 0 12px 12px 0; height: 52px; line-height: 52px; }
+.admin-formzeile .fl-btn.rund { width: 52px; }
+html.tv .admin-formzeile .fl-btn { height: 80px; line-height: 80px; }
+html.tv .admin-formzeile .fl-btn.rund { width: 80px; }
+.admin-knoepfe { margin-top: 16px; }
+.admin-chips { margin: 4px 0 8px; }
+.admin-fuss { padding: 16px 0 0; border-top: 1px solid var(--linie); margin-top: 16px; -webkit-flex-wrap: wrap; flex-wrap: wrap; }
+.admin-fuss .fl-grow { margin: 0 16px 12px 0; min-width: 200px; }
+.admin-fuss .fl-btn { margin: 0 0 12px 12px; }
+
+/* Hinweis, Balken, Kennzahlen */
+.admin-hinweis { padding: 14px 16px; margin: 0 0 16px; border-radius: var(--radius-s); background: var(--flaeche-1); box-shadow: inset 0 0 0 1px var(--linie); color: var(--text-2); font-size: 15px; line-height: 22px; -webkit-align-items: flex-start; align-items: flex-start; }
+.admin-hinweis .fl-icon { margin-right: 12px; -webkit-flex: none; flex: none; }
+.admin-hinweis b { display: block; color: var(--text); font-weight: 600; }
+html.tv .admin-hinweis { font-size: 24px; line-height: 34px; padding: 24px; }
+.admin-balken { display: block; height: 4px; margin: 8px 0 4px; background: var(--flaeche-3); border-radius: var(--radius-s); overflow: hidden; }
+.admin-balken i { display: block; height: 100%; background: var(--marke); }
+.admin-kennzahlen { display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; margin: 8px 0 24px; }
+.admin-messwert { min-width: 160px; margin: 0 32px 16px 0; }
+.admin-messwert small { display: block; }
+.admin-messwert .fl-label { font-size: 12px; margin-bottom: 4px; }
+.admin-messwert b { font-size: 24px; line-height: 32px; }
+html.tv .admin-messwert { min-width: 260px; }
+html.tv .admin-messwert .fl-label { font-size: 20px; }
+html.tv .admin-messwert b { font-size: 36px; line-height: 48px; }
+html.hd .admin-messwert { min-width: 0; width: 45%; margin-right: 5%; }
+
+/* Karten: Server, Sitzungen, Ordner-Browser */
+.admin-karte { padding: 20px; margin-bottom: 16px; border-radius: var(--radius-m); background: var(--flaeche-1); box-shadow: inset 0 0 0 1px var(--linie); box-sizing: border-box; }
+.admin-server { -webkit-flex-wrap: wrap; flex-wrap: wrap; }
+.admin-server > .fl-grow { min-width: 200px; margin: 0 24px 16px 0; }
+.admin-server .admin-messwert { margin-bottom: 16px; }
+.admin-server-name { display: block; font-size: 22px; line-height: 30px; font-weight: 600; margin-bottom: 4px; }
+.admin-update { width: 100%; padding-top: 12px; border-top: 1px solid var(--linie); }
+.admin-update .t-klein { -webkit-flex: 1; flex: 1; }
+.admin-update .fl-btn { margin: 0; }
+html.tv .admin-server-name { font-size: 34px; line-height: 44px; }
+.admin-sitzungen { display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; }
+.admin-sitzung { width: 340px; margin: 0 16px 16px 0; }
+.admin-sitzung-wer { margin-left: 12px; }
+.admin-sitzung-wer b, .admin-sitzung-wer small { display: block; }
+.admin-sitzung-wer small { color: var(--text-2); font-size: 13px; }
+.admin-sitzung-titel { display: block; margin: 12px 0 4px; font-weight: 600; }
+html.tv .admin-sitzung { width: 520px; font-size: 24px; line-height: 32px; }
+html.tv .admin-sitzung-wer small { font-size: 20px; }
+html.hd .admin-sitzung { width: 100%; margin-right: 0; }
+.admin-browser { margin-top: 12px; }
+.admin-link { font-family: var(--font-mono); font-size: 14px; line-height: 20px; word-break: break-all; margin: 0 0 12px; }
+html.tv .admin-link { font-size: 22px; line-height: 32px; }
+.admin-qr { display: block; width: 180px; height: 180px; margin: 8px 0 12px; background: #ece7dd; image-rendering: pixelated; } /* QR braucht hellen Grund, auch im Kino-Thema */
+.admin-appcode { font-family: var(--font-mono); font-size: 24px; letter-spacing: 3px; }
+html.tv .admin-appcode { font-size: 40px; }
+
+/* Aufgaben */
+.admin-aufgabe-stand { margin-top: 2px; }
+.admin-aufgabe .admin-balken { max-width: 420px; }
+.admin-aufgabe-lauf .admin-balken { max-width: 520px; }
+
+/* Zwei Spalten: Liste links, Detail rechts (Handy: untereinander) */
+.admin-spalten { display: -webkit-flex; display: flex; -webkit-align-items: flex-start; align-items: flex-start; }
+.admin-spalten > .admin-liste { width: 340px; -webkit-flex: none; flex: none; margin-right: 40px; }
+.admin-spalten > .admin-detail { -webkit-flex: 1; flex: 1; min-width: 0; }
+.admin-detail + .admin-liste { margin: 0 0 0 40px; }
+html.hd .admin-detail + .admin-liste { margin: 0 0 24px; }
+.admin-liste > .fl-btn { margin-top: 8px; }
+html.tv .admin-spalten > .admin-liste { width: 560px; margin-right: 64px; }
+html.hd .admin-spalten { display: block; }
+html.hd .admin-spalten > .admin-liste { width: auto; margin: 0 0 24px; }
+
+/* Metadaten-Editor */
+.admin-editor .fl-tabs { margin-bottom: 8px; }
+.admin-form { display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; padding-top: 8px; }
+.admin-form .admin-feld { width: 48%; margin-right: 2%; }
+.admin-form .admin-feld.breit { width: 98%; }
+.admin-form .admin-feld .fl-feld, .admin-form .admin-feld.breit .fl-feld { width: 100%; }
+html.hd .admin-form .admin-feld { width: 100%; margin-right: 0; }
+.admin-editor .admin-formzeile .admin-feld .fl-feld { width: 240px; }
+html.hd .admin-editor .admin-formzeile .admin-feld .fl-feld { width: 100%; }
+
+/* Protokoll */
+.admin-protokoll { font: 400 13px/18px var(--font-mono); color: var(--text-2); background: var(--flaeche-1); padding: var(--abstand-4); border-radius: var(--radius-s); max-height: 420px; overflow: auto; white-space: pre-wrap; word-break: break-all; margin: 8px 0 12px; }
+.admin-protokoll.ist-fokus { box-shadow: 0 0 0 2px var(--fokus-innen), 0 0 0 4px var(--marke); }
+html.tv .admin-protokoll { font-size: 20px; line-height: 28px; max-height: none; }
+
+.admin-toast { position: fixed; left: 50%; bottom: var(--abstand-7); z-index: 60; -webkit-transform: translateX(-50%); transform: translateX(-50%); box-shadow: var(--schatten-overlay); }
+html.hd .admin-toast { bottom: 24px; max-width: calc(100vw - 32px); }
+
+/* Benutzer-Einstellungen: Menü links (wie die Seitenleiste), Inhalt rechts */
+.einst-wer { padding: 8px 12px 20px; margin-bottom: 8px; border-bottom: 1px solid var(--linie); }
+.einst-wer .fl-mini-avatar { margin-right: 14px; }
+.einst-wer b, .einst-wer small { display: block; }
+.einst-wer b { font-size: 17px; line-height: 24px; font-weight: 600; }
+.einst-wer small { font-size: 14px; line-height: 20px; color: var(--text-2); }
+.einst-punkt { width: 100%; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; }
+.einst-inhalt { max-width: 820px; }
+.einst-titel { margin: 0 0 16px; font-size: 24px; line-height: 32px; font-weight: 600; }
+html.tv .einst-punkt { height: 72px; padding: 0 20px; margin-bottom: 6px; font-size: 28px; }
+html.tv .einst-punkt .fl-icon { width: 32px; height: 32px; margin-right: 20px; }
+html.tv .einst-punkt.ist-fokus { background: var(--marke); color: var(--auf-marke); box-shadow: none; }
+html.tv .einst-wer b { font-size: 30px; line-height: 40px; }
+html.tv .einst-wer small { font-size: 22px; line-height: 30px; }
+html.tv .einst-titel { font-size: 40px; line-height: 52px; }
+html.tv .einst-inhalt { max-width: none; }
+.admin-kopf + .fl-zeile, .admin-kopf + .admin-absatz + .fl-zeile, .admin-kopf + .admin-zeile-knopf { border-top: 0; }

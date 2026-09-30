@@ -1,5 +1,6 @@
 // Geräteklasse und Thema. Setzt html.tv / html.dt / html.hd (Typo-Skala und Maße aus tokens.css)
-// und data-theme. Zum Testen am Rechner: ?geraet=tv an die URL hängen.
+// und data-theme. Zum Testen am Rechner: ?geraet=tv an die URL hängen. Dauerhaft: Einstellungen › Anzeige › Ansicht
+// (localStorage), z. B. für den LG-Browser, der sich als Desktop-Chrome meldet (kein „Web0S“ im User-Agent).
 import { isTV, isTizen, isWebOS } from '../profile'
 
 export { isTV, isTizen, isWebOS }
@@ -7,7 +8,26 @@ export { isTV, isTizen, isWebOS }
 export type Geraet = 'tv' | 'dt' | 'hd'
 export type Thema = 'kino' | 'hell' | 'system'
 
-const erzwungen = (/[?&]geraet=(tv|dt|hd)/.exec(location.search) || [])[1] as Geraet | undefined
+export function geraetWahl(): Geraet | 'auto' {
+  try {
+    const g = localStorage.getItem('flimmer.geraet')
+    return g === 'tv' || g === 'dt' || g === 'hd' ? g : 'auto'
+  } catch {
+    return 'auto'
+  }
+}
+
+// Neu laden: Fokus-System und Seiten lesen die Geräteklasse beim Start.
+export function setGeraetWahl(g: Geraet | 'auto') {
+  try {
+    if (g === 'auto') localStorage.removeItem('flimmer.geraet')
+    else localStorage.setItem('flimmer.geraet', g)
+  } catch {}
+  location.reload()
+}
+
+const wahl = geraetWahl()
+const erzwungen = ((/[?&]geraet=(tv|dt|hd)/.exec(location.search) || [])[1] as Geraet | undefined) || (wahl === 'auto' ? undefined : wahl)
 
 function messen(): Geraet {
   if (erzwungen) return erzwungen
@@ -33,6 +53,10 @@ function anwenden() {
   const t = thema()
   const hell = geraet !== 'tv' && (t === 'hell' || (t === 'system' && !!window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches))
   h.setAttribute('data-theme', hell ? 'hell' : 'kino')
+  // TV: Die Maße sind für 1920 × 1080 gebaut. TV-Browser mit eigenem Layout-Viewport (LG: 960) skalieren damit
+  // auf jede Bildschirmgröße; Browser ohne Viewport-Unterstützung ignorieren die Angabe.
+  const vp = document.querySelector('meta[name=viewport]')
+  if (vp) vp.setAttribute('content', geraet === 'tv' ? 'width=1920' : 'width=device-width, initial-scale=1')
 }
 
 export function thema(): Thema {

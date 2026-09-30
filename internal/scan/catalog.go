@@ -82,7 +82,7 @@ func saveItem(ctx context.Context, db *sql.DB, it *Item, mtime int64) error {
 	if err != nil {
 		return err
 	}
-	for _, q := range []string{"DELETE FROM streams WHERE item_id = ?", "DELETE FROM keyframes WHERE item_id = ?"} {
+	for _, q := range []string{"DELETE FROM streams WHERE item_id = ?", "DELETE FROM keyframes WHERE item_id = ?", "DELETE FROM crops WHERE item_id = ?"} {
 		if _, err := tx.ExecContext(ctx, q, it.ID); err != nil {
 			return err
 		}

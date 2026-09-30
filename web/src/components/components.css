@@ -1,7 +1,7 @@
 /* Seitenlayout für die echten Screens. Die Komponenten-Stile (.fl-*) kommen aus design/komponenten.css;
    hier stehen nur Anordnung, Maße je Gerät und das Verhalten von Schiene und Seite. */
 
-/* --- Wortmarke: Pfad im Verhältnis 3447:688 --- */
+/* --- Wortmarke: Pixelblöcke im Verhältnis 1360:280 (Box 5:1, links bündig) --- */
 .wortmarke { display: block; height: 28px; width: 140px; color: var(--text); }
 html.tv .wortmarke { height: 40px; width: 200px; }
 html.hd .wortmarke { height: 22px; width: 110px; }
@@ -10,17 +10,8 @@ html.hd .wortmarke { height: 22px; width: 110px; }
 .seite { position: relative; min-height: 100vh; overflow-x: hidden; }
 .seite-schiene { position: relative; padding-bottom: var(--abstand-8); }
 html.tv .seite { height: 100vh; overflow: hidden; }
-html.tv .seite-schiene { padding-bottom: var(--tv-rand-oben); -webkit-transition: -webkit-transform var(--dauer-mittel) var(--kurve-standard); transition: transform var(--dauer-mittel) var(--kurve-standard); will-change: transform; }
+html.tv .seite-schiene { padding-bottom: var(--tv-rand-oben); -webkit-transition: -webkit-transform var(--dauer-mittel) var(--kurve-standard); transition: transform var(--dauer-mittel) var(--kurve-standard); }
 html.hd .seite-schiene { padding-bottom: 88px; } /* Platz für die Tab-Leiste */
-
-/* --- Kopfzeile --- */
-.kopf { position: absolute; left: 0; right: 0; top: 0; z-index: 5; background: linear-gradient(rgba(17, 16, 14, 0.85), rgba(17, 16, 14, 0)); }
-html[data-theme="hell"] .kopf { background: linear-gradient(rgba(243, 239, 230, 0.9), rgba(243, 239, 230, 0)); }
-html.hd .fl-kopf { height: 68px; padding: 0 16px; }
-.fl-kopf .nav a .fl-icon { margin-top: -3px; }
-.kopf-profil { padding: 4px; margin: -4px; border-radius: var(--radius-s); }
-.kopf-name { margin-right: 12px; font: var(--t-karte); }
-.fl-tabbar { position: fixed; z-index: 5; padding-bottom: env(safe-area-inset-bottom); }
 
 /* --- Hero (Start, Detail) --- */
 .held { position: relative; min-height: 560px; margin-bottom: var(--abstand-5); }
@@ -39,14 +30,10 @@ html.hd .held .kulisse { left: 0; bottom: 45%; }
 html.hd .held .schleier { background: linear-gradient(0deg, #11100e 45%, rgba(17, 16, 14, 0) 80%); }
 html.hd .held .inhalt { padding-top: 200px; }
 html.hd .held p { font-size: 15px; line-height: 22px; margin-bottom: 20px; }
-.held-klein { min-height: 0; }
 .held-skel { min-height: 560px; }
 .held-skel .fl-skel { margin-bottom: 16px; }
 .skel-plakat { width: 45%; height: 1em; font: var(--t-plakat); }
 .skel-titel { width: 240px; height: 24px; margin-bottom: 16px; }
-
-/* Start auf dem TV: Hero zeigt den fokussierten Titel, die erste Reihe steht bei ~560 px. */
-html.tv .start .held { min-height: 520px; margin-bottom: 0; }
 
 /* --- Reihe und Raster --- */
 .fl-reihe { padding-left: var(--rand); }
@@ -58,7 +45,7 @@ html.tv .fl-reihe .schiene { will-change: transform; }
 .fl-karte .bild img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; -webkit-transition: opacity var(--dauer-langsam) var(--kurve-standard); transition: opacity var(--dauer-langsam) var(--kurve-standard); }
 .fl-karte .bild img.da, .fl-episode .bild img.da { opacity: 1; }
 .fl-karte .fl-platzhalter { font-size: 16px; }
-.fl-karte.breit .fl-platzhalter .t { font-size: 40px; line-height: 38px; }
+.fl-karte.breit .fl-platzhalter .t { font-size: 40px; line-height: 38px; -webkit-line-clamp: 3; } /* lange Titel: … statt über den Rand */
 html.tv .fl-karte.breit .fl-platzhalter .t { font-size: 56px; line-height: 52px; }
 html.dt .fl-karte:hover .rahmen { -webkit-transform: scale(1.04); transform: scale(1.04); }
 .raster { white-space: normal; }
@@ -66,33 +53,9 @@ html.dt .fl-karte:hover .rahmen { -webkit-transform: scale(1.04); transform: sca
 html.hd .raster > .fl-karte { width: calc((100% - 24px) / 3 - 0.1px); }
 html.hd .raster > .fl-karte:nth-child(3n) { margin-right: 0; }
 
-/* --- Seiten ohne Hero: Titel unter der Kopfzeile --- */
-.seitenkopf { padding-top: 104px; margin-bottom: var(--abstand-5); }
-html.tv .seitenkopf { padding-top: 150px; }
-html.hd .seitenkopf { padding-top: 76px; }
-.seitenkopf h1 { font: var(--t-titel); margin-bottom: var(--abstand-5); }
-.seitenkopf h1 small { font: var(--t-text); color: var(--text-2); }
-
-/* --- Serie: Info links, Folgen rechts (TV, Desktop); Handy untereinander --- */
-.serie-spalten { position: relative; padding-top: 104px; }
-html.tv .serie-spalten { padding-top: 150px; }
-.serie-spalten.fl-reihe-flex { -webkit-align-items: flex-start; align-items: flex-start; }
-.serie .held { position: static; min-height: 0; margin-bottom: 0; }
-.serie .held .kulisse { left: 47%; opacity: 0.8; }
-.serie .held .inhalt { padding: 0; }
-.serie .held h1 { font-size: 80px; line-height: 72px; }
-html.tv .serie .held h1 { font-size: 112px; line-height: 100px; }
-.serie-info { position: relative; width: 38%; margin-right: 6%; -webkit-flex: none; flex: none; }
-.serie-folgen { position: relative; -webkit-flex: 1; flex: 1; min-width: 0; }
-.serie-folgen .fl-tabs { margin-bottom: 24px; }
-.folgen { padding: 0 12px; }
-.als-naechstes { margin: 24px 0 16px; font: var(--t-klein); }
-html.hd .serie-spalten { display: block; padding-top: 200px; }
-html.hd .serie .held .kulisse { left: 0; bottom: auto; height: 300px; }
-html.hd .serie-info { width: auto; margin: 0 0 24px; }
 .fl-episode { width: 100%; text-align: left; }
 .fl-episode .vorschau .bild, .fl-episode .vorschau .fl-platzhalter { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
-.fl-episode .vorschau .fl-platzhalter .t { font-size: 40px; line-height: 38px; }
+.fl-episode .vorschau .fl-platzhalter .t { font-size: 40px; line-height: 38px; -webkit-line-clamp: 3; }
 .fl-episode .vorschau img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; -webkit-transition: opacity var(--dauer-langsam) var(--kurve-standard); transition: opacity var(--dauer-langsam) var(--kurve-standard); }
 .folge-dauer { margin-bottom: 4px !important; }
 .folge-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
@@ -103,14 +66,62 @@ html.tv .zustand-platz { padding-top: 260px; }
 html.hd .zustand-platz { padding-top: 96px; }
 .zustand-platz .fl-zustand { margin: 0; }
 
-/* --- Fußzeile „Dieses Gerät“ --- */
-.fuss { margin-top: var(--abstand-5); color: var(--text-2); }
-.fuss .fl-ampel-zeile { margin-right: 24px; font: var(--t-klein); }
-.fuss-knoepfe { margin-top: var(--abstand-4); }
+/* --- Karte als div mit Knopf: Hover-Knöpfe (Desktop), Mehrfachauswahl, Zahl ungesehener Folgen --- */
+.karte-knopf { display: block; width: 100%; text-align: left; }
+.fl-karte .oben { display: -webkit-flex; display: flex; }
+.fl-badge.zahl { min-width: 24px; height: 24px; padding: 0 6px; background: var(--marke); color: var(--auf-marke); font-family: var(--font-mono); font-size: 12px; line-height: 24px; text-align: center; }
+html.tv .fl-badge.zahl { min-width: 36px; height: 36px; font-size: 20px; line-height: 36px; }
+.karte-ueber { display: none; position: absolute; left: 0; top: 0; width: 100%; padding-top: 150%; pointer-events: none; }
+.fl-karte.breit .karte-ueber { padding-top: 56.25%; }
+html.dt .fl-karte:hover .karte-ueber { display: block; -webkit-transform: scale(1.04); transform: scale(1.04); }
+.karte-ueber .schleier { position: absolute; left: 0; top: 0; right: 0; bottom: 0; background: rgba(17, 16, 14, 0.55); border-radius: var(--radius-s); }
+.karte-ueber button { pointer-events: auto; color: #ece7dd; }
+.karte-ueber .spielen { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: var(--radius-s); background: #ece7dd; color: #11100e; text-align: center; }
+.karte-ueber .spielen .fl-icon { fill: currentColor; }
+.karte-ueber .klein { position: absolute; right: 4px; bottom: 6px; white-space: nowrap; }
+.karte-ueber .klein button { width: 32px; height: 32px; text-align: center; }
+.karte-ueber .klein .fl-icon { width: 20px; height: 20px; }
+.karte-ueber .klein button:hover { color: #ffffff; }
+.karte-ueber .klein .an .fl-icon { stroke-width: 2.25; }
+.herz-an .fl-icon, .karte-ueber .klein .fav.an .fl-icon { fill: currentColor; }
+.karte-wahl { position: absolute; left: 8px; top: 8px; width: 24px; height: 24px; border-radius: var(--radius-s); background: var(--badge-grund); box-shadow: inset 0 0 0 1px #ece7dd; color: #11100e; text-align: center; line-height: 0; }
+.karte-wahl .fl-icon { width: 18px; height: 18px; margin-top: 3px; stroke-width: 2; }
+.fl-karte.gewaehlt .karte-wahl { background: #ece7dd; box-shadow: none; }
+.fl-karte.gewaehlt .rahmen:after { content: ''; position: absolute; left: 0; top: 0; right: 0; bottom: 0; border-radius: var(--radius-s); box-shadow: inset 0 0 0 3px var(--marke); }
+html.tv .karte-wahl { width: 36px; height: 36px; left: 12px; top: 12px; }
+html.tv .karte-wahl .fl-icon { width: 28px; height: 28px; margin-top: 4px; }
 
-/* --- Detail Film: Hero über die ganze Höhe, Restzeit unter den Knöpfen --- */
-.held.detail { min-height: 100vh; }
-html.hd .held.detail { min-height: 0; }
-html.tv .held.detail .inhalt { max-width: 1100px; }
-.restzeit { width: 420px; max-width: 100%; margin-top: 12px; }
-.restzeit .fl-2 { margin-top: 10px; font: var(--t-klein); }
+/* --- Mehrfachauswahl-Leiste --- */
+.auswahl-leiste { position: fixed; left: 50%; bottom: 24px; z-index: 40; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; max-width: calc(100vw - 32px); padding: 8px 12px; overflow-x: auto; white-space: nowrap; -webkit-transform: translateX(-50%); transform: translateX(-50%); background: var(--flaeche-1); border-radius: var(--radius-m); box-shadow: inset 0 0 0 1px var(--linie-stark), var(--schatten-overlay); }
+html.dt .rahmen .auswahl-leiste { margin-left: 124px; }
+.auswahl-leiste .fl-btn { margin: 0 4px 0 0; height: 40px; line-height: 40px; font-size: 15px; }
+.auswahl-leiste .fl-btn.rund { width: 40px; }
+.auswahl-zahl { margin: 0 16px 0 4px; font-weight: 600; }
+html.hd .auswahl-leiste { left: 0; right: 0; bottom: 0; max-width: none; border-radius: 0; -webkit-transform: none; transform: none; }
+html.tv .auswahl-leiste { bottom: 40px; padding: 12px 20px; }
+html.tv .auswahl-leiste .fl-btn { height: 64px; line-height: 64px; font-size: 26px; margin-right: 8px; }
+html.tv .auswahl-leiste .fl-btn.rund { width: 64px; }
+
+/* --- Dialoge aus Aktionen.tsx --- */
+.dialog-hinweis { margin: 0 0 12px; }
+.wahl-liste { margin: 0 -24px 12px; max-height: 280px; overflow-y: auto; }
+.wahl-liste .wahl-zeile { padding-left: 24px; padding-right: 24px; }
+.dialog-feld { height: 44px; margin-bottom: 12px; font-size: 15px; }
+.dialog-feld input { background: none; border: 0; outline: 0; color: var(--text); font: inherit; padding: 0; }
+html.tv .wahl-liste { margin: 0 -48px 16px; max-height: 420px; }
+html.tv .wahl-liste .wahl-zeile { padding-left: 48px; padding-right: 48px; }
+html.tv .dialog-feld { height: 72px; font-size: 26px; }
+.info-zeile { display: -webkit-flex; display: flex; padding: 6px 0; border-top: 1px solid var(--linie); }
+.info-zeile:first-child { border-top: 0; }
+.info-k { width: 120px; -webkit-flex: none; flex: none; font-size: 12px; }
+html.tv .info-k { width: 200px; }
+
+/* --- Reihe: Kopf mit Link und Blätterknöpfen --- */
+.reihe-kopf { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; padding-right: var(--rand); margin-bottom: 12px; }
+.reihe-kopf h2 { -webkit-flex: 1; flex: 1; min-width: 0; margin: 0 !important; }
+html.tv .reihe-kopf { margin-bottom: 20px; }
+.reihe-link { text-decoration: none; }
+.reihe-link .fl-icon { width: 20px; height: 20px; margin: -3px 0 0 4px; color: var(--text-2); }
+.reihe-link:hover .fl-icon { color: var(--text); }
+.reihe-blaettern button { width: 36px; height: 36px; margin-left: 8px; border-radius: var(--radius-s); box-shadow: inset 0 0 0 1px var(--linie-stark); text-align: center; }
+.reihe-blaettern .fl-icon { width: 20px; height: 20px; }

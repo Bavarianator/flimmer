@@ -4,11 +4,15 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"log"
+	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -75,6 +79,12 @@ func (t *tail) Write(p []byte) (int, error) {
 
 // open liefert den laufenden Stream des Kanals oder startet ihn.
 func (tv *TV) open(ch Channel) (*stream, error) {
+	if s := tv.stream(ch.ID); s != nil {
+		s.touch()
+		return s, nil
+	}
+	video := tv.config(context.Background()).Video
+	src, audio := bestVariant(ch.url, video) // fragt das Netz, deshalb vor der Sperre
 	tv.smu.Lock()
 	defer tv.smu.Unlock()
 	if s := tv.streams[ch.ID]; s != nil {
@@ -90,7 +100,7 @@ func (tv *TV) open(ch Channel) (*stream, error) {
 		return nil, err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(ctx, "ffmpeg", ffmpegArgs(ch.url, dir, tv.config(context.Background()).Video)...)
+	cmd := exec.CommandContext(ctx, "ffmpeg", ffmpegArgs(src, audio, dir, video)...)
 	msg := &tail{}
 	cmd.Stderr = msg
 	if err := cmd.Start(); err != nil {
@@ -150,17 +160,109 @@ func (tv *TV) reapIdle(after time.Duration) {
 	}
 }
 
+var hlsAttr = regexp.MustCompile(`([A-Z0-9-]+)=("[^"]*"|[^,]*)`)
+
+// attrs zerlegt die Attributliste einer HLS-Zeile (#EXT-X-STREAM-INF:…, #EXT-X-MEDIA:…).
+func attrs(line string) map[string]string {
+	m := map[string]string{}
+	for _, a := range hlsAttr.FindAllStringSubmatch(line[strings.IndexByte(line, ':')+1:], -1) {
+		m[a[1]] = strings.Trim(a[2], `"`)
+	}
+	return m
+}
+
+// bestVariant wählt aus einer HLS-Hauptliste die Variante mit der höchsten Bitrate, bei video == "h264" höchstens
+// 720p (mehr schafft x264 auf einem kleinen NAS nicht). ffmpeg nähme mit -map 0:v:0 die erste, bei ARD/ZDF 360p.
+// audio ist die Tonspur, wenn die Hauptliste den Ton getrennt führt (#EXT-X-MEDIA TYPE=AUDIO mit URI, so bei
+// ZDF/ARD): die Standardspur der Gruppe, sonst Deutsch, sonst die erste. Ohne sie liefe die Variante stumm.
+// Keine Hauptliste oder ein Fehler: src bleibt, audio leer.
+func bestVariant(src, video string) (best, audio string) {
+	best = src
+	if u, err := url.Parse(src); err != nil || !strings.HasPrefix(u.Scheme, "http") || !strings.HasSuffix(u.Path, ".m3u8") {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src, nil)
+	if err != nil {
+		return
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	abs := func(ref string) string {
+		if v, err := resp.Request.URL.Parse(ref); err == nil {
+			return v.String()
+		}
+		return ""
+	}
+	type ton struct{ uri, lang string }
+	gruppen := map[string][]ton{} // Standardspur steht vorn
+	standard := map[string]bool{}
+	bestBW, bestGroup := -1, ""
+	var inf map[string]string
+	for _, line := range strings.Split(string(body), "\n") {
+		line = strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(line, "#EXT-X-MEDIA:"):
+			if a := attrs(line); a["TYPE"] == "AUDIO" && a["URI"] != "" {
+				t := ton{abs(a["URI"]), strings.ToLower(a["LANGUAGE"])}
+				if a["DEFAULT"] == "YES" {
+					standard[a["GROUP-ID"]] = true
+					gruppen[a["GROUP-ID"]] = append([]ton{t}, gruppen[a["GROUP-ID"]]...)
+				} else {
+					gruppen[a["GROUP-ID"]] = append(gruppen[a["GROUP-ID"]], t)
+				}
+			}
+		case strings.HasPrefix(line, "#EXT-X-STREAM-INF:"):
+			inf = attrs(line)
+		case inf != nil && line != "" && line[0] != '#':
+			bw, _ := strconv.Atoi(inf["BANDWIDTH"])
+			h := 0
+			if r := inf["RESOLUTION"]; strings.Contains(r, "x") {
+				h, _ = strconv.Atoi(r[strings.IndexByte(r, 'x')+1:])
+			}
+			if v := abs(line); v != "" && (video != "h264" || h <= 720) && bw > bestBW {
+				best, bestBW, bestGroup = v, bw, inf["AUDIO"]
+			}
+			inf = nil
+		}
+	}
+	if t := gruppen[bestGroup]; len(t) > 0 {
+		audio = t[0].uri
+		if !standard[bestGroup] { // keine Standardspur: lieber Deutsch als Audiodeskription o. Ä.
+			for _, x := range t {
+				if x.lang == "deu" || x.lang == "ger" || x.lang == "de" {
+					audio = x.uri
+					break
+				}
+			}
+		}
+	}
+	return
+}
+
 // ffmpegArgs remuxt nach HLS mit kurzen Segmenten. Video wird kopiert (schneller Start, kaum Last) oder mit
 // video == "h264" entschachtelt und neu kodiert (für MPEG-2 und interlacte Sender im Browser).
 // ponytail: x264 in Software und nur die erste Tonspur; Hardware-Encoder aus internal/hwaccel und Tonwahl später.
-func ffmpegArgs(src, dir, video string) []string {
+func ffmpegArgs(src, audio, dir, video string) []string {
 	a := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-fflags", "+genpts+discardcorrupt",
 		"-analyzeduration", "1000000", "-probesize", "1000000"}
 	if u, err := url.Parse(src); err == nil && strings.HasPrefix(u.Scheme, "http") {
 		a = append(a, "-rw_timeout", "10000000") // hängende Quelle nach 10 s abbrechen
 	}
-	a = append(a, "-protocol_whitelist", "http,https,tcp,tls,udp,rtp,rtsp,rtmp,crypto", "-i", src,
-		"-map", "0:v:0?", "-map", "0:a:0?", "-sn", "-dn")
+	a = append(a, "-protocol_whitelist", "http,https,tcp,tls,udp,rtp,rtsp,rtmp,crypto", "-i", src)
+	if audio != "" { // Ton kommt aus eigener Playlist (HLS mit getrennten Tonspuren)
+		a = append(a, "-rw_timeout", "10000000", "-protocol_whitelist", "http,https,tcp,tls,crypto", "-i", audio,
+			"-map", "0:v:0?", "-map", "1:a:0",
+			"-copyts", "-start_at_zero") // Zeitstempel der Quellen behalten: Bild und Ton bleiben synchron
+	} else {
+		a = append(a, "-map", "0:v:0?", "-map", "0:a:0?")
+	}
+	a = append(a, "-sn", "-dn")
 	if video == "h264" {
 		a = append(a, "-vf", "yadif=deint=interlaced", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
 			"-pix_fmt", "yuv420p", "-force_key_frames", "expr:gte(t,n_forced*2)")

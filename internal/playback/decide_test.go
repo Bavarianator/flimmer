@@ -81,6 +81,34 @@ func TestBitrateLimitForcesTranscode(t *testing.T) {
 	}
 }
 
+// Qualitätswahl: Nur größere Quellen werden umgewandelt, nie über die gewählte Höhe hinaus.
+func TestMaxHeight(t *testing.T) {
+	uhd := media("matroska", "hevc", "yuv420p", "aac", 2)
+	uhd.Streams[0].Width, uhd.Streams[0].Height = 3840, 2160
+	sd := media("matroska", "hevc", "yuv420p", "aac", 2)
+	sd.Streams[0].Width, sd.Streams[0].Height = 720, 404
+	for _, tt := range []struct {
+		m      *probe.Media
+		max    int
+		speed  float64
+		method Method
+		video  string
+	}{
+		{uhd, 0, 8, DirectPlay, "copy"},
+		{uhd, 1080, 8, Transcode, "h264-1080"},
+		{uhd, 720, 8, Transcode, "h264-720"},
+		{uhd, 480, 1.2, Transcode, "h264-480"}, // langsamer Server würde 720p nehmen – die Wahl gewinnt
+		{sd, 480, 8, DirectPlay, "copy"},       // schon kleiner: bleibt direkt
+	} {
+		p := lgTV
+		p.MaxHeight = tt.max
+		got := Decide(tt.m, p, tt.speed)
+		if got.Method != tt.method || got.VideoCodec != tt.video {
+			t.Errorf("%dp, max %d: got %s/%s want %s/%s %v", tt.m.Streams[0].Height, tt.max, got.Method, got.VideoCodec, tt.method, tt.video, got.Reasons)
+		}
+	}
+}
+
 func TestSubtitlesNeverBurnedIn(t *testing.T) {
 	got := Decide(media("matroska", "h264", "yuv420p", "aac", 2, "subrip", "ass", "hdmv_pgs_subtitle", "dvd_subtitle"), lgTV, 0)
 	if got.Method != DirectPlay {

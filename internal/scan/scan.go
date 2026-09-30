@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log"
 	"os"
@@ -91,11 +92,14 @@ func ID(path string) string {
 // Library hält alle Einträge im Speicher (schnelle Listen) und den Katalog in SQLite:
 // Probe-Ergebnisse (items/streams) und Keyframe-Indizes überleben so einen Neustart.
 type Library struct {
-	Dirs []string
-	DB   *sql.DB
-	Meta *meta.Resolver // nil = keine Metadaten
+	Dirs  []string
+	Extra []string // weitere Ordner neben Dirs (Uploads); SetDirs lässt sie stehen
+	DB    *sql.DB
+	Meta  *meta.Resolver // nil = keine Metadaten
 	// Colorize ermittelt die Platzhalterfarbe ("#rrggbb") direkt nach den Metadaten, nicht erst beim Abruf.
 	Colorize func(ctx context.Context, it *Item, m *meta.Meta) string
+	// OnScan meldet das Ende jedes Scans aus Run (für die Aktivitäten im Dashboard); nil = niemand.
+	OnScan func(found int, err error)
 
 	mu       sync.RWMutex
 	items    map[string]*Item
@@ -109,15 +113,18 @@ type Library struct {
 	inflight map[string]chan struct{}
 
 	scanMu   sync.Mutex
+	cropMu   sync.Mutex // eine Balken-Erkennung zur Zeit
 	scanning atomic.Bool
+	lastScan atomic.Int64 // Unix-ms des letzten vollständigen Scans
 	found    atomic.Int64
 	wake     chan struct{}
+	metaWake chan struct{} // neue Titel: Metadaten sofort holen, nicht erst nach dem ganzen Scan
 	scanned  chan struct{} // geschlossen nach dem ersten vollständigen Scan
 	once     sync.Once
 }
 
 func NewLibrary(db *sql.DB, dirs []string) *Library {
-	return &Library{Dirs: dirs, DB: db, wake: make(chan struct{}, 1), scanned: make(chan struct{})}
+	return &Library{Dirs: dirs, DB: db, wake: make(chan struct{}, 1), metaWake: make(chan struct{}, 1), scanned: make(chan struct{})}
 }
 
 // Load füllt die Bibliothek aus der Datenbank – sie ist damit sofort nach dem Start da, noch vor dem ersten Scan.
@@ -135,6 +142,7 @@ func (l *Library) Load(ctx context.Context) error {
 	l.items, l.sorted, l.byAdded, l.series = items, nil, nil, nil
 	l.metas, l.colors, l.metaErr, l.kf = nil, nil, nil, nil // nach einem Restore neu auflösen
 	l.mu.Unlock()
+	l.metaSoon()
 	return nil
 }
 
@@ -145,16 +153,32 @@ func (c *cached) item() *Item {
 }
 
 // Run scannt sofort, dann alle every und auf Rescan hin; dazwischen misst Prefetch die Keyframes.
+// Metadaten laufen daneben: erst für die bekannten Titel (nach einem Neustart kommen sie aus dem Cache),
+// dann für jeden neu gefundenen – Poster erscheinen so während des ersten Scans, nicht erst danach.
 func (l *Library) Run(ctx context.Context, every time.Duration) {
 	t := time.NewTicker(every)
 	defer t.Stop()
+	go func() {
+		for {
+			l.resolveMeta(ctx)
+			select {
+			case <-ctx.Done():
+				return
+			case <-l.metaWake:
+			}
+		}
+	}()
 	for {
-		if err := l.Scan(ctx); err != nil && ctx.Err() == nil {
+		err := l.Scan(ctx)
+		if err != nil && ctx.Err() == nil {
 			log.Printf("scan: %v", err)
 		} else {
 			log.Printf("scan: %d Titel", len(l.All()))
 		}
-		l.resolveMeta(ctx)
+		if l.OnScan != nil && ctx.Err() == nil {
+			l.OnScan(len(l.All()), err)
+		}
+		l.metaSoon() // auch Netzfehler vom letzten Durchlauf erneut versuchen
 		l.once.Do(func() { close(l.scanned) })
 		l.Prefetch(ctx)
 		select {
@@ -166,7 +190,7 @@ func (l *Library) Run(ctx context.Context, every time.Duration) {
 	}
 }
 
-// Scanned ist geschlossen, sobald der erste Scan samt Metadaten durch ist – danach ist die Maschine ruhiger
+// Scanned ist geschlossen, sobald der erste Scan durch ist – danach ist die Maschine ruhiger
 // (z. B. für die Hardware-Messung, die sonst mit dem Scan um die CPU konkurriert).
 func (l *Library) Scanned() <-chan struct{} { return l.scanned }
 
@@ -303,7 +327,7 @@ func (l *Library) Scan(ctx context.Context) error {
 	if l.items == nil {
 		l.items = map[string]*Item{}
 	}
-	dirs := slices.Clone(l.Dirs)
+	dirs := append(slices.Clone(l.Dirs), l.Extra...)
 	l.mu.Unlock()
 
 	items := map[string]*Item{}
@@ -356,6 +380,7 @@ func (l *Library) Scan(ctx context.Context) error {
 					return err
 				}
 				it = &p
+				defer l.metaSoon() // erst nach dem Eintragen unten
 			}
 			items[it.ID] = it
 			l.mu.Lock()
@@ -387,7 +412,74 @@ func (l *Library) Scan(ctx context.Context) error {
 	l.items, l.sorted, l.byAdded, l.series = items, nil, nil, nil
 	l.kf = nil // Dateien können sich geändert haben
 	l.mu.Unlock()
+	l.lastScan.Store(time.Now().UnixMilli())
 	return nil
+}
+
+// Crop liefert den Bildausschnitt ohne eingebrannte Balken; nil = keine Balken oder noch nicht gemessen.
+// Ist er unbekannt, misst ein Hintergrundlauf (höchstens einer gleichzeitig, das NAS hat 2 Kerne); der nächste
+// Abruf hat das Ergebnis. Ist gerade eine andere Messung dran, versucht es der nächste Abruf erneut.
+func (l *Library) Crop(it *Item) *probe.Rect {
+	var r probe.Rect
+	err := l.DB.QueryRow("SELECT x, y, w, h FROM crops WHERE item_id = ?", it.ID).Scan(&r.X, &r.Y, &r.W, &r.H)
+	switch {
+	case err == nil && r.W == 0:
+		return nil
+	case err == nil:
+		return &r
+	case !errors.Is(err, sql.ErrNoRows) || !l.cropMu.TryLock():
+		return nil
+	}
+	go func() {
+		defer l.cropMu.Unlock()
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		defer cancel()
+		c, err := probe.Crop(ctx, it.Path, it.Media)
+		if err != nil {
+			log.Printf("scan: Balken: %v", err) // nicht speichern: Laufwerk kann gleich wieder da sein
+			return
+		}
+		if c == nil {
+			c = &probe.Rect{}
+		}
+		if _, err := l.DB.Exec("INSERT OR REPLACE INTO crops(item_id, x, y, w, h) VALUES(?, ?, ?, ?, ?)", it.ID, c.X, c.Y, c.W, c.H); err != nil {
+			log.Printf("scan: Balken speichern: %v", err)
+		}
+	}()
+	return nil
+}
+
+// LastScan ist das Ende des letzten vollständigen Scans (Null, solange keiner lief).
+func (l *Library) LastScan() time.Time {
+	if ms := l.lastScan.Load(); ms > 0 {
+		return time.UnixMilli(ms)
+	}
+	return time.Time{}
+}
+
+// RefreshMeta holt die Metadaten aller Titel neu (Aufgabe „Metadaten aktualisieren“); gesperrte Felder bleiben.
+// progress bekommt den erledigten Anteil (0..1). Netzfehler brechen nicht ab, der erste wird zurückgegeben.
+func (l *Library) RefreshMeta(ctx context.Context, progress func(float64)) error {
+	if l.Meta == nil {
+		return errors.New("Metadaten sind ausgeschaltet")
+	}
+	all := l.All()
+	var first error
+	for i, it := range all {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		m, err := l.Meta.Refresh(ctx, it.Query())
+		if err != nil && first == nil {
+			first = fmt.Errorf("%s: %w", filepath.Base(it.Path), err)
+		}
+		l.SetMeta(it.ID, m)
+		if l.Colorize != nil {
+			l.SetColor(it.ID, l.Colorize(ctx, it, m))
+		}
+		progress(float64(i+1) / float64(len(all)))
+	}
+	return first
 }
 
 // Keyframes liefert den Keyframe-Index eines Titels. Er wird beim ersten Bedarf per ffprobe gelesen
@@ -491,13 +583,22 @@ func (it *Item) Query() meta.Query {
 	return meta.Query{ID: it.ID, Path: it.Path, Title: it.Title, Series: it.Series, Year: it.Year, Season: it.Season, Episode: it.Episode}
 }
 
+// metaSoon weckt die Metadaten-Auflösung, ohne zu warten; mehrere Weckrufe ergeben einen Durchlauf.
+func (l *Library) metaSoon() {
+	select {
+	case l.metaWake <- struct{}{}:
+	default:
+	}
+}
+
 // resolveMeta holt nacheinander Metadaten für alle Titel ohne; Resolve cacht selbst, TMDB wird je Titel nur einmal gefragt.
+// Läuft nur in der Metadaten-Goroutine von Run; Titel, die währenddessen dazukommen, nimmt der nächste Durchlauf.
 func (l *Library) resolveMeta(ctx context.Context) {
 	if l.Meta == nil {
 		return
 	}
 	for _, it := range l.All() {
-		if ctx.Err() != nil || len(l.wake) > 0 {
+		if ctx.Err() != nil {
 			return
 		}
 		l.mu.RLock()

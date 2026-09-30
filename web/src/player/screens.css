@@ -15,26 +15,59 @@ html.hd .feld { height: var(--ziel-touch); font-size: 16px; }
 .feld:focus { box-shadow: inset 0 0 0 1px var(--text), 0 0 0 2px var(--fokus-innen), 0 0 0 4px var(--marke); }
 .fl-feld input { height: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit; -webkit-appearance: none; min-width: 0; }
 
-/* --- Kopf ohne Navigation (Profilauswahl, PIN, Kopplung) --- */
-.login-kopf { padding-top: var(--abstand-6); }
-html.tv .login-kopf { padding-top: var(--tv-rand-oben); }
-html.hd .login-kopf { padding-top: var(--abstand-4); }
+/* --- Kopf ohne Navigation (Profilauswahl, PIN, Einladung, Kopplung; Entwurf „Anmeldung“) --- */
+.login-kopf { height: 72px; }
+.login-kopf .wortmarke { width: 120px; height: 24px; }
+.login-zurueck { margin: 0 var(--abstand-3) 0 calc(-1 * var(--abstand-3)); }
+html.tv .login-kopf { height: auto; padding-top: var(--tv-rand-oben); }
+html.tv .login-kopf .wortmarke { width: 220px; height: 44px; }
+html.hd .login-kopf { height: 56px; }
 
-/* --- Profilauswahl (screens/01) --- */
-.profile { padding-top: 96px; text-align: center; }
-html.tv .profile { padding-top: 120px; }
-html.hd .profile { padding-top: 48px; }
-.profile h1 { margin-bottom: var(--abstand-8); }
-html.hd .profile h1 { margin-bottom: var(--abstand-6); }
-.profile .fl-avatar .zusatz .icon { width: 20px; height: 20px; }
-html.tv .profile .fl-avatar .zusatz .icon { width: 28px; height: 28px; }
-html.hd .fl-avatar { width: 96px; margin: 0 8px 16px; }
-html.hd .fl-avatar .kachel { width: 96px; height: 96px; line-height: 104px; font-size: 56px; }
-.login-koppeln { position: fixed; left: 0; right: 0; bottom: var(--tv-rand-oben); }
-.login-koppeln-innen { padding: 24px 32px; background: var(--flaeche-1); border-radius: var(--radius-s); }
-.login-koppeln-text { margin: 0 32px; }
-.login-koppeln .kopplung-qr { width: 160px; height: 160px; }
-.login-koppeln .fl-code { font-size: 64px; line-height: 72px; }
+/* --- Profilauswahl: links „Wer schaut?“, rechts Schnellverbindung; TV zentriert mit Code unten --- */
+.login-haupt { padding-top: var(--abstand-6); -webkit-align-items: flex-start; align-items: flex-start; }
+html.hd .login-haupt { display: block; padding-top: var(--abstand-4); }
+html.tv .login-haupt { display: block; padding-top: 120px; text-align: center; }
+.login-wer { max-width: 760px; }
+html.tv .login-wer { max-width: none; }
+.login-wer-text { margin-top: var(--abstand-2); font-size: 15px; }
+.profile-liste { margin-top: var(--abstand-6); }
+html.tv .profile-liste { margin-top: var(--abstand-8); }
+.login .profile-liste .fl-avatar { width: 152px; margin: 0 24px 32px 0; }
+.login .profile-liste .fl-avatar .kachel { width: 152px; height: 152px; line-height: 160px; font-size: 72px; }
+html.tv .login .profile-liste .fl-avatar { width: 200px; margin: 0 20px 28px; }
+html.tv .login .profile-liste .fl-avatar .kachel { width: 200px; height: 200px; line-height: 212px; font-size: 96px; }
+html.hd .login .profile-liste .fl-avatar { width: 96px; margin: 0 16px 20px 0; }
+html.hd .login .profile-liste .fl-avatar .kachel { width: 96px; height: 96px; line-height: 104px; font-size: 56px; }
+.login .fl-avatar .name { margin-top: 8px; color: var(--text); font-size: 16px; }
+.login .fl-avatar .unter { display: block; min-height: 18px; font-size: 13px; line-height: 18px; color: var(--text-3); }
+html.tv .login .fl-avatar .unter { min-height: 32px; font-size: 24px; line-height: 32px; }
+.login .fl-avatar .zusatz .fl-icon { width: 20px; height: 20px; }
+.login-aktionen { margin-top: var(--abstand-5); -webkit-flex-wrap: wrap; flex-wrap: wrap; }
+.login-aktionen .fl-btn { margin: 0 var(--abstand-3) var(--abstand-3) 0; }
+
+.login-schnell { width: 400px; margin-left: var(--abstand-8); padding: var(--abstand-6); background: var(--flaeche-1); border-radius: var(--radius-m); -webkit-flex: none; flex: none; font-size: 15px; line-height: 22px; }
+html.hd .login-schnell { width: auto; margin: var(--abstand-5) 0 0; padding: var(--abstand-5); }
+.login-schnell h2 { font-size: 20px; line-height: 28px; font-weight: 600; }
+.login-schnell h2 .fl-icon { margin-right: var(--abstand-3); }
+.login-schnell > p, .login-schnell > div { margin-top: 20px; }
+.login-schnell > .login-gilt { font-size: 14px; }
+.login-gilt .fl-icon { width: 18px; height: 18px; margin-right: var(--abstand-2); }
+.login-code { padding: 16px 0; background: var(--flaeche-2); border-radius: var(--radius-s); box-shadow: inset 0 0 0 1px var(--linie); font-size: 48px; line-height: 56px; letter-spacing: 6px; text-align: center; }
+.login-schnell > .login-ablauf { margin-top: var(--abstand-2); height: 4px; background: var(--linie); overflow: hidden; }
+.login-ablauf i { display: block; width: 100%; height: 100%; background: var(--text); -webkit-transform-origin: 0 0; transform-origin: 0 0; }
+.login-schnell > .login-qr { padding-top: 20px; box-shadow: inset 0 1px 0 var(--linie); }
+.login-qr .kopplung-qr { width: 168px; height: 168px; margin-right: 20px; }
+.login-qr b { display: block; font-weight: 600; }
+.login-qr .leise { display: block; font-size: 14px; line-height: 20px; }
+.login-fuss { margin-top: var(--abstand-8); padding-top: 24px; padding-bottom: 24px; box-shadow: inset 0 1px 0 var(--linie); }
+
+.login-tv-fuss { position: fixed; left: 0; right: 0; bottom: var(--tv-rand-oben); -webkit-align-items: flex-end; align-items: flex-end; }
+.login-tv-code { text-align: right; }
+.login-tv-code .zeile { -webkit-justify-content: flex-end; justify-content: flex-end; font-size: 28px; line-height: 40px; }
+.login-tv-code .fl-icon { width: 32px; height: 32px; margin-right: 16px; }
+.login-tv-ziffern { font-size: 48px; line-height: 56px; letter-spacing: 8px; }
+.login-tv-code .t-klein { font-size: 24px; line-height: 32px; }
+.login-tv-qr { width: 200px; height: 200px; margin-left: 40px; }
 
 /* --- PIN (screens/02) --- */
 .pin { padding-top: 96px; text-align: center; }
@@ -47,13 +80,15 @@ html.hd .pin { padding-top: 48px; }
 .pin-fehler { margin-top: var(--abstand-4); }
 .pin-form { display: inline-block; text-align: left; width: 420px; max-width: 100%; }
 .pin-form .feld { width: 100%; }
+.pin-form .feld + .feld { margin-top: var(--abstand-3); }
+.pin-hinweis { margin-top: var(--abstand-2); }
 .pin-aktionen { margin-top: var(--abstand-5); -webkit-justify-content: center; justify-content: center; }
 .pin-form .pin-aktionen { -webkit-justify-content: flex-start; justify-content: flex-start; }
 .pin-text-absatz { margin: 0 auto var(--abstand-5); max-width: 32em; }
 
 /* --- Kopplung (screens/16) --- */
 .kopplung-code-gross { font-size: 96px; line-height: 104px; letter-spacing: 8px; }
-.kopplung-qr { width: 240px; height: 240px; padding: 10px; background: #ece7dd; border-radius: var(--radius-s); -webkit-flex: 0 0 auto; flex: 0 0 auto; }
+.kopplung-qr { width: 240px; height: 240px; background: #ece7dd; border-radius: var(--radius-s); -webkit-flex: 0 0 auto; flex: 0 0 auto; image-rendering: pixelated; } /* PNG bringt den weißen Rand mit; ohne Weichzeichnen skaliert, sonst verschwimmen die Module */
 .koppeln-seite { padding-top: 140px; }
 html.hd .koppeln-seite { padding-top: 72px; }
 .koppeln-karte { width: 540px; max-width: 100%; margin: 0 auto; padding: 40px; background: var(--flaeche-1); border-radius: var(--radius-s); }
@@ -129,3 +164,14 @@ html.tv .einst-feld { width: 360px; }
 html.tv .protokoll { font-size: 24px; line-height: 32px; }
 .einst-toast { position: fixed; left: 50%; bottom: var(--abstand-7); z-index: 20; -webkit-transform: translateX(-50%); transform: translateX(-50%); box-shadow: var(--schatten-overlay); }
 html.hd .einst-toast { bottom: 96px; }
+
+/* --- Gemeinsam schauen: Neue Gruppe erstellen / beitreten (Route /party) --- */
+.party-lobby-text { margin: var(--abstand-2) 0 var(--abstand-5); max-width: 48em; }
+html.tv .party-lobby-text { margin-top: 0; }
+.party-block { margin-top: var(--abstand-6); padding-bottom: var(--abstand-7); }
+.party-block-text { margin: var(--abstand-1) 0 var(--abstand-4); max-width: 40em; }
+.party-code-form { max-width: 560px; }
+.party-code-form .feld { margin-right: var(--abstand-3); }
+.party-code-form .fl-btn { margin: 0; }
+.party-code-feld { width: 720px; max-width: 100%; margin-bottom: var(--abstand-5); font-size: 36px; line-height: 80px; letter-spacing: 4px; }
+.party-tastatur { margin-bottom: var(--abstand-5); }

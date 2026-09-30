@@ -126,7 +126,8 @@ func TestParseVideo(t *testing.T) {
 		{"h264-1080", "h264", 1080, true},
 		{"h264-sdr", "h264-sdr", 0, true},
 		{"h264-1080-sdr", "h264-sdr", 1080, true},
-		{"h264-480", "", 0, false},
+		{"h264-480", "h264", 480, true},
+		{"h264-360", "", 0, false},
 		{"hevc", "", 0, false},
 		{"h264-sdr-720", "", 0, false},
 	} {

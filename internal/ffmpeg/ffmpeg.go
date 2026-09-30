@@ -356,3 +356,19 @@ func (c *counter) Write(p []byte) (int, error) {
 	c.mu.Unlock()
 	return len(p), nil
 }
+
+// Nice senkt die Priorität eines Hintergrund-Laufs: nice 19 und, unter Linux, ionice Idle-Klasse.
+// ponytail: unter Windows läuft ffmpeg mit normaler Priorität; BELOW_NORMAL per CreationFlags, wenn es stört
+func Nice(name string, args []string) (string, []string) {
+	if runtime.GOOS == "windows" {
+		return name, args
+	}
+	cmd := append([]string{name}, args...)
+	if p, err := exec.LookPath("ionice"); err == nil {
+		cmd = append([]string{p, "-c", "3"}, cmd...)
+	}
+	if p, err := exec.LookPath("nice"); err == nil {
+		cmd = append([]string{p, "-n", "19"}, cmd...)
+	}
+	return cmd[0], cmd[1:]
+}

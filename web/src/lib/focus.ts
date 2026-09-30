@@ -70,8 +70,14 @@ export function folge(node: HTMLElement) {
   if (seite) {
     const ziel = (node.closest('.reihe') as HTMLElement | null) || node
     const max = Math.max(0, seite.scrollHeight - window.innerHeight)
-    const y = Math.min(max, Math.max(0, oben(ziel, seite) - window.innerHeight * 0.42))
-    seite.style.transform = seite.style.webkitTransform = 'translateY(' + -y + 'px)'
+    const o = oben(ziel, seite)
+    let y = o - window.innerHeight * 0.42
+    // Bis zur ersten Reihe nur so weit, dass das Ziel ganz zu sehen ist – sonst schneidet die 42-%-Linie den Hero-Titel ab.
+    const erste = seite.querySelector('.reihe') as HTMLElement | null
+    if (erste && o <= oben(erste, seite)) y = Math.min(y, o + ziel.offsetHeight + 48 - window.innerHeight)
+    y = Math.min(max, Math.max(0, y))
+    // Ungescrollt kein transform: sonst hängen position: fixed-Kinder (TV-Fuß der Anmeldung, Toasts) an der Schiene statt am Bildschirm
+    seite.style.transform = seite.style.webkitTransform = y ? 'translateY(' + -y + 'px)' : ''
   }
 }
 

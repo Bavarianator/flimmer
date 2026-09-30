@@ -221,6 +221,26 @@ func TestEndToEnd(t *testing.T) {
 	if _, b := call(anon, "GET", "/api/users", nil); strings.Contains(string(b), "Gast") {
 		t.Fatalf("Gast in der Profilauswahl: %s", b)
 	}
+	// Mit Passwort registriert: Token für Apps, eindeutiger Name, später Anmeldung per Name (auch von außen).
+	if res, b := call(anon, "POST", "/api/invites/redeem", map[string]any{"token": token, "name": "Freund", "password": "geheim"}); res.StatusCode != 200 || !strings.Contains(string(b), `"token":"`) {
+		t.Fatalf("registrieren: %d %s", res.StatusCode, b)
+	}
+	if res, _ := call(anon, "POST", "/api/invites/redeem", map[string]any{"token": token, "name": "freund", "password": "geheim"}); res.StatusCode != 409 {
+		t.Fatalf("doppelter Name: %d", res.StatusCode)
+	}
+	if res, b := call(anon, "POST", "/api/login", map[string]any{"user": "Freund", "password": "geheim"}); res.StatusCode != 200 {
+		t.Fatalf("Anmeldung per Name: %d %s", res.StatusCode, b)
+	}
+	// Kopplungs-QR ist vor der Anmeldung abrufbar, das Bestätigen nicht.
+	var pair struct{ Code string }
+	_, b = call(anon, "POST", "/api/pair", map[string]any{"device": "TV"})
+	json.Unmarshal(b, &pair)
+	if res, _ := call(anon, "GET", "/api/pair/"+pair.Code+"/qr", nil); res.StatusCode != 200 || res.Header.Get("Content-Type") != "image/png" {
+		t.Fatalf("Kopplungs-QR: %d", res.StatusCode)
+	}
+	if res, _ := call(anon, "POST", "/api/pair/"+pair.Code+"/confirm", map[string]any{}); res.StatusCode != 401 {
+		t.Fatalf("Bestätigen ohne Anmeldung: %d", res.StatusCode)
+	}
 	if res, _ := call(browser, "DELETE", "/api/invites/"+inv.Invite.ID, nil); res.StatusCode != 204 {
 		t.Fatalf("widerrufen: %d", res.StatusCode)
 	}
@@ -277,9 +297,9 @@ func TestHomeRows(t *testing.T) {
 		"film": {Pos: 600, Updated: now},
 		"weg":  {Pos: 100, Updated: now}, // Datei nicht mehr da
 	}
-	cont, next, recent := homeRows(all, prog)
-	if len(cont) != 1 || cont[0].ID != "film" || len(next) != 1 || next[0].ID != "e2" || len(recent) != 2 || recent[0].ID != "film" {
-		t.Fatalf("cont=%v next=%v recent=%v", ids(cont), ids(next), ids(recent))
+	cont, next, movies, series := homeRows(all, prog)
+	if len(cont) != 1 || cont[0].ID != "film" || len(next) != 1 || next[0].ID != "e2" || len(movies) != 1 || movies[0].ID != "film" || len(series) != 1 {
+		t.Fatalf("cont=%v next=%v movies=%v series=%v", ids(cont), ids(next), ids(movies), ids(series))
 	}
 }
 

@@ -16,13 +16,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/Bavarianator/flimmer/internal/ffmpeg"
 	"github.com/Bavarianator/flimmer/internal/hwaccel"
 	"github.com/Bavarianator/flimmer/internal/playback"
 	"github.com/Bavarianator/flimmer/internal/probe"
@@ -69,10 +69,11 @@ type Optimizer struct {
 	opts Options
 	now  func() time.Time
 
-	mu     sync.Mutex
-	st     Status
-	failed map[string]string // ID → Grund; ponytail: nur bis zum Neustart gemerkt, in die DB wenn das nervt
-	hdr    map[string]bool   // ID → HDR-Quelle (Cache für hdrOf)
+	running sync.Mutex // ein Job zur Zeit: Nachtfenster oder „Jetzt ausführen“
+	mu      sync.Mutex
+	st      Status
+	failed  map[string]string // ID → Grund; ponytail: nur bis zum Neustart gemerkt, in die DB wenn das nervt
+	hdr     map[string]bool   // ID → HDR-Quelle (Cache für hdrOf)
 }
 
 func New(opts Options) *Optimizer {
@@ -148,9 +149,10 @@ func (o *Optimizer) Run(ctx context.Context) {
 func (o *Optimizer) tick(ctx context.Context) {
 	from, to, on := o.opts.Window()
 	now := o.now()
-	if !on || !inWindow(now.Hour(), from, to) || o.opts.Busy() {
+	if !on || !inWindow(now.Hour(), from, to) || o.opts.Busy() || !o.running.TryLock() {
 		return
 	}
+	defer o.running.Unlock()
 	todo, err := o.pending(ctx)
 	if err != nil {
 		o.setErr(err)
@@ -159,12 +161,40 @@ func (o *Optimizer) tick(ctx context.Context) {
 	if len(todo) == 0 {
 		return
 	}
-	it := todo[0]
-	err = o.encode(ctx, it, windowEnd(now, to), o.opts.Accel)
+	o.job(ctx, todo[0], windowEnd(now, to))
+}
+
+// RunNow bereitet alle offenen Titel sofort vor, auch außerhalb des Zeitfensters (Aufgabe „Jetzt ausführen“).
+// Endet, sobald jemand etwas abspielt; progress bekommt den erledigten Anteil.
+func (o *Optimizer) RunNow(ctx context.Context, progress func(float64)) error {
+	if !o.running.TryLock() {
+		return errors.New("die Vorbereitung läuft bereits")
+	}
+	defer o.running.Unlock()
+	todo, err := o.pending(ctx)
+	if err != nil {
+		return err
+	}
+	for i, it := range todo {
+		if o.opts.Busy() {
+			return errors.New("unterbrochen, weil gerade etwas abgespielt wird")
+		}
+		o.job(ctx, it, o.now().Add(6*time.Hour))
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		progress(float64(i+1) / float64(len(todo)))
+	}
+	return nil
+}
+
+// job kodiert einen Titel bis deadline und hält Status und Fehlschläge fest.
+func (o *Optimizer) job(ctx context.Context, it Item, deadline time.Time) {
+	err := o.encode(ctx, it, deadline, o.opts.Accel)
 	if errors.Is(err, errFailed) && len(o.opts.Accel.Encode) > 0 {
 		// Wie beim Streaming: Die GPU dekodiert nicht jeden Codec (z. B. HEVC 10 bit auf alter Hardware) → Software.
 		log.Printf("optimize: %s mit %s gescheitert, versuche Software: %v", it.Title, o.opts.Accel.Name, err)
-		err = o.encode(ctx, it, windowEnd(now, to), hwaccel.Accel{})
+		err = o.encode(ctx, it, deadline, hwaccel.Accel{})
 	}
 	var slow errTooSlow
 	switch {
@@ -304,7 +334,7 @@ func (o *Optimizer) encode(ctx context.Context, it Item, deadline time.Time, acc
 
 	jobCtx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
-	name, args := niceCmd(o.opts.FFmpeg, Args(it, hdr, accel, part))
+	name, args := ffmpeg.Nice(o.opts.FFmpeg, Args(it, hdr, accel, part))
 	cmd := exec.CommandContext(jobCtx, name, args...)
 	var stderr tail
 	cmd.Stderr = &stderr
@@ -436,22 +466,6 @@ func Args(it Item, hdr bool, accel hwaccel.Accel, out string) []string {
 		}
 	}
 	return append(a, "-movflags", "+faststart", "-progress", "pipe:1", "-f", "mp4", out)
-}
-
-// niceCmd senkt die Priorität: nice 19 und, unter Linux, ionice Idle-Klasse.
-// ponytail: unter Windows läuft ffmpeg mit normaler Priorität; BELOW_NORMAL per CreationFlags, wenn es stört
-func niceCmd(ffmpeg string, args []string) (string, []string) {
-	if runtime.GOOS == "windows" {
-		return ffmpeg, args
-	}
-	cmd := append([]string{ffmpeg}, args...)
-	if p, err := exec.LookPath("ionice"); err == nil {
-		cmd = append([]string{p, "-c", "3"}, cmd...)
-	}
-	if p, err := exec.LookPath("nice"); err == nil {
-		cmd = append([]string{p, "-n", "19"}, cmd...)
-	}
-	return cmd[0], cmd[1:]
 }
 
 func inWindow(h, from, to int) bool {

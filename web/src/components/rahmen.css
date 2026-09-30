@@ -1,0 +1,127 @@
+/* Rahmen im Jellyfin-Aufbau: Seitenleiste + Kopfzeile (Desktop), Schublade (Handy), Icon-Schiene (TV),
+   dazu Kontextmenü, Seitenblatt und Dialog aus Menue.tsx. Chromium 53: kein gap, kein Grid, Präfixe. */
+
+/* ---------- Desktop: Seitenleiste ---------- */
+.leiste { position: fixed; left: 0; top: 0; bottom: 0; width: 248px; z-index: 20; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; background: var(--flaeche-1); border-right: 1px solid var(--linie); box-sizing: border-box; overflow-y: auto; }
+html.dt .rahmen:not(.ohne) > .seite { margin-left: 248px; }
+.leiste-marke { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-flex: none; flex: none; height: 64px; padding: 0 24px; border-bottom: 1px solid var(--linie); box-sizing: border-box; }
+.bildmarke { width: 24px; height: 24px; margin-right: 10px; -webkit-flex: none; flex: none; color: var(--text); }
+.leiste-marke .marke-text { display: block; line-height: 0; }
+.leiste-marke .wortmarke { width: 100px; height: 20px; }
+.leiste-marke .fl-label { display: block; margin-top: 4px; font-size: 10px; line-height: 12px; letter-spacing: 2px; color: var(--text-3); }
+.leiste-nav { -webkit-flex: 1; flex: 1; padding: 16px 12px; }
+.nav-kopf { margin: 20px 12px 6px; font-family: var(--font-mono); font-weight: 500; font-size: 12px; line-height: 16px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-3); white-space: nowrap; }
+.nav-punkt { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; height: 44px; padding: 0 12px; margin-bottom: 2px; border-radius: var(--radius-s); color: var(--text-2); font-size: 15px; font-weight: 500; text-decoration: none; cursor: pointer; }
+.nav-punkt .fl-icon { margin-right: 14px; -webkit-flex: none; flex: none; }
+.nav-punkt:hover { color: var(--text); }
+.nav-punkt.an { background: var(--marke-leise); color: var(--text); font-weight: 600; }
+.leiste-status { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-flex: none; flex: none; padding: 16px 24px; border-top: 1px solid var(--linie); font-size: 13px; line-height: 18px; color: var(--text-3); }
+.leiste-status .fl-ampel { width: 8px; height: 8px; margin-right: 12px; -webkit-flex: none; flex: none; }
+
+/* ---------- Kopfzeile ---------- */
+.kopfzeile { position: -webkit-sticky; position: sticky; top: 0; z-index: 10; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; height: 64px; padding: 0 24px 0 32px; border-bottom: 1px solid var(--linie); background: var(--saal); box-sizing: border-box; }
+.kopfzeile.ueber-hero { position: absolute; left: 0; right: 0; border-bottom: 0; background: linear-gradient(rgba(17, 16, 14, 0.85), rgba(17, 16, 14, 0)); }
+.kopf-titel { margin: 0 24px 0 0; font-size: 20px; line-height: 28px; font-weight: 600; min-width: 0; }
+.kopf-tabs { -webkit-align-self: stretch; align-self: stretch; min-width: 0; }
+.kopf-tabs-innen { display: -webkit-flex; display: flex; height: 100%; white-space: nowrap; }
+.kopf-tab { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; padding: 0 12px; color: var(--text-2); font-weight: 500; text-decoration: none; cursor: pointer; }
+.kopf-tab:hover { color: var(--text); }
+.kopf-tab.an { color: var(--text); font-weight: 600; box-shadow: inset 0 -2px 0 var(--marke); }
+.kopf-tab.ist-fokus { box-shadow: inset 0 0 0 2px var(--marke); }
+.kopf-suche { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; width: 300px; -webkit-flex-shrink: 1; flex-shrink: 1; min-width: 160px; height: 40px; padding: 0 12px; margin: 0 8px 0 16px; background: var(--flaeche-2); border-radius: var(--radius-s); box-shadow: inset 0 0 0 1px var(--linie-stark); color: var(--text-2); box-sizing: border-box; }
+.kopf-suche input { -webkit-flex: 1; flex: 1; min-width: 0; margin-left: 8px; padding: 0; background: none; border: 0; outline: 0; color: var(--text); font: inherit; font-size: 15px; }
+.kopf-suche.ist-fokus { box-shadow: inset 0 0 0 1px var(--linie-stark), 0 0 0 2px var(--fokus-innen), 0 0 0 4px var(--marke); }
+.kopf-knopf { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; -webkit-flex: none; flex: none; width: 44px; height: 44px; margin-left: 4px; padding: 0; border: 0; border-radius: var(--radius-s); background: none; color: var(--text); cursor: pointer; }
+.kopf-knopf .fl-mini-avatar { width: 34px; height: 34px; line-height: 38px; font-size: 20px; }
+.kopfzeile .fl-btn { margin: 0 0 0 8px; height: 40px; line-height: 40px; padding: 0 16px; font-size: 15px; }
+
+/* ---------- Handy: Kopfzeile, wischbare Tabs, Schublade ---------- */
+html.hd .kopfzeile { height: 56px; padding: 0 4px; }
+html.hd .kopf-titel { margin: 0 0 0 4px; font-size: 18px; line-height: 24px; }
+html.hd .kopf-knopf { width: 44px; height: 48px; margin: 0; }
+html.hd .kopf-knopf .fl-mini-avatar { width: 30px; height: 30px; line-height: 34px; font-size: 17px; }
+.kopf-tabs-hd { position: -webkit-sticky; position: sticky; top: 56px; z-index: 9; height: 48px; padding: 0 12px; border-bottom: 1px solid var(--linie); background: var(--saal); overflow-x: auto; -webkit-overflow-scrolling: touch; }
+html.hd .kopf-tab { font-size: 15px; }
+.schublade-scrim { position: fixed; left: 0; top: 0; right: 0; bottom: 0; z-index: 30; background: var(--scrim); }
+.schublade { position: fixed; left: 0; top: 0; bottom: 0; z-index: 31; width: 312px; max-width: 85vw; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; background: var(--flaeche-1); overflow-y: auto; box-shadow: var(--schatten-overlay); }
+.schublade-profil { padding: 20px 20px 16px; border-bottom: 1px solid var(--linie); }
+.schublade-profil .fl-mini-avatar { width: 48px; height: 48px; line-height: 54px; font-size: 30px; margin-right: 14px; -webkit-flex: none; flex: none; }
+.schublade-profil b { display: block; font-size: 17px; line-height: 24px; font-weight: 600; }
+.schublade-profil small { display: block; font-size: 14px; line-height: 20px; color: var(--text-2); }
+
+/* ---------- TV: Icon-Schiene links, klappt beim Fokus auf ---------- */
+html.tv .rahmen:not(.ohne) > .seite { margin-left: 112px; }
+.schiene-tv { position: fixed; left: 0; top: 0; bottom: 0; z-index: 20; width: 112px; padding: 40px 0; background: var(--saal); border-right: 1px solid var(--linie); box-sizing: border-box; overflow: hidden; white-space: nowrap; -webkit-transition: width var(--dauer-mittel) var(--kurve-standard); transition: width var(--dauer-mittel) var(--kurve-standard); }
+.schiene-tv.offen { width: 420px; background: var(--flaeche-1); box-shadow: var(--schatten-overlay); }
+.schiene-tv .leiste-marke { height: 72px; padding: 0 36px; border: 0; }
+.schiene-tv .bildmarke { width: 40px; height: 40px; margin-right: 20px; }
+.schiene-tv .wortmarke { width: 150px; height: 30px; }
+.schiene-tv .leiste-nav { padding: 16px 20px; }
+.schiene-tv .nav-kopf { margin: 24px 16px 8px; font-size: 18px; line-height: 24px; }
+.schiene-tv .nav-punkt { height: 64px; padding: 0 16px; margin-bottom: 4px; font-size: 26px; }
+.schiene-tv .nav-punkt .fl-icon { margin-right: 24px; }
+.schiene-tv .nav-punkt.ist-fokus { background: var(--marke); color: var(--auf-marke); box-shadow: none; }
+.schiene-tv .marke-text, .schiene-tv .nav-kopf, .schiene-tv .nav-punkt .text { opacity: 0; -webkit-transition: opacity var(--dauer-schnell) linear; transition: opacity var(--dauer-schnell) linear; }
+.schiene-tv.offen .marke-text, .schiene-tv.offen .nav-kopf, .schiene-tv.offen .nav-punkt .text { opacity: 1; }
+.tv-kopf { padding: 48px var(--rand) 0; }
+.tv-titel { margin: 0 0 16px; font-size: 44px; line-height: 52px; font-weight: 600; }
+html.tv .kopf-tabs { height: 64px; margin-bottom: 24px; }
+html.tv .kopf-tab { padding: 0 20px; font-size: 26px; border-radius: var(--radius-s); }
+html.tv .kopf-tab.an { box-shadow: inset 0 -3px 0 var(--marke); }
+html.tv .kopf-tab.ist-fokus { background: var(--marke); color: var(--auf-marke); box-shadow: none; }
+
+/* Übergang: Seiten, die noch mit der alten, schwebenden Kopfzeile rechnen (werden im Umbau ersetzt) */
+html.dt .rahmen .seitenkopf, html.hd .rahmen .seitenkopf { padding-top: 24px; }
+html.dt .rahmen .serie-spalten { padding-top: 24px; }
+html.tv .rahmen .seitenkopf, html.tv .rahmen .serie-spalten { padding-top: 48px; }
+
+/* ---------- Überlagerungen: Menü, Seitenblatt, Dialog ---------- */
+.ueberlagerung { position: fixed; left: 0; top: 0; right: 0; bottom: 0; z-index: 50; }
+.ueberlagerung.dunkel { background: var(--scrim); }
+.fl-menue { position: absolute; min-width: 260px; max-width: 360px; max-height: calc(100vh - 16px); padding: 6px 0; overflow-y: auto; background: var(--flaeche-1); border-radius: var(--radius-s); box-shadow: inset 0 0 0 1px var(--linie), var(--schatten-overlay); box-sizing: border-box; }
+.fl-menue.unten { left: 0; right: 0; bottom: 0; max-width: none; max-height: 85vh; padding: 8px 0 16px; border-radius: var(--radius-m) var(--radius-m) 0 0; }
+.fl-menue .griff { width: 36px; height: 3px; margin: 4px auto 12px; background: var(--linie-stark); }
+.menue-titel { padding: 0 20px 8px; font-size: 16px; line-height: 22px; font-weight: 600; }
+.menue-punkt { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; width: 100%; min-height: 40px; padding: 8px 16px; border: 0; background: none; color: var(--text); font: inherit; font-size: 15px; line-height: 22px; text-align: left; cursor: pointer; box-sizing: border-box; }
+.menue-punkt .fl-icon { width: 20px; height: 20px; margin-right: 14px; -webkit-flex: none; flex: none; }
+.menue-punkt .fl-icon.an { margin: 0 0 0 12px; }
+.menue-punkt small { display: block; font-size: 13px; line-height: 18px; color: var(--text-3); }
+.menue-punkt.gefahr { color: var(--ampel-rot); }
+.menue-punkt:hover, .menue-punkt.ist-fokus { background: var(--marke-leise); box-shadow: none; }
+.fl-menue .trenner { height: 1px; margin: 6px 0; background: var(--linie); }
+html.hd .menue-punkt { min-height: 48px; padding: 0 20px; }
+html.tv .fl-menue { min-width: 440px; max-width: 560px; padding: 12px 0; }
+html.tv .menue-punkt { min-height: 64px; padding: 0 28px; font-size: 26px; line-height: 34px; }
+html.tv .menue-punkt .fl-icon { width: 28px; height: 28px; margin-right: 20px; }
+html.tv .menue-punkt small { font-size: 20px; line-height: 28px; }
+html.tv .menue-punkt.ist-fokus { background: var(--marke); color: var(--auf-marke); }
+html.tv .menue-punkt.ist-fokus small { color: var(--auf-marke); }
+
+.fl-blatt { position: absolute; top: 0; right: 0; bottom: 0; width: 440px; max-width: 100%; background: var(--flaeche-1); box-shadow: inset 1px 0 0 var(--linie), -20px 0 48px rgba(0, 0, 0, 0.5); }
+.fl-blatt .blatt-innen { height: 100%; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; }
+.blatt-kopf { -webkit-flex: none; flex: none; height: 56px; padding: 0 12px 0 24px; }
+.blatt-kopf h2 { margin: 0; font-size: 20px; line-height: 28px; font-weight: 600; }
+.blatt-kopf .fl-btn { margin: 0; }
+.blatt-inhalt { -webkit-flex: 1; flex: 1; min-height: 0; padding: 16px 24px; overflow-y: auto; }
+.blatt-fuss { -webkit-flex: none; flex: none; height: 76px; padding: 0 24px; border-top: 1px solid var(--linie); }
+.blatt-fuss .fl-btn { margin: 0 0 0 12px; }
+.blatt-fuss .fl-btn:first-child { margin-left: 0; }
+html.hd .fl-blatt { top: auto; left: 0; width: auto; max-height: 90vh; border-radius: var(--radius-m) var(--radius-m) 0 0; }
+html.hd .fl-blatt .blatt-innen { height: auto; max-height: 90vh; }
+html.tv .fl-blatt { width: 680px; }
+html.tv .blatt-kopf { height: 104px; padding: 0 32px 0 48px; }
+html.tv .blatt-kopf h2 { font-size: 34px; line-height: 44px; }
+html.tv .blatt-inhalt { padding: 24px 48px; }
+html.tv .blatt-fuss { height: 120px; padding: 0 48px; }
+
+.fl-dialog { position: absolute; left: 50%; top: 50%; width: 480px; max-width: calc(100vw - 32px); max-height: calc(100vh - 32px); overflow-y: auto; -webkit-transform: translate(-50%, -50%); transform: translate(-50%, -50%); background: var(--flaeche-1); border-radius: var(--radius-m); box-shadow: var(--schatten-overlay), inset 0 0 0 1px var(--linie); box-sizing: border-box; }
+.fl-dialog.breit { width: 1000px; }
+.fl-dialog .blatt-kopf { height: 64px; }
+.dialog-inhalt { padding: 4px 24px 8px; }
+.dialog-knoepfe { padding: 16px 24px 24px; text-align: right; }
+.dialog-knoepfe .fl-btn { margin: 0 0 0 8px; }
+html.tv .fl-dialog { width: 760px; }
+html.tv .fl-dialog .blatt-kopf { height: 104px; padding: 0 32px 0 48px; }
+html.tv .dialog-inhalt { padding: 8px 48px 16px; }
+html.tv .dialog-knoepfe { padding: 24px 48px 40px; }
+html.tv .login-kopf .bildmarke { width: 40px; height: 40px; margin-right: 16px; }

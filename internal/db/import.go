@@ -72,7 +72,7 @@ func (d *DB) ImportState(ctx context.Context, path string) (bool, error) {
 			return err
 		}
 		for _, u := range st.Users {
-			if err := insertUser(ctx, tx, User{u.ID, u.Name, u.Color, u.Admin, u.PassHash}); err != nil {
+			if err := insertUser(ctx, tx, User{ID: u.ID, Name: u.Name, Color: u.Color, Admin: u.Admin, PassHash: u.PassHash}); err != nil {
 				return err
 			}
 		}

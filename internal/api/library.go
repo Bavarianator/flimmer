@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -54,7 +55,7 @@ func (s *Server) items(r *http.Request, p playback.Profile, list []*scan.Item) [
 	for _, it := range list {
 		plan := playback.Decide(it.Media, p, speed)
 		li := libraryItem{Item: it, Duration: it.Media.Duration, Light: plan.Light, Method: plan.Method,
-			Meta: s.Lib.MetaFor(it.ID), Color: s.Lib.ColorFor(it.ID), Progress: prog[it.ID].Pos, Watched: prog[it.ID].Watched}
+			Meta: listMeta(s.Lib.MetaFor(it.ID)), Color: s.Lib.ColorFor(it.ID), Progress: prog[it.ID].Pos, Watched: prog[it.ID].Watched}
 		if m := li.Meta; m != nil && m.PosterPath != "" {
 			li.Poster = "/api/images/" + it.ID + "/poster?w=300&v=" + url.QueryEscape(m.PosterPath)
 		}
@@ -63,10 +64,22 @@ func (s *Server) items(r *http.Request, p playback.Profile, list []*scan.Item) [
 			li.Backdrop = "/api/images/" + it.ID + "/backdrop?w=1280&v=" + url.QueryEscape(li.Meta.BackdropPath)
 		case it.Series != "":
 			li.Backdrop = "/api/images/" + it.ID + "/still?w=780" // Standbild aus der Episode
+		case it.Media.First("video") != nil:
+			li.Backdrop = "/api/images/" + it.ID + "/backdrop?w=1280" // Film ohne Hintergrund: hellstes von mehreren Standbildern
 		}
 		out = append(out, li)
 	}
 	return out
+}
+
+// listMeta lässt die Personen weg: Listen brauchen sie nicht, und bei Tausenden Titeln wird die Antwort sonst groß.
+func listMeta(m *meta.Meta) *meta.Meta {
+	if m == nil || len(m.People) == 0 {
+		return m
+	}
+	c := *m
+	c.People = nil
+	return &c
 }
 
 // library gibt die Titel mit Ampel für genau das anfragende Gerät zurück.
@@ -76,7 +89,7 @@ func (s *Server) library(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	all := visible(r, s.Lib.All())
+	all := s.visible(r, s.Lib.All())
 	w.Header().Set("X-Total-Count", strconv.Itoa(len(all)))
 	w.Header().Set("Access-Control-Expose-Headers", "X-Total-Count")
 	if q := r.URL.Query(); q.Has("limit") || q.Has("offset") {
@@ -97,7 +110,7 @@ type homeRow struct {
 	Items []libraryItem `json:"items"`
 }
 
-// home: Weiterschauen, Als Nächstes, Neu hinzugefügt. Leere Reihen fallen weg.
+// home: Weiterschauen, Als Nächstes, neu in Filme, neu in Serien. Leere Reihen fallen weg.
 func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	p, ok := readProfile(w, r)
 	if !ok {
@@ -108,13 +121,14 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var lib catalog = s.Lib
-	if scopeFrom(r) != nil {
-		lib = scopedLib{s.Lib, r}
+	if s.restricted(r) {
+		lib = scopedLib{s, r}
 	}
-	cont, next, recent := homeRows(lib, prog)
+	cont, next, movies, series := homeRows(lib, prog)
 	rows := []homeRow{}
-	for _, row := range []homeRow{{ID: "continue", Title: "Weiterschauen"}, {ID: "nextup", Title: "Als Nächstes"}, {ID: "recent", Title: "Neu hinzugefügt"}} {
-		list := map[string][]*scan.Item{"continue": cont, "nextup": next, "recent": recent}[row.ID]
+	for _, row := range []homeRow{{ID: "continue", Title: "Weiterschauen"}, {ID: "nextup", Title: "Als Nächstes"},
+		{ID: "recent-movies", Title: "Kürzlich hinzugefügt in Filme"}, {ID: "recent-series", Title: "Kürzlich hinzugefügt in Serien"}} {
+		list := map[string][]*scan.Item{"continue": cont, "nextup": next, "recent-movies": movies, "recent-series": series}[row.ID]
 		if len(list) > 0 {
 			row.Items = s.items(r, p, list)
 			rows = append(rows, row)
@@ -134,7 +148,7 @@ type catalog interface {
 
 // homeRows ist rein (ohne Server), damit die Regeln testbar sind. Kosten wachsen mit dem Fortschritt
 // des Benutzers, nicht mit der Bibliotheksgröße.
-func homeRows(lib catalog, prog map[string]db.Progress) (cont, next, recent []*scan.Item) {
+func homeRows(lib catalog, prog map[string]db.Progress) (cont, next, movies, series []*scan.Item) {
 	type hit struct {
 		it *scan.Item
 		t  time.Time
@@ -189,21 +203,20 @@ func homeRows(lib catalog, prog map[string]db.Progress) (cont, next, recent []*s
 		next = append(next, h.it)
 	}
 
-	// Neu hinzugefügt: jüngste Dateien, pro Serie nur einmal.
+	// Neu hinzugefügt: jüngste Filme und je Serie die neueste Folge.
 	seen := map[string]bool{}
 	for _, it := range lib.Newest() {
-		if len(recent) == rowMax {
-			break
-		}
-		if it.Series != "" {
-			if seen[it.Series] {
-				continue
-			}
+		switch {
+		case len(movies) == rowMax && len(series) == rowMax:
+			return cont, next, movies, series
+		case it.Series == "" && len(movies) < rowMax:
+			movies = append(movies, it)
+		case it.Series != "" && !seen[it.Series] && len(series) < rowMax:
 			seen[it.Series] = true
+			series = append(series, it)
 		}
-		recent = append(recent, it)
 	}
-	return cont, next, recent
+	return cont, next, movies, series
 }
 
 type subtitleOut struct {
@@ -267,7 +280,9 @@ func (s *Server) play(w http.ResponseWriter, r *http.Request) {
 	if it.Series != "" {
 		title = fmt.Sprintf("%s – S%02dE%02d %s", it.Series, it.Season, it.Episode, it.Title)
 	}
-	s.streams.start(u.ID+"|"+it.ID, stream{User: u.Name, Title: title, Device: p.Name, Method: plan.Method, Light: plan.Light, Reasons: plan.Reasons})
+	s.streams.start(u.ID+"|"+it.ID, stream{User: u.Name, Title: title, Device: p.Name, Method: plan.Method, Light: plan.Light, Reasons: plan.Reasons,
+		color: u.Color, itemID: it.ID, client: clientName(r.UserAgent())})
+	s.activity.add("play", u.Name, "Spielt „"+title+"“")
 	writeJSON(w, resp)
 }
 
@@ -289,6 +304,7 @@ func (s *Server) progress(w http.ResponseWriter, r *http.Request) {
 		Duration float64 `json:"duration"`
 		Audio    string  `json:"audio"`
 		Subtitle string  `json:"subtitle"`
+		Paused   bool    `json:"paused"` // für die Sitzungen im Dashboard
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -297,7 +313,10 @@ func (s *Server) progress(w http.ResponseWriter, r *http.Request) {
 	if dur <= 0 {
 		dur = req.Duration
 	}
-	uid := userFrom(r).ID
+	u := userFrom(r)
+	uid := u.ID
+	s.streams.beat(uid+"|"+it.ID, stream{User: u.Name, Title: it.Title, color: u.Color, itemID: it.ID, client: clientName(r.UserAgent())},
+		max(req.Pos, 0), dur, req.Paused)
 	out, err := s.DB.SetProgress(r.Context(), uid, it.ID, max(req.Pos, 0), dur)
 	if writeErr(w, err) {
 		return
@@ -377,13 +396,25 @@ func ImageSource(it *scan.Item, m *meta.Meta, imgDir, kind string) (images.Sourc
 		return images.Source{Path: filepath.Join(imgDir, filepath.Base(file))}, true
 	case kind == "still" && it.Series != "":
 		return images.Source{Path: it.Path, Video: true, Duration: it.Media.Duration}, true
+	case kind == "backdrop" && it.Series == "" && it.Path != "" && it.Media != nil && it.Media.First("video") != nil && it.Media.Duration > 0:
+		d := it.Media.Duration // um 20 % herum; das hellste gewinnt, damit keine dunkle Szene den Kopf füllt
+		return images.Source{Path: it.Path, Video: true, Duration: d, Pick: []float64{d * 0.15, d * 0.2, d * 0.25, d * 0.3}}, true
 	}
 	return images.Source{}, false
 }
 
 func (s *Server) imageLookup(id, kind string) (images.Source, bool) {
+	if s.Meta == nil {
+		return images.Source{}, false
+	}
+	if name, ok := strings.CutPrefix(id, "serie:"); ok { // Bilder der Serie selbst (Hintergrund der Serienseite)
+		if show := s.Meta.Show(context.Background(), name); show != nil && kind != "still" && len(s.Lib.Episodes(name)) > 0 {
+			return ImageSource(&scan.Item{Series: name}, show, s.Meta.ImgDir(), kind)
+		}
+		return images.Source{}, false
+	}
 	it := s.Lib.Get(id)
-	if it == nil || s.Meta == nil {
+	if it == nil {
 		return images.Source{}, false
 	}
 	return ImageSource(it, s.Lib.MetaFor(id), s.Meta.ImgDir(), kind)

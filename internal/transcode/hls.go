@@ -92,7 +92,7 @@ func (j Job) Key() string {
 	return fmt.Sprintf("%s|%d|%s|%s|%d|%v", j.Input, j.AudioIndex, j.AudioCodec, j.VideoCodec, j.Height, j.Night)
 }
 
-// ParseVideo zerlegt den Video-Teil der HLS-URL: "copy" oder "h264[-720|-1080][-sdr]".
+// ParseVideo zerlegt den Video-Teil der HLS-URL: "copy" oder "h264[-480|-720|-1080][-sdr]".
 // Die Höhe verkleinert (nie vergrößert), "-sdr" rechnet HDR per Tone-Mapping nach SDR um;
 // dann ist codec "h264-sdr" (Software-Pfad, siehe VideoArgs).
 func ParseVideo(v string) (codec string, height int, ok bool) {
@@ -109,6 +109,8 @@ func ParseVideo(v string) (codec string, height int, ok bool) {
 	}
 	switch rest {
 	case "":
+	case "-480":
+		height = 480
 	case "-720":
 		height = 720
 	case "-1080":

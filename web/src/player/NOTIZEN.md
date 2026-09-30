@@ -19,6 +19,22 @@
 - **Party-Mitglieder:** `members` sind nur Namen. Für „Gastgeber“ und die Avatar-Farbe fehlen ID und Farbe pro Mitglied.
 - **Nächtliche Sicherung:** Die Einstellungen können sie nicht ein- oder ausschalten. `db.Maintenance` meldet nur den Stand.
 
+## Jellyfin-Umbau (web-player, 29.09.2026)
+
+- **Player-Bedienung:** Kopf (Zurück, Titel, Ampel, Gemeinsam), Zeitleiste mit Kapitel-Segmenten aus `GET /api/items/{id}` (`chapters`),
+  Knopfleiste (Vorheriges/Nächstes Kapitel bzw. Folge, 10 s zurück, Pause, 30 s vor · Ton & Untertitel, Qualität & Geschwindigkeit,
+  Vollbild). „Vorspann überspringen“ erscheint im Kapitel namens Vorspann/Intro/Opening, ein Kapitel Abspann/Credits startet die
+  Nächste-Folge-Karte. Eigene Segmente (Intro-Erkennung) liefert der Server nicht.
+- **Trickplay:** Der Server hat keine Vorschaubilder. Über der Zeitleiste stehen deshalb nur Zeit und Kapitelname.
+- **Geschwindigkeit:** beim gemeinsamen Schauen als Aktion `rate` an den Raum.
+- **Warteschlange** („Alle abspielen“, web-browse): der Player liest `sessionStorage['flimmer.warteschlange'] = {ids}` selbst.
+- **Bildanpassung:** `bild.ts` (reine Rechnung, Selbsttest `node web/scripts/bild-test.mjs`), Modus pro Gerät in `localStorage['flimmer.bild']`,
+  Menü „Qualität & Geschwindigkeit“ › Bild. `video.crop` kommt aus `details(id)`; fehlt es, fragt der Player nach 31 s einmal nach.
+  Text-Untertitel zeichnet der Player selbst (Spur „hidden“, `cuechange`), damit sie beim Füllen am Bildschirm bleiben.
+- **Live-TV:** `Player({ id: '', kanal })` spielt `/api/livetv/channels/{kanal}/play`, ohne Zeitleiste, Fortschritt und Menüs.
+- **Gemeinsam schauen:** `/party` ohne Raum ist die Lobby (Titel wählen → `POST /api/party`, Beitreten per Code oder Link).
+  Der Gruppencode ist die Raum-ID (12 Hex-Zeichen). Eine Liste offener Räume („Annas Gruppe beitreten“) gibt es serverseitig nicht.
+
 ## Offen bei ui-player
 
 - Es gibt noch keine Sichtprüfung im Browser: Playwright war gesperrt, danach war die Maschine knapp. `tsc` und `vite build` sind grün.

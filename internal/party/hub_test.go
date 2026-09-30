@@ -19,6 +19,7 @@ func TestHub(t *testing.T) {
 	}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /party", h.Create)
+	mux.HandleFunc("GET /party", h.List)
 	mux.HandleFunc("GET /party/{id}/events", h.Events)
 	mux.HandleFunc("POST /party/{id}/actions", h.Action)
 	srv := httptest.NewServer(mux)
@@ -88,7 +89,22 @@ func TestHub(t *testing.T) {
 		}
 	}
 
+	liste := func() (l []struct{ Host string }) {
+		json.NewDecoder(do("ben", "GET", "/party", "").Body).Decode(&l)
+		return l
+	}
+	if l := liste(); len(l) != 0 {
+		t.Fatalf("leerer Raum in der Liste: %v", l)
+	}
 	annaM, anna := connect("anna")
+	if l := liste(); len(l) != 1 || l[0].Host != "Anna" {
+		t.Fatalf("offene Gruppen: %v", l)
+	}
+	h.Allowed = func(*http.Request, string) bool { return false }
+	if l := liste(); len(l) != 0 {
+		t.Fatalf("gesperrter Titel in der Liste: %v", l)
+	}
+	h.Allowed = nil
 	benM, ben := connect("ben")
 	for len(next(anna, "members")["members"].([]any)) != 2 { // erst Annas eigener Beitritt, dann Ben
 	}

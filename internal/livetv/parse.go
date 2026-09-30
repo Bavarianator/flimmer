@@ -127,7 +127,7 @@ func parseInf(line string) *Channel {
 
 type guide struct {
 	progs map[string][]Program // je XMLTV-Kanal, nach Start sortiert
-	names map[string]string    // Anzeigename (klein) → XMLTV-Kanal, für Playlists ohne tvg-id
+	names map[string]string    // nameKey(Anzeigename) → XMLTV-Kanal, für Playlists ohne tvg-id
 }
 
 func (g *guide) count() (n int) {
@@ -170,7 +170,7 @@ func parseXMLTV(r io.Reader, now time.Time) (*guide, error) {
 			}
 			if d.DecodeElement(&c, &se) == nil {
 				for _, n := range c.Names {
-					g.names[strings.ToLower(strings.TrimSpace(n))] = c.ID
+					g.names[nameKey(n)] = c.ID
 				}
 			}
 		case "programme":
@@ -253,7 +253,9 @@ func fetch[T any](ctx context.Context, src string, timeout time.Duration, parse 
 		}
 	}()
 	var rc io.ReadCloser
-	if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
+	if src == FreeSource {
+		rc = io.NopCloser(bytes.NewReader(freeM3U))
+	} else if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
 		req, e := http.NewRequestWithContext(ctx, http.MethodGet, src, nil)
 		if e != nil {
 			return out, e

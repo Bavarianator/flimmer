@@ -1,0 +1,98 @@
+{
+ "name": "Dark",
+ "genres": [
+  "Drama",
+  "Science-Fiction",
+  "Supernatural"
+ ],
+ "premiered": "2017-12-01",
+ "ended": "2020-06-27",
+ "status": "Ended",
+ "summary": "<p>A family saga with a supernatural twist, <b>Dark</b> is set in a German town in present day where the disappearance of two young children exposes the double lives and fractured relationships among four families.</p>",
+ "image": {
+  "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/504/1262352.jpg",
+  "original": "https://static.tvmaze.com/uploads/images/original_untouched/504/1262352.jpg"
+ },
+ "rating": {
+  "average": 8.2
+ },
+ "network": null,
+ "webChannel": {
+  "name": "Netflix"
+ },
+ "externals": {
+  "tvrage": null,
+  "thetvdb": 334824,
+  "imdb": "tt5753856"
+ },
+ "_embedded": {
+  "episodes": [
+   {
+    "name": "Geheimnisse",
+    "season": 1,
+    "number": 1,
+    "airdate": "2017-12-01",
+    "summary": "<p>In 2019, a local boy's disappearance stokes fear in the residents of Winden, a small German town with a strange and tragic history.</p>",
+    "image": {
+     "medium": "https://static.tvmaze.com/uploads/images/medium_landscape/408/1020106.jpg",
+     "original": "https://static.tvmaze.com/uploads/images/original_untouched/408/1020106.jpg"
+    },
+    "rating": {
+     "average": 8.1
+    }
+   },
+   {
+    "name": "Lügen",
+    "season": 1,
+    "number": 2,
+    "airdate": "2017-12-01",
+    "summary": "<p>When a grim discovery leaves the police baffled, Ulrich seeks a search warrant for the power plant. A mysterious stranger checks into the hotel.</p>",
+    "image": {
+     "medium": "https://static.tvmaze.com/uploads/images/medium_landscape/408/1020107.jpg",
+     "original": "https://static.tvmaze.com/uploads/images/original_untouched/408/1020107.jpg"
+    },
+    "rating": {
+     "average": 7.9
+    }
+   }
+  ],
+  "cast": [
+   {
+    "person": {
+     "name": "Louis Hofmann",
+     "image": {
+      "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/561/1403589.jpg",
+      "original": "https://static.tvmaze.com/uploads/images/original_untouched/561/1403589.jpg"
+     }
+    },
+    "character": {
+     "name": "Jonas Kahnwald"
+    }
+   },
+   {
+    "person": {
+     "name": "Karoline Eichhorn",
+     "image": {
+      "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/139/349995.jpg",
+      "original": "https://static.tvmaze.com/uploads/images/original_untouched/139/349995.jpg"
+     }
+    },
+    "character": {
+     "name": "Charlotte Doppler"
+    }
+   },
+   {
+    "person": {
+     "name": "Stephan Kampwirth",
+     "image": {
+      "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/76/190132.jpg",
+      "original": "https://static.tvmaze.com/uploads/images/original_untouched/76/190132.jpg"
+     }
+    },
+    "character": {
+     "name": "Peter Doppler"
+    }
+   }
+  ]
+ }
+}

@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000" role="img" aria-label="Flimmer-Ampel">
+  <title>Flimmer-Ampel</title>
+  <circle cx="500" cy="300" r="130" fill="#8fae86"/><path d="M500 170 A130 130 0 0 1 500 430 Z" fill="#cfae5c"/><circle cx="500" cy="700" r="130" fill="none" stroke="#d4826f" stroke-width="56"/>
+</svg>

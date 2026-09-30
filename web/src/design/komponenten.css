@@ -92,7 +92,7 @@ html.hd .fl-karte .meta small { font-size: 13px; line-height: 18px; }
 /* Platzhalter ohne Bild: ruhige Tonfläche mit dem Titel in Plakat-Versalien, Jahr und Laufzeit am Fuß */
 .fl-platzhalter { position: absolute; left: 0; top: 0; right: 0; bottom: 0; padding: 12px; background: var(--flaeche-2); color: #ece7dd; overflow: hidden; }
 /* Titel unter der Badge-Zeile; lange Wörter brechen um (Titel im Code mit &shy; trennen) */
-.fl-platzhalter .t { margin-top: 28px; word-wrap: break-word; overflow-wrap: break-word; -webkit-hyphens: auto; hyphens: auto; font-family: var(--font-plakat); font-weight: 800; text-transform: uppercase; font-size: 30px; line-height: 28px; letter-spacing: .5px; }
+.fl-platzhalter .t { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; overflow: hidden; margin-top: 28px; word-wrap: break-word; overflow-wrap: break-word; -webkit-hyphens: auto; hyphens: auto; font-family: var(--font-plakat); font-weight: 800; text-transform: uppercase; font-size: 30px; line-height: 28px; letter-spacing: .5px; }
 .fl-platzhalter .f { position: absolute; left: 12px; right: 12px; bottom: 10px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 1.5px; color: rgba(236,231,221,.72); border-top: 1px solid rgba(236,231,221,.28); padding-top: 6px; }
 .fl-platzhalter .f span { float: right; }
 html.tv .fl-platzhalter { padding: 18px; }

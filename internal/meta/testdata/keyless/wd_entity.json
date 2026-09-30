@@ -1,0 +1,436 @@
+{
+ "entities": {
+  "Q151895": {
+   "type": "item",
+   "id": "Q151895",
+   "labels": {
+    "de": {
+     "value": "Nosferatu – Eine Symphonie des Grauens"
+    }
+   },
+   "claims": {
+    "P577": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "time": "+1922-02-17T00:00:00Z",
+         "timezone": 0,
+         "before": 0,
+         "after": 0,
+         "precision": 11,
+         "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+        }
+       }
+      }
+     },
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "time": "+1922-03-15T00:00:00Z",
+         "timezone": 0,
+         "before": 0,
+         "after": 0,
+         "precision": 11,
+         "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+        }
+       }
+      }
+     }
+    ],
+    "P4947": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": "653"
+       }
+      }
+     }
+    ],
+    "P345": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": "tt0013442"
+       }
+      }
+     }
+    ],
+    "P136": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 226730,
+         "id": "Q226730"
+        }
+       }
+      }
+     },
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 200092,
+         "id": "Q200092"
+        }
+       }
+      }
+     },
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 130232,
+         "id": "Q130232"
+        }
+       }
+      }
+     },
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 2137852,
+         "id": "Q2137852"
+        }
+       }
+      }
+     }
+    ],
+    "P57": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 55412,
+         "id": "Q55412"
+        }
+       }
+      }
+     }
+    ],
+    "P58": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 97411,
+         "id": "Q97411"
+        }
+       }
+      }
+     }
+    ],
+    "P86": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 99363,
+         "id": "Q99363"
+        }
+       }
+      }
+     }
+    ],
+    "P162": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 97413,
+         "id": "Q97413"
+        }
+       }
+      }
+     }
+    ],
+    "P161": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 58822,
+         "id": "Q58822"
+        }
+       }
+      },
+      "qualifiers": {
+       "P453": [
+        {
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 1442062,
+           "id": "Q1442062"
+          }
+         }
+        }
+       ]
+      }
+     },
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 89376,
+         "id": "Q89376"
+        }
+       }
+      }
+     },
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 66097,
+         "id": "Q66097"
+        }
+       }
+      },
+      "qualifiers": {
+       "P453": [
+        {
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 123697444,
+           "id": "Q123697444"
+          }
+         }
+        }
+       ]
+      }
+     },
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 76656,
+         "id": "Q76656"
+        }
+       }
+      },
+      "qualifiers": {
+       "P453": [
+        {
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 123697744,
+           "id": "Q123697744"
+          }
+         }
+        }
+       ]
+      }
+     },
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 78817,
+         "id": "Q78817"
+        }
+       }
+      },
+      "qualifiers": {
+       "P453": [
+        {
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 123704047,
+           "id": "Q123704047"
+          }
+         }
+        }
+       ]
+      }
+     },
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 95681,
+         "id": "Q95681"
+        }
+       }
+      }
+     },
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 87468,
+         "id": "Q87468"
+        }
+       }
+      }
+     },
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 114696,
+         "id": "Q114696"
+        }
+       }
+      }
+     },
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 1913136,
+         "id": "Q1913136"
+        }
+       }
+      }
+     },
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 2177665,
+         "id": "Q2177665"
+        }
+       }
+      }
+     },
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 1471025,
+         "id": "Q1471025"
+        }
+       }
+      }
+     },
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 1585227,
+         "id": "Q1585227"
+        }
+       }
+      }
+     },
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 91159,
+         "id": "Q91159"
+        }
+       }
+      }
+     },
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 86293,
+         "id": "Q86293"
+        }
+       }
+      }
+     },
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 1599343,
+         "id": "Q1599343"
+        }
+       }
+      }
+     },
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 89069,
+         "id": "Q89069"
+        }
+       }
+      }
+     },
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 98755,
+         "id": "Q98755"
+        }
+       }
+      }
+     }
+    ],
+    "P272": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 540172,
+         "id": "Q540172"
+        }
+       }
+      }
+     }
+    ],
+    "P495": [
+     {
+      "mainsnak": {
+       "datavalue": {
+        "value": {
+         "entity-type": "item",
+         "numeric-id": 183,
+         "id": "Q183"
+        }
+       }
+      }
+     }
+    ]
+   },
+   "sitelinks": {
+    "dewiki": {
+     "title": "Nosferatu – Eine Symphonie des Grauens"
+    },
+    "enwiki": {
+     "title": "Nosferatu"
+    }
+   }
+  }
+ }
+}

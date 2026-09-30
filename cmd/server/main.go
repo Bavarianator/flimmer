@@ -7,8 +7,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -28,6 +28,7 @@ import (
 	"github.com/Bavarianator/flimmer/internal/ffmpeg"
 	"github.com/Bavarianator/flimmer/internal/hwaccel"
 	"github.com/Bavarianator/flimmer/internal/images"
+	"github.com/Bavarianator/flimmer/internal/livetv"
 	"github.com/Bavarianator/flimmer/internal/meta"
 	"github.com/Bavarianator/flimmer/internal/optimize"
 	"github.com/Bavarianator/flimmer/internal/playback"
@@ -59,8 +60,9 @@ func main() {
 	relayURL := flag.String("relay", "", "Rendezvous-Dienst für den Fernzugriff (leer = keine Prüfung von außen)")
 	httpsPort := flag.Int("https", 8443, "HTTPS-Port für den Fernzugriff (0 = aus); nur dieser Port wird im Router freigegeben")
 	flag.Parse()
-	ring := &api.LogRing{}
-	log.SetOutput(io.MultiWriter(os.Stderr, ring))
+	// Ein Ringpuffer für Diagnose und Dashboard; slog.SetDefault leitet auch log.Printf dorthin (Konsole bleibt).
+	ring := &api.LogRing{Out: os.Stderr}
+	slog.SetDefault(slog.New(ring.Handler()))
 	addrSet := false
 	flag.Visit(func(f *flag.Flag) { addrSet = addrSet || f.Name == "addr" })
 
@@ -128,6 +130,7 @@ func main() {
 	}
 	img := images.New(filepath.Join(cacheDir, "thumbs"))
 	lib := scan.NewLibrary(store.DB, dirs)
+	lib.Extra = []string{filepath.Join(cfgDir, "uploads")} // POST /api/upload, neben den Medienordnern
 	if err := lib.Load(bg); err != nil {
 		log.Fatal(err)
 	}
@@ -142,8 +145,13 @@ func main() {
 	}
 	hls := transcode.NewManager(tmp)
 	lanURL := discovery.LANURL(port)
-	srv := &api.Server{Lib: lib, HLS: hls, DB: store, Meta: res, Images: img, CacheDir: cacheDir,
+	backups := filepath.Join(cfgDir, "backups")
+	srv := &api.Server{Lib: lib, UploadDir: lib.Extra[0], HLS: hls, DB: store, Meta: res, Images: img, CacheDir: cacheDir, BackupDir: backups,
 		Web: web.FS(), Pages: setup.FS(), LANURL: lanURL, QR: discovery.QRHandler(port), Log: ring, Updates: &update.Checker{}}
+	lib.OnScan = srv.ScanDone
+	// Live-TV lädt Kanäle und Programm im Hintergrund; ohne eingetragene Quelle bleibt es leer.
+	srv.LiveTV, srv.Port = livetv.New(store.DB, filepath.Join(cacheDir, "livetv")), port
+	go srv.LiveTV.Run(ctx)
 	// HTTPS nur für den Fernzugriff: Passwörter gehen nie unverschlüsselt durchs Internet, HTTP bleibt im Heimnetz.
 	var tlsLn net.Listener
 	if *httpsPort > 0 {
@@ -182,17 +190,10 @@ func main() {
 	}
 	// Einladungen: Links zeigen auf die öffentliche Adresse, wenn der Fernzugriff läuft, sonst ins Heimnetz.
 	srv.Share = share.New(share.Options{
-		DB:   store,
-		Port: port,
-		BaseURL: func() (string, bool) {
-			if srv.Remote != nil {
-				if st := srv.Remote.Status(); st.Reachable && st.PublicURL != "" {
-					return st.PublicURL, true
-				}
-			}
-			return lanURL, false
-		},
-		Login: srv.GuestLogin,
+		DB:      store,
+		Port:    port,
+		BaseURL: srv.BaseURL,
+		Login:   srv.GuestLogin,
 		UserID: func(r *http.Request) string {
 			if u := api.UserFrom(r); u != nil {
 				return u.ID
@@ -201,7 +202,7 @@ func main() {
 		},
 	})
 	go srv.Share.Run(ctx)
-	go store.Nightly(ctx, filepath.Join(cfgDir, "backups"), 7)
+	go store.Nightly(ctx, backups, 7)
 	go srv.Updates.Run(ctx, func() bool {
 		s, err := store.Settings(ctx)
 		return err == nil && !s.NoUpdates
@@ -275,6 +276,11 @@ func main() {
 	}
 	if err := discovery.Start(ctx, name, port); err != nil {
 		log.Printf("Discovery: %v", err)
+	}
+	if err := discovery.StartMDNS(ctx); err != nil {
+		log.Printf("Discovery: %v", err)
+	} else {
+		log.Printf("Fernseher finden Flimmer von selbst unter http://%s:%d", discovery.Host, port)
 	}
 
 	local := "http://localhost:" + strconv.Itoa(port)

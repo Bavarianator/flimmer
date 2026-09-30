@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -29,6 +30,7 @@ type Hub struct {
 
 type hubRoom struct {
 	room    *Room
+	host    string                // Anzeigename des Erstellers (Liste offener Gruppen)
 	subs    map[string]chan event // Mitglied → Ereignisse
 	expire  *time.Timer
 	cleanup *time.Timer
@@ -61,7 +63,7 @@ func Time(w http.ResponseWriter, _ *http.Request) {
 
 // Create: POST /api/party {mediaId} → {id, state}
 func (h *Hub) Create(w http.ResponseWriter, r *http.Request) {
-	uid, _, ok := h.User(r)
+	uid, name, ok := h.User(r)
 	if !ok {
 		http.Error(w, "Bitte anmelden", http.StatusUnauthorized)
 		return
@@ -85,12 +87,41 @@ func (h *Hub) Create(w http.ResponseWriter, r *http.Request) {
 	if h.rooms == nil {
 		h.rooms = map[string]*hubRoom{}
 	}
-	hr := &hubRoom{room: NewRoom(req.MediaID, uid, now), subs: map[string]chan event{}}
+	hr := &hubRoom{room: NewRoom(req.MediaID, uid, now), host: name, subs: map[string]chan event{}}
 	h.rooms[id] = hr
 	h.scheduleCleanup(id, hr)
 	st := hr.room.State(now)
 	h.mu.Unlock()
 	writeJSON(w, map[string]any{"id": id, "state": st, "eventsUrl": h.eventsURL(r, id)})
+}
+
+// List: GET /api/party → offene Gruppen (mindestens ein Mitglied), nur mit Titeln, die der Benutzer sehen darf.
+func (h *Hub) List(w http.ResponseWriter, r *http.Request) {
+	type offen struct {
+		ID      string   `json:"id"`
+		MediaID string   `json:"mediaId"`
+		Host    string   `json:"host"`
+		Members []string `json:"members"`
+		Paused  bool     `json:"paused"`
+	}
+	now := h.clock()
+	var alle []offen
+	h.mu.Lock()
+	for id, hr := range h.rooms {
+		if len(hr.subs) > 0 {
+			st := hr.room.State(now)
+			alle = append(alle, offen{id, st.MediaID, hr.host, hr.room.Members(), st.Paused})
+		}
+	}
+	h.mu.Unlock()
+	out := []offen{}
+	for _, o := range alle { // Allowed fragt die Bibliothek – außerhalb der Sperre
+		if h.Allowed == nil || h.Allowed(r, o.MediaID) {
+			out = append(out, o)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Host+out[i].ID < out[j].Host+out[j].ID })
+	writeJSON(w, out)
 }
 
 // Get: GET /api/party/{id} → {state, members}

@@ -8,6 +8,9 @@ import android.view.Display
 import android.media.MediaCodecInfo.CodecProfileLevel
 import android.media.MediaCodecList
 import android.net.wifi.WifiManager
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.DatagramPacket
@@ -22,15 +25,71 @@ class Store(ctx: Context) {
     var server: String
         get() = p.getString("server", "") ?: ""
         set(v) = p.edit().putString("server", v).apply()
+    /** VPN-Adresse des Servers (NetBird/Tailscale, aus /api/vpn), für unterwegs. */
+    var vpn: String
+        get() = p.getString("vpn", "") ?: ""
+        set(v) = p.edit().putString("vpn", v).apply()
     var token: String
         get() = p.getString("token", "") ?: ""
         set(v) = p.edit().putString("token", v).apply()
-    /** Merkliste (lokal, bis der Server eine hat). */
-    var watchlist: Set<String>
-        get() = p.getStringSet("watchlist", emptySet()) ?: emptySet()
-        set(v) = p.edit().putStringSet("watchlist", v).apply()
+    /** Lokale Favoriten (früher „Merkliste“, Serien damals als "s:<Name>"), solange der Server keine hat. */
+    var favoriten: Set<String>
+        get() = p.getStringSet("favoriten", null)
+            ?: p.getStringSet("watchlist", emptySet()).orEmpty().map { if (it.startsWith("s:")) "serie:" + it.drop(2) else it }.toSet()
+        set(v) = p.edit().putStringSet("favoriten", v).remove("watchlist").apply()
+    /** Zuletzt gesucht (neueste zuerst). */
+    var suchverlauf: List<String>
+        get() = p.getString("suchverlauf", "").orEmpty().split('\n').filter { it.isNotBlank() }
+        set(v) = p.edit().putString("suchverlauf", v.joinToString("\n")).apply()
+    /** Nachtmodus: laute Stellen leiser, leise Dialoge lauter. Schlüssel teilt sich Einstellungen (android-mehr). */
+    var night: Boolean
+        get() = p.getBoolean("night", false)
+        set(v) = p.edit().putBoolean("night", v).apply()
+    /** Tonsprachen in Wunschreihenfolge, gespeichert kommagetrennt. */
+    val audioLangs: List<String>
+        get() = (p.getString("audioLangs", null) ?: "de,en").split(',').map { it.trim() }.filter { it.isNotEmpty() }
+    /** Untertitel: "" intelligent, "always", "off". */
+    val subtitleMode: String
+        get() = p.getString("subtitleMode", "") ?: ""
+    /** Bildanpassung im Player (pro Gerät). */
+    var bildModus: BildModus
+        get() = runCatching { BildModus.valueOf(p.getString("bildModus", "") ?: "") }.getOrDefault(BildModus.Auto)
+        set(v) = p.edit().putString("bildModus", v.name).apply()
+    /** Nach dem Ende einer Folge gleich die nächste starten. */
+    var autoNext: Boolean
+        get() = p.getBoolean("autoNext", true)
+        set(v) = p.edit().putBoolean("autoNext", v).apply()
+    /** Qualitätswahl im Player (maxHeight), 0 = automatisch; gilt für alle weiteren Wiedergaben. */
+    var quality: Int
+        get() = p.getInt("quality", 0)
+        set(v) = p.edit().putInt("quality", v).apply()
     val deviceId: String
         get() = p.getString("device", null) ?: UUID.randomUUID().toString().replace("-", "").also { p.edit().putString("device", it).apply() }
+}
+
+/**
+ * Favoriten pro Profil: auf dem Server (GET/PUT/DELETE /api/favorites), bei älteren Servern lokal.
+ * Kennt der Server die Route, wandern lokal gemerkte Einträge einmal dorthin.
+ */
+class Favoriten(private val store: Store) {
+    private var server = false
+
+    suspend fun laden(api: ApiClient): Set<String> {
+        val remote = optional { api.favorites() }?.toSet() ?: return store.favoriten.also { server = false }
+        server = true
+        val hoch = mutableSetOf<String>()
+        val offen = mutableSetOf<String>() // Netzfehler: beim nächsten Laden noch einmal; 404 = Titel gibt es nicht mehr
+        for (k in store.favoriten - remote) {
+            val e = runCatching { api.favorite(k, true) }.exceptionOrNull()
+            if (e == null) hoch += k else if ((e as? ApiException)?.code != 404) offen += k
+        }
+        store.favoriten = offen
+        return remote + hoch + offen
+    }
+
+    suspend fun setzen(api: ApiClient, key: String, an: Boolean) {
+        if (server) api.favorite(key, an) else store.favoriten = if (an) store.favoriten + key else store.favoriten - key
+    }
 }
 
 fun isTv(ctx: Context) = ctx.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
@@ -117,6 +176,27 @@ suspend fun discover(ctx: Context, timeoutMs: Int = 2500): List<String> = withCo
 internal fun parseLocation(response: String): String? =
     response.lineSequence().firstOrNull { it.startsWith("LOCATION:", ignoreCase = true) }
         ?.substringAfter(':')?.trim()?.trimEnd('/')?.takeIf { it.startsWith("http") }
+
+/** Server aus einem QR-Code oder eingefügten Link, dazu Einladung (/einladung#<token>) oder TV-Kopplungscode (/#/koppeln/<code>). */
+data class FlimmerLink(val server: String, val invite: String? = null, val pairCode: String? = null)
+
+fun parseLink(text: String): FlimmerLink {
+    val s = text.trim()
+    val invite = s.substringAfter("/einladung#", "").ifEmpty { null }
+    val code = Regex("""koppeln/(\d{6})""").find(s)?.groupValues?.get(1)
+    if (invite == null && code == null) return FlimmerLink(normalizeServer(s))
+    // Links vom Server tragen die genaue Adresse (auch https ohne Port) – nichts ergänzen
+    val host = s.substringAfter("://").substringBefore('/').substringBefore('#')
+    return FlimmerLink(if ("://" in s) s.substringBefore("://") + "://" + host else normalizeServer(host), invite, code)
+}
+
+/** QR-Code mit dem Scanner der Google-Play-Dienste lesen: keine Kamera-Berechtigung nötig, die Oberfläche kommt von Google. */
+fun scanQr(ctx: Context, onFehler: (String) -> Unit, onText: (String) -> Unit) {
+    val opts = GmsBarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE).build()
+    GmsBarcodeScanning.getClient(ctx, opts).startScan()
+        .addOnSuccessListener { b -> b.rawValue?.let(onText) }
+        .addOnFailureListener { onFehler("QR-Scanner geht gerade nicht (Google-Play-Dienste nötig): ${it.message}") }
+}
 
 /** "192.168.1.5" → "http://192.168.1.5:8096" */
 fun normalizeServer(input: String): String {

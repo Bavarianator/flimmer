@@ -149,3 +149,31 @@ func mustRead(t *testing.T, p string) []byte {
 func fmtSscan(c string, r, g, b *int) (int, error) { return fmt.Sscanf(c, "#%02x%02x%02x", r, g, b) }
 
 func abs(x int) int { return max(x, -x) }
+
+// Hintergrund-Ersatz: Von mehreren Kandidaten gewinnt das hellste Bild; At nimmt genau eine Stelle.
+func TestBestFrame(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg fehlt")
+	}
+	clip := filepath.Join(t.TempDir(), "hell.mkv")
+	if b, err := exec.Command("ffmpeg", "-v", "error", "-f", "lavfi", "-i",
+		"color=c=0x101010:s=160x90:d=8:r=10,drawbox=x=0:y=0:w=iw:h=ih:color=white:t=fill:enable='gte(t,4)'",
+		"-c:v", "libx264", "-g", "10", clip).CombinedOutput(); err != nil {
+		t.Fatalf("Clip: %v %s", err, b)
+	}
+	s := New(t.TempDir())
+	ctx := context.Background()
+	bright, err := s.Scaled(ctx, Source{Path: clip, Video: true, Duration: 8, Pick: []float64{1, 6, 20}}, 160) // 20 s liegt hinter dem Ende
+	if err != nil {
+		t.Fatal(err)
+	}
+	dark, err := s.Scaled(ctx, Source{Path: clip, Video: true, Duration: 8, At: 1}, 160)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lb, _ := luma(bright)
+	ld, _ := luma(dark)
+	if lb < 200 || ld > 60 {
+		t.Errorf("Helligkeit: Kandidaten %.0f (hell erwartet), At=1 %.0f (dunkel erwartet)", lb, ld)
+	}
+}

@@ -9,7 +9,7 @@ auf allen Schnittstellen. Deshalb erkennt Flimmer nur die Adresse und zeigt sie 
 `tailscale*` (Linux, Windows), `wt<N>` (NetBird) und `utun<N>` (macOS, dort ist der Anbieter nicht unterscheidbar). Die
 100.64-Adresse eines Mobilfunk-Routers auf `eth0` zählt nicht.
 
-`GET /api/vpn` (nur Admin):
+`GET /api/vpn` (alle angemeldeten Nutzer außer Gästen; die Android-App merkt sich die Adresse für unterwegs):
 
 ```json
 {"addrs":[{"provider":"tailscale","interface":"tailscale0","ip":"100.101.102.103","url":"http://100.101.102.103:8096"}],
@@ -47,6 +47,14 @@ services:
 `TS_USERSPACE=false` ist wichtig, sonst gibt es keine Schnittstelle. NetBird ist analog (`netbirdio/netbird`, `NB_SETUP_KEY`,
 `cap_add: [NET_ADMIN, SYS_ADMIN, SYS_RESOURCE]`).
 
+## Fernseher finden den Server (`internal/discovery/mdns.go`)
+
+Flimmer antwortet per mDNS auf `flimmer.local` (nur A-Eintrag, Port 5353, verträgt sich mit Avahi). Der Starter für LG
+und Samsung (`apps/launcher`) fragt zuerst die zuletzt genutzte Adresse ab, dann `flimmer.local` auf 8096 und 8097, dann
+alle Adressen im eigenen /24-Netz (IP des Fernsehers über Luna bzw. `tizen.systeminfo`). Erst wenn nichts antwortet, fragt
+er nach der Adresse. Im Docker-Bridge-Netz kommt Multicast nicht an, dafür braucht es `network_mode: host`.
+*Auf echten Fernsehern ungetestet; die Suche ist mit `node apps/launcher/suche.test.js` nachgestellt.*
+
 ## Live-TV und Programm (`internal/livetv`)
 
 Quellen:
@@ -64,6 +72,19 @@ stehen. Von den Sendungen bleiben nur die der nächsten 72 Stunden im Speicher.
 Fehlermeldungen oder im Log; Status und Fehler zeigen nur `Schema://Rechner`. Clients bekommen nie die Quelladresse, nur
 Flimmer-HLS. Nur `http`, `https`, `rtsp`, `rtmp`, `udp` und `rtp` gehen an ffmpeg (kein `file:` aus einer fremden Liste).
 
+### Einrichten per Knopf
+
+Im Dashboard unter Live-TV steht „Schnell einrichten“ über den eigenen Adressen:
+
+- **Freie Sender:** 18 öffentlich-rechtliche Sender (ARD, ZDF, dritte Programme …) als Internet-Stream. Die Liste ist
+  eingebettet (`internal/livetv/freie-sender.m3u`, Quelle `flimmer:freie-sender`), das Programm kommt von epgshare01
+  (ein Dritter). Die Streams sind meist nur in Deutschland abrufbar. Ändert ein Sender seine Adresse, hilft erst ein Update.
+- **FRITZ!Box mit Kabel-TV:** Flimmer fragt `http://fritz.box/dvb/m3u/tvhd.m3u` und `192.168.178.1` ab (höchstens 2 s)
+  und bietet die Liste nur an, wenn dort wirklich Sender liegen. Programm wie oben, Zuordnung über den Namen („Das Erste HD“
+  passt zu „Das Erste“). *Nicht mit echter FRITZ!Box getestet.*
+
+HLS-Quellen mit mehreren Qualitäten spielt Flimmer in der besten ab (`video: "h264"`: höchstens 720p).
+
 ### Wiedergabe
 
 Pro Kanal läuft ein ffmpeg, der die Quelle nach HLS remuxt (2-s-Segmente, 6 in der Playlist). Alle Zuschauer eines Kanals
@@ -80,6 +101,7 @@ teilen ihn. Er endet 30 s nach dem letzten Abruf. Höchstens 3 Kanäle gleichzei
 | `GET /api/livetv` | Admin | `{source, epg, video, channels, programs, updated, error}` |
 | `PUT /api/livetv` | Admin | Body `{source?, epg?, video?}`, `""` löscht, fehlend bleibt; 202, lädt neu |
 | `POST /api/livetv/refresh` | Admin | 202 |
+| `GET /api/livetv/vorlagen` | Admin | `[{id, source, epg, channels, active}]`, `id` = `frei` oder `fritz`, `channels` 0 = nicht gefunden |
 | `GET /api/livetv/channels` | Live-TV-Konto | `[{id, number?, name, logo?, group?, now:{start,stop,title,desc?}\|null, next:{…}\|null}]` |
 | `GET /api/livetv/guide?hours=6&channel=<id>` | Live-TV-Konto | `{from, to, channels:[{id, programs:[{start,stop,title,desc?}]}]}`, `hours` 1–48; nur Kanäle mit Sendungen |
 | `POST /api/livetv/channels/{id}/play` | Live-TV-Konto | `{url, title, live:true}`; startet den Kanal sofort |

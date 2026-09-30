@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Bavarianator/flimmer/internal/auth"
 	"github.com/Bavarianator/flimmer/internal/db"
 	"github.com/Bavarianator/flimmer/internal/discovery"
 )
@@ -75,7 +76,8 @@ func (s *Share) RevokeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// RedeemHandler: POST /api/invites/redeem, OHNE Anmeldung. Body {token, name} → legt den Gast an und meldet ihn an.
+// RedeemHandler: POST /api/invites/redeem, OHNE Anmeldung. Body {token, name, password?} → legt den Gast an,
+// meldet ihn an und liefert {id, name, token}. Mit Passwort meldet er sich später per Name an (Web, App, von außen).
 func (s *Share) RedeemHandler(w http.ResponseWriter, r *http.Request) {
 	if !s.limiter.Allow(s.opts.ClientIP(r), s.now()) {
 		w.Header().Set("Retry-After", "60")
@@ -83,27 +85,41 @@ func (s *Share) RedeemHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Token string `json:"token"`
-		Name  string `json:"name"`
+		Token    string `json:"token"`
+		Name     string `json:"name"`
+		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
 		fail(w, http.StatusBadRequest, "ungültige Anfrage")
 		return
 	}
-	u, err := s.Redeem(r.Context(), req.Token, req.Name)
+	if req.Password != "" && len(req.Password) < 4 {
+		fail(w, http.StatusBadRequest, "Das Passwort braucht mindestens 4 Zeichen")
+		return
+	}
+	hash := ""
+	if req.Password != "" {
+		hash = auth.HashPassword(req.Password)
+	}
+	u, err := s.Redeem(r.Context(), req.Token, req.Name, hash)
 	if errors.Is(err, ErrInvalid) {
 		fail(w, http.StatusGone, err.Error())
+		return
+	}
+	if errors.Is(err, ErrName) {
+		fail(w, http.StatusConflict, err.Error())
 		return
 	}
 	if err != nil {
 		fail(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if err := s.opts.Login(w, r, u); err != nil {
+	tok, err := s.opts.Login(w, r, u)
+	if err != nil {
 		fail(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, map[string]string{"id": u.ID, "name": u.Name})
+	writeJSON(w, map[string]string{"id": u.ID, "name": u.Name, "token": tok})
 }
 
 func fail(w http.ResponseWriter, code int, msg string) {

@@ -1,6 +1,7 @@
 // Package share verwaltet Einladungen: Link und QR mit HMAC-signiertem Token, befristet, mit Scope
 // (Bibliotheken bzw. einzelne Titel), maximaler Nutzungszahl und Widerruf. Beim Einlösen entsteht ein Gast
-// (kein Admin, kein Passwort, sieht nur den Scope). Durchgesetzt wird der Scope in internal/api über Scope/Allows.
+// (kein Admin, sieht nur den Scope). Mit Passwort kann sich der Gast später per Name und Passwort auf anderen
+// Geräten anmelden, auch von außerhalb. Durchgesetzt wird der Scope in internal/api über Scope/Allows.
 package share
 
 import (
@@ -73,8 +74,8 @@ type Options struct {
 	// sonst die LAN-Adresse. Ohne Angabe: discovery.LANURL(Port).
 	BaseURL func() (url string, public bool)
 	Port    int
-	// Login meldet den neuen Gast an (Session-Cookie/-Token von internal/api).
-	Login func(w http.ResponseWriter, r *http.Request, u db.User) error
+	// Login meldet den neuen Gast an (Session-Cookie von internal/api) und liefert das Token für Apps.
+	Login func(w http.ResponseWriter, r *http.Request, u db.User) (string, error)
 	// UserID liefert den angemeldeten Admin einer Anfrage (für created_by).
 	UserID func(r *http.Request) string
 	// ClientIP für das Rate-Limit beim Einlösen; Standard RemoteAddr.
@@ -90,6 +91,7 @@ type Share struct {
 var (
 	ErrInvalid = errors.New("Einladung ungültig, abgelaufen oder aufgebraucht")
 	ErrExpired = errors.New("Gastzugang abgelaufen")
+	ErrName    = errors.New("Diesen Namen gibt es schon – bitte einen anderen wählen")
 )
 
 const (
@@ -242,11 +244,26 @@ func (s *Share) Revoke(ctx context.Context, id string) error {
 }
 
 // Redeem löst eine Einladung ein und legt einen Gast an. Die Nutzung wird atomar gezählt, sodass max_uses
-// auch bei gleichzeitigen Anfragen hält.
-func (s *Share) Redeem(ctx context.Context, token, name string) (db.User, error) {
+// auch bei gleichzeitigen Anfragen hält. passHash leer = Gast ohne Passwort (nur diese Session).
+func (s *Share) Redeem(ctx context.Context, token, name, passHash string) (db.User, error) {
 	k, err := s.parse(ctx, token)
 	if err != nil {
 		return db.User{}, err
+	}
+	name = trimName(name, 40)
+	if name == "" {
+		name = "Gast"
+	}
+	if passHash != "" { // Anmeldung per Name: der Name muss eindeutig sein
+		all, err := s.opts.DB.Users(ctx)
+		if err != nil {
+			return db.User{}, err
+		}
+		for _, u := range all {
+			if strings.EqualFold(u.Name, name) {
+				return db.User{}, ErrName
+			}
+		}
 	}
 	res, err := s.opts.DB.ExecContext(ctx, `UPDATE invites SET uses = uses + 1
 WHERE id = ? AND expires > ? AND (max_uses = 0 OR uses < max_uses)`, k, s.now().UnixMilli())
@@ -258,10 +275,7 @@ WHERE id = ? AND expires > ? AND (max_uses = 0 OR uses < max_uses)`, k, s.now().
 	}
 	id := make([]byte, 8)
 	rand.Read(id)
-	u := db.User{ID: hex.EncodeToString(id), Name: trimName(name, 40)}
-	if u.Name == "" {
-		u.Name = "Gast"
-	}
+	u := db.User{ID: hex.EncodeToString(id), Name: name, PassHash: passHash}
 	err = s.opts.DB.CreateUser(ctx, u)
 	if err == nil {
 		_, err = s.opts.DB.ExecContext(ctx, "INSERT INTO guests(user_id, invite_id) VALUES(?, ?)", u.ID, k)

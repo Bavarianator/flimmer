@@ -159,7 +159,9 @@ func TestMigrateExisting(t *testing.T) {
 	d.CreateUser(ctx, User{ID: "u", Name: "U"})
 	for _, q := range []string{"ALTER TABLE streams DROP COLUMN forced", "ALTER TABLE streams DROP COLUMN hearing_impaired",
 		"ALTER TABLE items DROP COLUMN probe_version", "ALTER TABLE streams DROP COLUMN hdr",
-		"ALTER TABLE streams DROP COLUMN dv_profile", "ALTER TABLE streams DROP COLUMN dv_compat", "PRAGMA user_version = 1"} {
+		"ALTER TABLE streams DROP COLUMN dv_profile", "ALTER TABLE streams DROP COLUMN dv_compat",
+		"ALTER TABLE sessions DROP COLUMN client", "ALTER TABLE sessions DROP COLUMN ip", "ALTER TABLE users DROP COLUMN upload",
+		"PRAGMA user_version = 1"} {
 		if _, err := d.Exec(q); err != nil {
 			t.Fatal(q, err)
 		}
@@ -183,5 +185,28 @@ func TestMigrateExisting(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "flimmer.db.bak")); err != nil {
 		t.Fatal("kein Backup vor der Migration")
+	}
+}
+
+func TestListsAndSessions(t *testing.T) {
+	d, _ := open(t)
+	d.CreateUser(ctx, User{ID: "u", Name: "U"})
+	if err := d.CreateList(ctx, Collection, "", List{ID: "c", Name: "Alle", Items: []string{"a"}}); err != nil {
+		t.Fatal(err)
+	}
+	d.CreateList(ctx, Playlist, "u", List{ID: "p", Name: "Meine", Items: []string{}})
+	if l, _ := d.Lists(ctx, Collection, ""); len(l) != 1 || l[0].Items[0] != "a" {
+		t.Errorf("Sammlungen: %+v", l)
+	}
+	if _, err := d.UpdateList(ctx, Playlist, "fremd", "p", func(*List) error { return nil }); err != ErrNotFound {
+		t.Errorf("fremde Liste: %v", err)
+	}
+	d.CreateSession(ctx, "0123456789abcdef-rest", "u", "TV", time.Hour)
+	d.SetSessionClient(ctx, "0123456789abcdef-rest", "LG webOS", "192.168.1.5")
+	if s, _ := d.Sessions(ctx, time.Hour); len(s) != 1 || s[0].ID != "0123456789abcdef" || s[0].Client != "LG webOS" || s[0].User != "U" {
+		t.Errorf("Sessions: %+v", s)
+	}
+	if err := d.DeleteSessionID(ctx, "0123456789abcdef"); err != nil || d.DeleteSessionID(ctx, "0123456789abcdef") != ErrNotFound {
+		t.Errorf("abmelden: %v", err)
 	}
 }

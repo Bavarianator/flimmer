@@ -1,34 +1,37 @@
 <!doctype html>
-<!-- Starter für LG webOS und Samsung Tizen: merkt sich die Server-Adresse und lädt dann die Oberfläche
-     direkt vom Server. So bekommt der TV jedes Server-Update ohne neue App-Version.
+<!-- Starter für LG webOS und Samsung Tizen: findet den Server von selbst (flimmer.local, sonst Suche im Heimnetz),
+     merkt sich die Adresse und lädt dann die Oberfläche direkt vom Server. So bekommt der TV jedes Server-Update ohne neue App-Version.
      Bewusst ES5 und ohne Build-Schritt – läuft auch auf webOS 3 / Tizen 3. -->
 <html lang="de">
 <head>
 <meta charset="utf-8">
 <title>Flimmer</title>
 <style>
-  body { margin: 0; background: #0b0d12; color: #eef1f7; font-family: sans-serif; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; height: 100vh; }
+  body { margin: 0; background: #11100e; color: #ece7dd; font-family: sans-serif; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; height: 100vh; }
   form { width: 760px; text-align: center; }
-  h1 { font-size: 72px; margin: 0 0 24px; }
-  input { box-sizing: border-box; width: 100%; font-size: 36px; padding: 16px 20px; border-radius: 12px; border: 3px solid #2a3040; background: #151923; color: #fff; }
-  input:focus { border-color: #7c9cff; outline: none; }
-  button { margin-top: 24px; font-size: 32px; padding: 14px 48px; border-radius: 12px; border: 3px solid transparent; background: #eef1f7; color: #0b0d12; }
-  button:focus { border-color: #7c9cff; outline: none; }
-  p { color: #8b93a7; font-size: 26px; }
-  #err { color: #ff5d5d; min-height: 32px; }
+  #logo { display: block; width: 470px; height: 100px; margin: 0 auto 48px; }
+  input { box-sizing: border-box; width: 100%; font-size: 36px; padding: 16px 20px; border-radius: 2px; border: 2px solid #78716a; background: #24221e; color: #ece7dd; }
+  input:focus, button:focus { outline: none; box-shadow: 0 0 0 3px #11100e, 0 0 0 6px #ece7dd; }
+  button { margin-top: 24px; font-size: 32px; padding: 14px 48px; border-radius: 2px; border: 0; background: #ece7dd; color: #11100e; }
+  p { color: #a8a195; font-size: 28px; line-height: 1.4; }
+  #err { color: #d4826f; min-height: 32px; }
+  .hidden { display: none; }
 </style>
 </head>
 <body>
 <form id="f">
-  <h1>Flimmer</h1>
-  <p id="hint">Suche Flimmer-Server im Heimnetz …</p>
-  <input id="url" placeholder="192.168.178.20">
-  <button type="submit" id="go">Verbinden</button>
+  <svg id="logo" viewBox="0 0 1960 400" role="img" aria-label="Flimmer"><g transform="scale(0.625)"><path d="M0 0 h640 v640 h-640 Z M160 80 L480 80 L480 160 L240 160 L240 240 L400 240 L400 320 L240 320 L240 560 L160 560 Z" fill="#ece7dd" fill-rule="evenodd"/><path d="M160 320 L240 320 L240 560 L160 560 Z" fill="#78716a"/></g><path d="M519.5 59.5 h121 v41 h-121 ZM519.5 99.5 h41 v41 h-41 ZM519.5 139.5 h121 v41 h-121 ZM519.5 179.5 h41 v41 h-41 ZM519.5 219.5 h41 v41 h-41 ZM519.5 259.5 h41 v41 h-41 ZM519.5 299.5 h41 v41 h-41 Z" fill="#78716a"/><path d="M719.5 59.5 h81 v41 h-81 ZM759.5 99.5 h41 v41 h-41 ZM759.5 139.5 h41 v41 h-41 ZM759.5 179.5 h41 v41 h-41 ZM759.5 219.5 h41 v41 h-41 ZM759.5 259.5 h41 v41 h-41 ZM759.5 299.5 h81 v41 h-81 Z" fill="#78716a"/><path d="M919.5 59.5 h41 v41 h-41 ZM879.5 139.5 h81 v41 h-81 ZM919.5 179.5 h41 v41 h-41 ZM919.5 219.5 h41 v41 h-41 ZM919.5 259.5 h41 v41 h-41 ZM919.5 299.5 h81 v41 h-81 Z" fill="#78716a"/><path d="M1039.5 139.5 h201 v41 h-201 ZM1039.5 179.5 h41 v41 h-41 ZM1119.5 179.5 h41 v41 h-41 ZM1199.5 179.5 h41 v41 h-41 ZM1039.5 219.5 h41 v41 h-41 ZM1119.5 219.5 h41 v41 h-41 ZM1199.5 219.5 h41 v41 h-41 ZM1039.5 259.5 h41 v41 h-41 ZM1119.5 259.5 h41 v41 h-41 ZM1199.5 259.5 h41 v41 h-41 ZM1039.5 299.5 h41 v41 h-41 ZM1119.5 299.5 h41 v41 h-41 ZM1199.5 299.5 h41 v41 h-41 Z" fill="#78716a"/><path d="M1279.5 139.5 h201 v41 h-201 ZM1279.5 179.5 h41 v41 h-41 ZM1359.5 179.5 h41 v41 h-41 ZM1439.5 179.5 h41 v41 h-41 ZM1279.5 219.5 h41 v41 h-41 ZM1359.5 219.5 h41 v41 h-41 ZM1439.5 219.5 h41 v41 h-41 ZM1279.5 259.5 h41 v41 h-41 ZM1359.5 259.5 h41 v41 h-41 ZM1439.5 259.5 h41 v41 h-41 ZM1279.5 299.5 h41 v41 h-41 ZM1359.5 299.5 h41 v41 h-41 ZM1439.5 299.5 h41 v41 h-41 Z" fill="#ece7dd"/><path d="M1519.5 139.5 h161 v41 h-161 ZM1519.5 179.5 h41 v41 h-41 ZM1639.5 179.5 h41 v41 h-41 ZM1519.5 219.5 h161 v41 h-161 ZM1519.5 259.5 h41 v41 h-41 ZM1519.5 299.5 h161 v41 h-161 Z" fill="#ece7dd"/><path d="M1759.5 139.5 h41 v41 h-41 ZM1839.5 139.5 h81 v41 h-81 ZM1759.5 179.5 h81 v41 h-81 ZM1759.5 219.5 h41 v41 h-41 ZM1759.5 259.5 h41 v41 h-41 ZM1759.5 299.5 h41 v41 h-41 Z" fill="#ece7dd"/></svg>
+  <p id="hint">Suche deinen Flimmer-Server …</p>
+  <div id="manuell" class="hidden">
+    <input id="url" placeholder="192.168.178.20">
+    <button type="submit" id="go">Verbinden</button>
+  </div>
   <p id="err"></p>
 </form>
 <script>
   var KEY = 'flimmer.server';
   var PORT = 8096;
+  var PORTS = [8096, 8097]; // ist 8096 belegt (z. B. von Jellyfin), nimmt Flimmer 8097
   var $ = function (id) { return document.getElementById(id); };
 
   // Samsung: Medientasten müssen angemeldet werden, sonst kommen sie nie an.
@@ -46,10 +49,10 @@
   }
 
   // Prüft, ob unter url ein Flimmer-Server antwortet (öffentliche Route, keine Anmeldung nötig).
-  function check(url, ok, fail) {
+  function check(url, ok, fail, ms) {
     var x = new XMLHttpRequest();
     x.open('GET', url + '/api/users');
-    x.timeout = 3000;
+    x.timeout = ms || 3000;
     x.onload = function () { x.status === 200 ? ok(url) : fail(); };
     x.onerror = x.ontimeout = fail;
     x.send();
@@ -60,11 +63,59 @@
     location.href = url + '/';
   }
 
+  function manuell() {
+    $('hint').textContent = 'Kein Server gefunden. Gib die Adresse ein, die Flimmer beim Start anzeigt:';
+    $('manuell').className = '';
+    $('url').focus();
+  }
+
+  // Eigene Adresse des Fernsehers: webOS über den Luna-Dienst, Tizen über systeminfo, sonst null.
+  // Ungetestet auf echten Geräten; schlägt es fehl, bleibt die Eingabe von Hand.
+  function tvIP(cb) {
+    var fertig = false;
+    function fin(ip) { if (!fertig) { fertig = true; cb(/^\d+\.\d+\.\d+\.\d+$/.test(ip || '') ? ip : null); } }
+    setTimeout(function () { fin(null); }, 3000);
+    try {
+      if (window.PalmServiceBridge) {
+        var b = new PalmServiceBridge();
+        window.flimmerBruecke = b; // festhalten, sonst räumt der Garbage Collector die Brücke vor der Antwort ab
+        b.onservicecallback = function (m) {
+          try { var r = JSON.parse(m); fin((r.wired && r.wired.ipAddress) || (r.wifi && r.wifi.ipAddress)); } catch (e) { fin(null); }
+        };
+        b.call('luna://com.palm.connectionmanager/getStatus', '{}');
+        return;
+      }
+      if (window.tizen && tizen.systeminfo) {
+        tizen.systeminfo.getPropertyValue('ETHERNET_NETWORK', function (e) {
+          if (e && e.ipAddress) return fin(e.ipAddress);
+          tizen.systeminfo.getPropertyValue('WIFI_NETWORK', function (w) { fin(w && w.ipAddress); }, function () { fin(null); });
+        }, function () { fin(null); });
+        return;
+      }
+    } catch (e) {}
+    fin(null);
+  }
+
+  // Fragt alle Adressen im eigenen /24-Netz auf beiden Ports ab, 48 gleichzeitig. Der erste Treffer gewinnt.
+  function scan(ip, done) {
+    var netz = ip.split('.').slice(0, 3).join('.') + '.', list = [], next = 0, offen = 0, gefunden = false;
+    for (var i = 1; i < 255; i++) for (var p = 0; p < PORTS.length; p++) list.push('http://' + netz + i + ':' + PORTS[p]);
+    function weiter() {
+      if (gefunden) return;
+      while (offen < 48 && next < list.length) {
+        offen++;
+        check(list[next++], function (url) { if (!gefunden) { gefunden = true; done(url); } }, function () { offen--; weiter(); }, 1500);
+      }
+      $('hint').textContent = 'Suche im Heimnetz … ' + Math.round(next / list.length * 100) + ' %';
+      if (offen === 0) done(null);
+    }
+    weiter();
+  }
+
   function tryList(list, i) {
     if (i >= list.length) {
-      $('hint').textContent = 'Adresse deines Flimmer-Servers (steht beim Start im Server-Fenster):';
-      $('url').focus();
-      return;
+      $('hint').textContent = 'Suche im Heimnetz …';
+      return tvIP(function (ip) { ip ? scan(ip, function (url) { url ? open(url) : manuell(); }) : manuell(); });
     }
     check(list[i], open, function () { tryList(list, i + 1); });
   }
@@ -87,8 +138,11 @@
   var saved = null;
   try { saved = localStorage.getItem(KEY); } catch (e) {}
   if (saved) $('url').value = saved.replace(/^http:\/\//, '').replace(':' + PORT, '');
-  // Zuerst die zuletzt genutzte Adresse, dann der Standardname im Heimnetz.
-  tryList([saved, 'http://flimmer.local:' + PORT, 'http://flimmer:' + PORT].filter(Boolean), 0);
+  // Zuerst die zuletzt genutzte Adresse, dann flimmer.local (der Server meldet sich per mDNS), dann das ganze Heimnetz.
+  var liste = [saved];
+  for (var p = 0; p < PORTS.length; p++) liste.push('http://flimmer.local:' + PORTS[p]);
+  liste.push('http://flimmer:' + PORT);
+  tryList(liste.filter(Boolean), 0);
 </script>
 </body>
 </html>

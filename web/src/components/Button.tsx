@@ -6,7 +6,7 @@ import { Icon, type IconName } from './Icon'
 // geist (nur Schrift). Ohne children entsteht ein runder Icon-Knopf; dann ist label Pflicht.
 export function Button(p: {
   fokusKey?: string
-  onPress: () => void
+  onPress: (el: HTMLElement) => void // el: der Knopf, z. B. als Anker für ein Menü
   variante?: 'primaer' | 'sekundaer' | 'geist'
   icon?: IconName
   label?: string
@@ -14,13 +14,14 @@ export function Button(p: {
   voll?: boolean // volle Breite (Handy)
   children?: ComponentChildren
 }) {
-  const f = useFokus<HTMLButtonElement>({ fokusKey: p.fokusKey, onPress: p.aus ? undefined : p.onPress })
+  const los = p.aus ? undefined : () => p.onPress(f.ref.current!)
+  const f = useFokus<HTMLButtonElement>({ fokusKey: p.fokusKey, onPress: los })
   const v = p.variante && p.variante !== 'sekundaer' ? ' ' + p.variante : ''
   return (
     <button
       ref={f.ref}
       {...f.dom}
-      onClick={p.aus ? undefined : p.onPress}
+      onClick={los}
       type="button"
       disabled={p.aus}
       aria-label={p.label}

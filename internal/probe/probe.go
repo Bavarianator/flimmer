@@ -7,10 +7,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/Bavarianator/flimmer/internal/ffmpeg"
 )
 
 type Stream struct {
@@ -176,4 +179,121 @@ func parseKeyframes(out []byte) []float64 {
 	}
 	sort.Float64s(kf) // Pakete kommen in Decode-Reihenfolge
 	return kf
+}
+
+// Extra sind Angaben, die nur die Detailseite braucht; deshalb nicht im Scan, sondern auf Abruf.
+type Extra struct {
+	FPS      float64   `json:"fps,omitempty"`
+	Chapters []Chapter `json:"chapters,omitempty"`
+}
+
+type Chapter struct {
+	Start float64 `json:"start"` // Sekunden
+	Name  string  `json:"name"`
+}
+
+// Extras liest Bildrate und Kapitel (nur der Kopf der Datei).
+func Extras(ctx context.Context, path string) (Extra, error) {
+	out, err := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-print_format", "json", "-show_chapters",
+		"-select_streams", "v:0", "-show_entries", "stream=avg_frame_rate", path).Output()
+	if err != nil {
+		return Extra{}, fmt.Errorf("ffprobe %s: %w", path, err)
+	}
+	return parseExtras(out)
+}
+
+func parseExtras(out []byte) (Extra, error) {
+	var p struct {
+		Streams []struct {
+			Rate string `json:"avg_frame_rate"`
+		} `json:"streams"`
+		Chapters []struct {
+			Start string            `json:"start_time"`
+			Tags  map[string]string `json:"tags"`
+		} `json:"chapters"`
+	}
+	var e Extra
+	if err := json.Unmarshal(out, &p); err != nil {
+		return e, err
+	}
+	if len(p.Streams) > 0 {
+		n, d, _ := strings.Cut(p.Streams[0].Rate, "/")
+		num, _ := strconv.ParseFloat(n, 64)
+		den, _ := strconv.ParseFloat(d, 64)
+		if den > 0 {
+			e.FPS = float64(int(num/den*1000+0.5)) / 1000 // 23.976
+		}
+	}
+	for _, c := range p.Chapters {
+		start, _ := strconv.ParseFloat(c.Start, 64)
+		e.Chapters = append(e.Chapters, Chapter{Start: start, Name: c.Tags["title"]})
+	}
+	return e, nil
+}
+
+// Rect ist ein Bildausschnitt in Anteilen des ganzen Bildes (0..1), damit er auch für anamorphe Videos und
+// umgewandelte Streams mit anderer Auflösung stimmt.
+type Rect struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+	W float64 `json:"w"`
+	H float64 `json:"h"`
+}
+
+// Crop sucht eingebrannte schwarze Balken per cropdetect an drei Stellen (10, 50 und 80 % der Laufzeit, je 2 s)
+// und nimmt die Vereinigung der Rechtecke. nil heißt: keine Balken (≥ 98 % in beiden Richtungen), eine dunkle
+// Szene (< 50 % Fläche) oder kein Video. Läuft mit niedriger Priorität.
+func Crop(ctx context.Context, path string, m *Media) (*Rect, error) {
+	v := m.First("video")
+	if v == nil || v.Width == 0 || v.Height == 0 || m.Duration <= 0 {
+		return nil, nil
+	}
+	var all []pixRect
+	for _, at := range []float64{0.1, 0.5, 0.8} {
+		name, args := ffmpeg.Nice("ffmpeg", []string{"-hide_banner", "-nostdin", "-ss", strconv.FormatFloat(m.Duration*at, 'f', 2, 64),
+			"-i", path, "-t", "2", "-map", "0:v:0", "-vf", "cropdetect=limit=0.094:round=2:reset=0", "-an", "-sn", "-f", "null", "-"})
+		out, err := exec.CommandContext(ctx, name, args...).CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("cropdetect %s: %w", path, err)
+		}
+		if r, ok := parseCrop(out); ok {
+			all = append(all, r)
+		}
+	}
+	return cropOf(all, v.Width, v.Height), nil
+}
+
+type pixRect struct{ x, y, w, h int }
+
+// parseCrop liest das letzte „crop=w:h:x:y“; mit reset=0 ist das schon die Vereinigung über alle Bilder der Stelle.
+func parseCrop(out []byte) (pixRect, bool) {
+	i := bytes.LastIndex(out, []byte("crop="))
+	if i < 0 {
+		return pixRect{}, false
+	}
+	line, _, _ := bytes.Cut(out[i+5:], []byte("\n"))
+	var r pixRect
+	if n, _ := fmt.Sscanf(strings.TrimSpace(string(line)), "%d:%d:%d:%d", &r.w, &r.h, &r.x, &r.y); n != 4 || r.w <= 0 || r.h <= 0 {
+		return pixRect{}, false
+	}
+	return r, true
+}
+
+// cropOf vereinigt die Rechtecke und wendet die Schwellen an (siehe Crop).
+func cropOf(all []pixRect, width, height int) *Rect {
+	if len(all) == 0 {
+		return nil
+	}
+	x1, y1, x2, y2 := width, height, 0, 0
+	for _, r := range all {
+		x1, y1 = min(x1, r.x), min(y1, r.y)
+		x2, y2 = max(x2, r.x+r.w), max(y2, r.y+r.h)
+	}
+	x1, y1, x2, y2 = max(x1, 0), max(y1, 0), min(x2, width), min(y2, height)
+	fw, fh := float64(x2-x1)/float64(width), float64(y2-y1)/float64(height)
+	if fw >= 0.98 && fh >= 0.98 || fw*fh < 0.5 {
+		return nil
+	}
+	round := func(f float64) float64 { return math.Round(f*10000) / 10000 }
+	return &Rect{X: round(float64(x1) / float64(width)), Y: round(float64(y1) / float64(height)), W: round(fw), H: round(fh)}
 }

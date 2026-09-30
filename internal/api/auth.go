@@ -15,6 +15,7 @@ import (
 
 	"github.com/Bavarianator/flimmer/internal/auth"
 	"github.com/Bavarianator/flimmer/internal/db"
+	"github.com/Bavarianator/flimmer/internal/discovery"
 )
 
 const (
@@ -48,6 +49,7 @@ var public = map[string]bool{
 	"GET /api/setup/count":     true,
 	"POST /api/setup":          true,
 	"POST /api/setup/ffmpeg":   true,
+	"GET /api/qr":              true, // Anmeldeseite (Schnellverbindung) zeigt den QR vor dem Login; enthält nur die LAN-Adresse
 }
 
 // authenticate hängt den Benutzer an den Request. Medien-URLs tragen das Token im Pfad
@@ -59,8 +61,9 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			tok, path, _ := strings.Cut(rest, "/")
 			uid, ok := auth.CheckMediaToken(s.secret(), tok)
 			u := s.user(r.Context(), uid)
-			// Medien-Token gilt nur lesend für Titel und die Ereignisse eines Raums (EventSource auf TVs).
-			media := strings.HasPrefix(path, "items/") || (strings.HasPrefix(path, "party/") && strings.HasSuffix(path, "/events"))
+			// Medien-Token gilt nur lesend für Titel, Live-TV-Kanäle und die Ereignisse eines Raums (EventSource auf TVs).
+			media := strings.HasPrefix(path, "items/") || strings.HasPrefix(path, "livetv/channels/") ||
+				(strings.HasPrefix(path, "party/") && strings.HasSuffix(path, "/events"))
 			if !ok || u == nil || r.Method != http.MethodGet || !media {
 				http.Error(w, "Link abgelaufen – bitte neu starten", http.StatusUnauthorized)
 				return
@@ -82,8 +85,9 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 				return
 			}
 		}
-		// GET /api/pair/{code} pollt der TV vor der Anmeldung.
-		isPoll := r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/pair/") && strings.Count(r.URL.Path, "/") == 3
+		// GET /api/pair/{code} pollt der TV vor der Anmeldung, GET /api/pair/{code}/qr zeigt er als QR-Code.
+		n := strings.Count(r.URL.Path, "/")
+		isPoll := r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/pair/") && (n == 3 || n == 4 && strings.HasSuffix(r.URL.Path, "/qr"))
 		// ponytail: Bilder öffentlich, weil <img> auf TVs kein Bearer schickt; enthalten nur Poster/Standbilder.
 		isImage := r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/images/")
 		if !strings.HasPrefix(r.URL.Path, "/api/") || userFrom(r) != nil || public[r.Method+" "+r.URL.Path] || isPoll || isImage {
@@ -113,13 +117,19 @@ func (s *Server) user(ctx context.Context, id string) *db.User {
 	return u
 }
 
-func (s *Server) sessionUser(r *http.Request) *db.User {
+// sessionToken ist das Token der Anfrage: Bearer-Header, sonst Cookie ("" ohne).
+func sessionToken(r *http.Request) string {
 	tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if tok == "" {
 		if c, err := r.Cookie(cookieName); err == nil {
 			tok = c.Value
 		}
 	}
+	return tok
+}
+
+func (s *Server) sessionUser(r *http.Request) *db.User {
+	tok := sessionToken(r)
 	if tok == "" {
 		return nil
 	}
@@ -135,6 +145,9 @@ func (s *Server) newSession(w http.ResponseWriter, r *http.Request, userID, devi
 	tok, h := auth.NewToken()
 	if err := s.DB.CreateSession(r.Context(), h, userID, device, sessionTTL); err != nil {
 		return "", err
+	}
+	if err := s.DB.SetSessionClient(r.Context(), h, clientName(r.UserAgent()), clientIP(r)); err != nil {
+		log.Printf("Session: %v", err)
 	}
 	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: tok, Path: "/", MaxAge: int(sessionTTL.Seconds()),
 		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil})
@@ -152,10 +165,11 @@ type publicUser struct {
 	Color       int    `json:"color"`
 	Admin       bool   `json:"admin"`
 	HasPassword bool   `json:"hasPassword"`
+	Upload      bool   `json:"upload"` // darf Videos hochladen (Admins immer)
 }
 
 func toPublic(u db.User) publicUser {
-	return publicUser{ID: u.ID, Name: u.Name, Color: u.Color, Admin: u.Admin, HasPassword: u.PassHash != ""}
+	return publicUser{ID: u.ID, Name: u.Name, Color: u.Color, Admin: u.Admin, HasPassword: u.PassHash != "", Upload: u.Upload || u.Admin}
 }
 
 // users: Profilauswahl vor dem Login (Netflix-Stil).
@@ -223,6 +237,11 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	}
 	tok, err := s.newSession(w, r, u.ID, req.Device)
 	if !writeErr(w, err) {
+		text := "Angemeldet"
+		if req.Device != "" {
+			text += " auf " + req.Device
+		}
+		s.activity.add("login", u.Name, text)
 		writeJSON(w, withToken{toPublic(*u), tok})
 	}
 }
@@ -260,6 +279,7 @@ type userReq struct {
 	Password *string `json:"password"` // "" entfernt das Passwort (nicht für Admins)
 	Admin    *bool   `json:"admin"`
 	Color    *int    `json:"color"`
+	Upload   *bool   `json:"upload"`
 }
 
 func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
@@ -323,6 +343,9 @@ func applyUser(u *db.User, req userReq) error {
 	if req.Color != nil {
 		u.Color = ((*req.Color % 360) + 360) % 360
 	}
+	if req.Upload != nil {
+		u.Upload = *req.Upload
+	}
 	if req.Password != nil {
 		switch {
 		case *req.Password == "":
@@ -373,6 +396,7 @@ func (s *Server) pairPoll(w http.ResponseWriter, r *http.Request) {
 		}
 		tok, err := s.newSession(w, r, uid, device)
 		if !writeErr(w, err) {
+			s.activity.add("login", u.Name, "Gerät gekoppelt: "+device)
 			writeJSON(w, map[string]any{"token": tok, "user": toPublic(*u)})
 		}
 	}
@@ -394,6 +418,24 @@ func (s *Server) pairConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]string{"device": device})
+}
+
+// pairQR: PNG mit dem Link <Basis>/#/koppeln/<code>. Das Handy scannt ihn mit der Kamera oder der Flimmer-App,
+// meldet sich bei Bedarf an und bestätigt den Code ohne Tippen – von unterwegs über die öffentliche Adresse.
+func (s *Server) pairQR(w http.ResponseWriter, r *http.Request) {
+	code := r.PathValue("code")
+	if !reCode.MatchString(code) {
+		http.Error(w, "Code ungültig", http.StatusNotFound)
+		return
+	}
+	base, _ := s.BaseURL()
+	png, err := discovery.QR(strings.TrimSuffix(base, "/") + "/#/koppeln/" + code)
+	if writeErr(w, err) {
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Write(png)
 }
 
 // --- Hilfen ---

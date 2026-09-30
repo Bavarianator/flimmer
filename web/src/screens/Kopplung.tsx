@@ -9,7 +9,7 @@ import { ergaenze, t } from '../lib/i18n'
 import { back, go, teile } from '../lib/router'
 import { Seite } from '../components/Seite'
 import { Icon } from '../components/Icon'
-import { Wortmarke } from '../components/Wortmarke'
+import { LoginKopf } from './Login'
 import { KoppelCode, useKoppelCode } from './KopplungTV'
 import '../player/screens.css'
 
@@ -77,7 +77,8 @@ function KopplungHandy() {
   }
   useEffect(() => koppeln(vorgabe), []) // Code aus dem QR-Link sofort bestätigen
   return (
-    <Seite>
+    <Seite ohneKopf class="login">
+      <LoginKopf zurueck={back} />
       <div class="koppeln-seite rand">
         <div class="koppeln-karte">
           <h1 class="t-titel">{t('koppeln.titel')}</h1>
@@ -136,10 +137,8 @@ export function KopplungTV({ onDone }: { onDone: () => void }) {
   const rest = z ? Math.max(0, z.bis - jetzt) : 0
   const anteil = Math.min(1, rest / 600000)
   return (
-    <main class="seite koppeln-tv">
-      <div class="rand login-kopf">
-        <Wortmarke />
-      </div>
+    <Seite ohneKopf class="login koppeln-tv">
+      <LoginKopf />
       <div class="koppeln-tv-inhalt rand">
         <h1 class="t-titel">{t('koppeln.tv.titel')}</h1>
         <p class="t-text leise koppeln-tv-unter">{t('koppeln.tv.text')}</p>
@@ -159,13 +158,13 @@ export function KopplungTV({ onDone }: { onDone: () => void }) {
             </div>
             <p class="t-klein leise">{t('koppeln.tv.neu', { n: Math.max(1, Math.ceil(rest / 60000)) })}</p>
           </div>
-          <img class="kopplung-qr" src="/api/qr" alt="" width={240} height={240} />
+          {z && <img class="kopplung-qr" src={'/api/pair/' + z.code + '/qr'} alt="" width={240} height={240} />}
         </div>
       </div>
       <p class="koppeln-tv-fuss t-klein leise">{t('koppeln.tv.zurueck')}</p>
       <button class="nur-sr" type="button" onClick={back}>
         {t('knopf.zurueck')}
       </button>
-    </main>
+    </Seite>
   )
 }

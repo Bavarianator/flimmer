@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000" role="img" aria-label="Flimmer">
+  <title>Flimmer</title>
+  <rect width="1000" height="1000" fill="#11100e"/>
+  <path d="M180 80 H600 V280 H380 V460 H700 V660 H380 V920 H180 Z" fill="#ece7dd"/><path d="M640 170 H820 V370 H640 Z" fill="#cfae5c"/>
+</svg>

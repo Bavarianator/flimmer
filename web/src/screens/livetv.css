@@ -1,0 +1,63 @@
+/* Live-TV (Entwurf „LiveTV“ / „TV-Guide“). Chromium 53: kein Grid/gap, Abstände per margin; das Programmraster
+   ist absolut positioniert (5 px pro Minute, TV 8 px), Zeilen 64 px (TV 96 px). */
+
+/* --- Kanäle: Liste --- */
+.livetv-kanaele { padding-top: var(--abstand-2); padding-bottom: var(--abstand-7); }
+.livetv-kanal { display: -webkit-flex; display: flex; width: 100%; min-height: 72px; padding: var(--abstand-2) var(--abstand-3); border-radius: var(--radius-s); box-shadow: inset 0 -1px 0 var(--linie); text-align: left; color: var(--text); }
+.livetv-kanal.ist-fokus { box-shadow: 0 0 0 2px var(--fokus-innen), 0 0 0 4px var(--marke); }
+html.dt .livetv-kanal:hover { background: var(--flaeche-1); }
+html.tv .livetv-kanal { min-height: 112px; padding: var(--abstand-3) var(--abstand-5); }
+html.tv .livetv-kanal.ist-fokus { box-shadow: 0 0 0 3px var(--fokus-innen), 0 0 0 6px var(--marke); }
+.livetv-nr { width: 32px; margin-right: var(--abstand-3); font-size: 13px; color: var(--text-3); -webkit-flex: none; flex: none; }
+html.tv .livetv-nr { width: 56px; font-size: 22px; }
+.livetv-logo { width: 72px; height: 44px; line-height: 44px; margin-right: var(--abstand-4); border-radius: var(--radius-s); background: var(--flaeche-2); text-align: center; overflow: hidden; -webkit-flex: none; flex: none; font-size: 13px; color: var(--text-2); text-transform: uppercase; }
+.livetv-logo img { max-width: 100%; max-height: 100%; vertical-align: middle; }
+html.tv .livetv-logo { width: 128px; height: 72px; line-height: 72px; font-size: 22px; }
+.livetv-kanal-text b { display: block; font-size: 16px; line-height: 22px; font-weight: 600; }
+.livetv-kanal-text .leise { display: block; font-size: 14px; line-height: 20px; }
+html.tv .livetv-kanal-text b { font-size: 28px; line-height: 36px; }
+html.tv .livetv-kanal-text .leise { font-size: 24px; line-height: 32px; }
+.livetv-gruppe { margin-left: var(--abstand-4); -webkit-flex: none; flex: none; }
+html.hd .livetv-gruppe { display: none; }
+.livetv-balken { display: block; height: 3px; margin-top: 6px; background: var(--linie); overflow: hidden; }
+.livetv-balken i { display: block; width: 100%; height: 100%; background: var(--text); -webkit-transform-origin: 0 0; transform-origin: 0 0; }
+.livetv-kanal-text .livetv-balken { max-width: 320px; }
+
+/* --- Programmführer --- */
+.livetv-fuehrer { padding-bottom: var(--abstand-7); }
+.livetv-filter { -webkit-flex-wrap: wrap; flex-wrap: wrap; margin-bottom: var(--abstand-3); }
+.livetv-filter .fl-label { margin-bottom: var(--abstand-2); font-size: 12px; color: var(--text-3); }
+html.hd .livetv-filter .fl-label { display: none; }
+.livetv-gitter { -webkit-align-items: flex-start; align-items: flex-start; border-radius: var(--radius-m); box-shadow: inset 0 0 0 1px var(--linie); overflow: hidden; }
+.livetv-spalte { width: 220px; box-shadow: inset -1px 0 0 var(--linie); -webkit-flex: none; flex: none; }
+html.tv .livetv-spalte { width: 300px; }
+html.hd .livetv-spalte { width: 96px; }
+.livetv-kopfzelle { height: 40px; line-height: 40px; padding: 0 16px; box-shadow: inset 0 -1px 0 var(--linie); font-size: 12px; color: var(--text-3); }
+.livetv-zeilenkopf { height: 64px; padding: 0 12px 0 16px; box-shadow: inset 0 -1px 0 var(--linie); font-size: 15px; font-weight: 500; }
+html.tv .livetv-zeilenkopf { height: 96px; font-size: 26px; }
+html.hd .livetv-zeilenkopf { padding: 0 8px; font-size: 13px; }
+html.hd .livetv-zeilenkopf .livetv-nr { display: none; }
+.livetv-raster { position: relative; min-width: 0; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; }
+html.tv .livetv-raster { overflow: hidden; }
+.livetv-innen { position: relative; }
+.livetv-marke { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--linie); }
+.livetv-marke span { position: absolute; left: 8px; top: 12px; font-size: 12px; line-height: 16px; letter-spacing: 1px; color: var(--text-3); white-space: nowrap; }
+html.tv .livetv-marke span { font-size: 20px; line-height: 24px; top: 8px; }
+.livetv-block { position: absolute; height: 52px; padding: 0 10px; border-radius: var(--radius-s); background: var(--flaeche-1); box-shadow: inset 0 0 0 1px var(--linie); text-align: left; overflow: hidden; color: var(--text); }
+.livetv-block.laeuft { background: var(--flaeche-2); }
+.livetv-block span { display: block; font-size: 14px; line-height: 20px; font-weight: 500; }
+.livetv-block small { display: block; font-size: 12px; line-height: 16px; color: var(--text-2); }
+.livetv-block.ist-fokus { z-index: 1; box-shadow: 0 0 0 2px var(--fokus-innen), 0 0 0 4px var(--marke); }
+html.dt .livetv-block:hover { box-shadow: inset 0 0 0 1px var(--linie-stark); }
+html.tv .livetv-block { height: 84px; padding: 0 16px; }
+html.tv .livetv-block span { font-size: 24px; line-height: 34px; }
+html.tv .livetv-block small { font-size: 20px; line-height: 28px; }
+html.tv .livetv-block.ist-fokus { box-shadow: 0 0 0 3px var(--fokus-innen), 0 0 0 6px var(--marke); }
+.livetv-jetzt { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--marke); pointer-events: none; z-index: 2; }
+.livetv-jetzt span { position: absolute; left: 1px; top: 8px; height: 24px; padding: 0 8px; background: var(--marke); color: var(--auf-marke); font-size: 12px; line-height: 24px; letter-spacing: 1px; }
+html.tv .livetv-jetzt span { height: 32px; line-height: 32px; font-size: 20px; }
+
+/* Sendung im Dialog */
+.livetv-text { margin-top: var(--abstand-3); }
+.livetv-rest { margin-top: var(--abstand-4); }
+.livetv-rest .livetv-balken { margin: 0 var(--abstand-3) 0 0; height: 4px; }

@@ -32,13 +32,32 @@ type nfo struct {
 	IMDBID  string   `xml:"imdbid"`
 	ID      string   `xml:"id"`
 	Genres  []string `xml:"genre"`
+	MPAA    string   `xml:"mpaa"`          // Kodi: „FSK 12“, „de:12“ …
+	Cert    string   `xml:"certification"` // „DE:12 / US:PG-13“
 	Season  string   `xml:"season"`
 	Episode string   `xml:"episode"`
 	Thumbs  []struct {
 		Aspect string `xml:"aspect,attr"`
 		URL    string `xml:",chardata"`
 	} `xml:"thumb"`
-	Fanart []string `xml:"fanart>thumb"`
+	Fanart    []string `xml:"fanart>thumb"`
+	SortTitle string   `xml:"sorttitle"`
+	Tagline   string   `xml:"tagline"`
+	Studios   []string `xml:"studio"`
+	Countries []string `xml:"country"`
+	Tags      []string `xml:"tag"`
+	Status    string   `xml:"status"`
+	Directors []string `xml:"director"`
+	Writers   []string `xml:"credits"`
+	Actors    []struct {
+		Name  string `xml:"name"`
+		Role  string `xml:"role"`
+		Thumb string `xml:"thumb"`
+	} `xml:"actor"`
+	Set struct { // <set>Name</set> oder <set><name>Name</name></set>
+		Name string `xml:"name"`
+		Text string `xml:",chardata"`
+	} `xml:"set"`
 }
 
 var (
@@ -63,6 +82,9 @@ func ParseNFO(path string) (*Meta, error) {
 		m.Season, _ = strconv.Atoi(strings.TrimSpace(n.Season))
 		m.Episode, _ = strconv.Atoi(strings.TrimSpace(n.Episode))
 		m.Genres = n.Genres
+		if m.Age = fsk(n.MPAA); m.Age == nil {
+			m.Age = fsk(n.Cert)
+		}
 		m.Rating, _ = strconv.ParseFloat(strings.TrimSpace(n.Rating), 64)
 		for _, r := range n.Ratings {
 			if r.Default || m.Rating == 0 {
@@ -89,6 +111,20 @@ func ParseNFO(path string) (*Meta, error) {
 		if len(n.Fanart) > 0 {
 			m.backdropURL = strings.TrimSpace(n.Fanart[0])
 		}
+		m.SortTitle, m.Tagline, m.Status = strings.TrimSpace(n.SortTitle), strings.TrimSpace(n.Tagline), strings.TrimSpace(n.Status)
+		m.Studios, m.Countries, m.Tags = n.Studios, n.Countries, n.Tags
+		for _, d := range n.Directors {
+			m.People = append(m.People, Person{Name: strings.TrimSpace(d), Kind: "director"})
+		}
+		for _, w := range n.Writers {
+			m.People = append(m.People, Person{Name: strings.TrimSpace(w), Kind: "writer"})
+		}
+		for _, a := range n.Actors {
+			m.People = append(m.People, Person{Name: strings.TrimSpace(a.Name), Role: strings.TrimSpace(a.Role), Kind: "actor", Image: strings.TrimSpace(a.Thumb)})
+		}
+		if set := strings.TrimSpace(cmp(n.Set.Name, n.Set.Text)); set != "" {
+			m.Collection = &Collection{Name: set}
+		}
 	}
 	if m.TMDBID == 0 {
 		if s := reTMDBURL.FindSubmatch(b); s != nil {
@@ -108,14 +144,14 @@ func year0(date string) int {
 
 // fromNFO sucht NFO und lokale Bilder nach Kodi-Konvention.
 // Liefert die fertigen Metadaten, wenn die NFO einen Titel hat; sonst höchstens eine TMDB-ID als Suchhilfe.
-func fromNFO(q Query) (*Meta, int) {
+// show ist die tvshow.nfo einer Serie samt lokaler Bilder (nil ohne).
+func fromNFO(q Query) (m *Meta, tmdbID int, show *Meta) {
 	dir := filepath.Dir(q.Path)
 	base := strings.TrimSuffix(q.Path, filepath.Ext(q.Path))
 	names := []string{base + ".nfo"}
 	if q.Series == "" {
 		names = append(names, filepath.Join(dir, "movie.nfo"))
 	}
-	var m *Meta
 	for _, p := range names {
 		if nm, err := ParseNFO(p); err == nil {
 			m = nm
@@ -126,18 +162,20 @@ func fromNFO(q Query) (*Meta, int) {
 	if l := strings.ToLower(filepath.Base(dir)); strings.HasPrefix(l, "staffel") || strings.HasPrefix(l, "season") {
 		showDir = filepath.Dir(dir)
 	}
-	var show *Meta
 	if q.Series != "" {
-		show, _ = ParseNFO(filepath.Join(showDir, "tvshow.nfo"))
+		if show, _ = ParseNFO(filepath.Join(showDir, "tvshow.nfo")); show != nil {
+			show.posterURL = cmp(findArt(filepath.Join(showDir, "tvshow"), showDir, "poster", "folder"), show.posterURL)
+			show.backdropURL = cmp(findArt(filepath.Join(showDir, "tvshow"), showDir, "fanart", "backdrop"), show.backdropURL)
+		}
 	}
 	if m == nil || m.Title == "" {
 		switch {
 		case m != nil && q.Series == "" && m.TMDBID > 0:
-			return nil, m.TMDBID
+			return nil, m.TMDBID, show
 		case show != nil && show.TMDBID > 0:
-			return nil, show.TMDBID
+			return nil, show.TMDBID, show
 		}
-		return nil, 0
+		return nil, 0, show
 	}
 	// Lokale Bilder schlagen URLs aus der NFO: <name>-poster.jpg, poster.jpg, folder.jpg, <name>-fanart.jpg, fanart.jpg.
 	artDir := dir
@@ -147,6 +185,9 @@ func fromNFO(q Query) (*Meta, int) {
 			m.Series = cmp(m.Series, show.Title)
 			m.TMDBID = cmp0(show.TMDBID, m.TMDBID)
 			m.Genres = append(m.Genres, show.Genres...)
+			if m.Age == nil {
+				m.Age = show.Age
+			}
 			m.posterURL = cmp(show.posterURL, m.posterURL)
 			m.backdropURL = cmp(m.backdropURL, show.backdropURL)
 		}
@@ -156,7 +197,7 @@ func fromNFO(q Query) (*Meta, int) {
 	if q.Series != "" {
 		m.Season, m.Episode = cmp0(m.Season, q.Season), cmp0(m.Episode, q.Episode)
 	}
-	return m, m.TMDBID
+	return m, m.TMDBID, show
 }
 
 func findArt(base, dir string, kinds ...string) string {
@@ -170,6 +211,22 @@ func findArt(base, dir string, kinds ...string) string {
 		}
 	}
 	return ""
+}
+
+// reFSK: reine Zahl (TMDB-DE) oder eine deutsche Angabe in Texten wie „FSK 12“, „de:12 / us:PG-13“, „Germany:FSK 16“.
+var reFSK = regexp.MustCompile(`(?i)^\s*(\d{1,2})\s*$|(?:fsk|\bde:|germany:)\s*(?:fsk\s*)?(\d{1,2})\b`)
+
+// fsk liest eine FSK-Freigabe; alles andere (z. B. „PG-13“) ist unbekannt (nil).
+func fsk(s string) *int {
+	m := reFSK.FindStringSubmatch(s)
+	if m == nil {
+		return nil
+	}
+	n, _ := strconv.Atoi(m[1] + m[2])
+	if n != 0 && n != 6 && n != 12 && n != 16 && n != 18 {
+		return nil
+	}
+	return &n
 }
 
 func cmp0(a, b int) int {

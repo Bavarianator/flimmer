@@ -47,6 +47,9 @@ dependencies {
     implementation(libs.media3.hls)
     implementation(libs.media3.ui)
     implementation(libs.media3.ffmpeg)
+    implementation(libs.cast.framework) // Chromecast (Default Media Receiver)
+    implementation(libs.mediarouter)
+    implementation(libs.code.scanner) // QR-Codes scannen (Einladung, TV-Kopplung) – Oberfläche aus den Play-Diensten, ohne Kamera-Berechtigung
 
     testImplementation(libs.junit)
     testImplementation(libs.okhttp.mockwebserver)
