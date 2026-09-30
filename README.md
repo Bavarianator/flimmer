@@ -7,56 +7,35 @@ Ein schlanker Open-Source-Medienserver für Filme und Serien, als Alternative zu
 Weitere Ziele:
 - **Wenig Ressourcen:** eine einzige Binary ohne Abhängigkeiten außer ffmpeg. Läuft auch auf dem Raspberry Pi.
 - **Alle Geräte:** eine Web-UI für Browser, LG webOS, Samsung Tizen, Android (TV) und iOS.
-- **Gemeinsam schauen und einfaches Teilen** sind geplant (siehe [Architektur](docs/architektur.md)).
+- **Gemeinsam schauen und einfaches Teilen:** synchron schauen mit Freunden, Einladungslinks mit Registrierung, Anmeldung am Fernseher per QR-Code.
 
-> Status: frühe Version. Benutzer, Metadaten (NFO/TMDB) und Hardware-Transcoding sind da; Apps außer dem LG-Starter fehlen noch.
+> Status: frühe Version. Server, Web-UI, Android-App (Handy und TV) und LG-Starter laufen; fertige Releases folgen.
 
-## Installation (am einfachsten: Docker)
+## Installation
 
-Es gibt noch keine fertigen Releases oder Images. Docker baut Flimmer deshalb selbst aus dem Quellcode, das dauert beim ersten Mal ein paar Minuten. Du brauchst nur [Docker](https://docs.docker.com/get-docker/) (ffmpeg steckt schon im Image). `/pfad/zu/filmen` ersetzt du durch deinen Medienordner.
-
-**Ein Befehl (Docker):**
+Du brauchst nur [Docker](https://docs.docker.com/get-docker/). Ein Befehl lädt Flimmer und startet es. `/pfad/zu/filmen` ersetzt du durch deinen Medienordner:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Bavarianator/flimmer/main/deploy/install.sh | sh -s -- /pfad/zu/filmen
 ```
 
-**Ein Befehl (Docker Compose):**
+Das Skript lädt das fertige Image, ffmpeg ist schon drin. Flimmer startet danach mit dem Rechner von selbst. Unter Linux nutzt es das Host-Netz, damit Apps und Fernseher den Server im Heimnetz finden, und die Grafikkarte (`/dev/dri`) zum Umwandeln, falls vorhanden.
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/Bavarianator/flimmer/main/deploy/compose.remote.yml | MEDIA_DIR=/pfad/zu/filmen docker compose -f - up -d --build
-```
+- **Aktualisieren:** denselben Befehl noch einmal ausführen. Einstellungen und Konten bleiben im Volume `flimmer-data`.
+- **Anderer Port**, z. B. weil Jellyfin schon 8096 belegt: `… | FLIMMER_PORT=8097 sh -s -- /pfad/zu/filmen`
+- **Mit Docker Compose:** `curl -fsSL https://raw.githubusercontent.com/Bavarianator/flimmer/main/deploy/compose.remote.yml | MEDIA_DIR=/pfad/zu/filmen docker compose -f - up -d --pull always`
 
-Beides noch einmal ausführen = aktualisieren, die Daten bleiben im Volume `flimmer-data`.
+### Erste Schritte
 
-**Von Hand** (wenn du den Code geklont hast):
-
-```sh
-git clone https://github.com/Bavarianator/flimmer.git
-cd flimmer
-docker build -f deploy/Dockerfile -t flimmer .
-docker run -d --name flimmer --restart unless-stopped -p 8096:8096 \
-  -v /pfad/zu/filmen:/media:ro \
-  -v flimmer-data:/data \
-  flimmer
-```
-
-Oder mit Compose aus dem Klon: `MEDIA_DIR=/pfad/zu/filmen docker compose -f deploy/compose.yml up -d --build`. Statt der Variablen kannst du `MEDIA_DIR`, `FLIMMER_PORT` und `TZ` auch in eine `.env`-Datei neben der Compose-Datei schreiben.
-
-Dann im Browser `http://localhost:8096` öffnen (oder `http://<server-ip>:8096` von einem anderen Gerät). Dort Medienordner wählen, fertig. Der Ordner heißt im Container `/media`.
-
-Nützliche Befehle:
+1. Die Adresse öffnen, die das Skript anzeigt (z. B. `http://192.168.1.20:8096`), und das Admin-Konto anlegen. Der Medienordner heißt im Container `/media`.
+2. **Fernseher anmelden:** Der Fernseher zeigt einen Code und einen QR-Code. Scanne den QR-Code mit der Handy-Kamera oder in der Flimmer-App, dann ist der Fernseher angemeldet, ganz ohne Tippen.
+3. **Freunde einladen:** Unter Dashboard › Einladungen einen Link erstellen und verschicken. Wer ihn öffnet, wählt Name und Passwort und kann sich danach überall anmelden, mit Fernzugriff auch von unterwegs.
 
 | Aufgabe | Befehl |
 |---|---|
-| Status (mit Compose auch „healthy“) | `docker ps --filter name=flimmer` |
 | Logs ansehen | `docker logs -f flimmer` |
 | Stoppen / starten | `docker stop flimmer` / `docker start flimmer` |
-| Aktualisieren | `git pull`, dann `docker build …` wie oben, `docker rm -f flimmer` und `docker run …` erneut (die Daten bleiben im Volume `flimmer-data`) |
-| Mit Compose aktualisieren | `git pull && docker compose -f deploy/compose.yml up -d --build` |
 | Entfernen | `docker rm -f flimmer` (Einstellungen löschen: `docker volume rm flimmer-data`) |
-
-Für die automatische Geräte-Suche im Heimnetz (SSDP) statt `-p 8096:8096` besser `--network host` verwenden. Für Hardware-Transcoding auf Intel/AMD zusätzlich `--device /dev/dri:/dev/dri`.
 
 ## Ohne Docker
 
@@ -81,6 +60,8 @@ Für einen eigenen Benutzer und Härtung gibt es [`deploy/flimmer.service`](depl
 ### Aus dem Quellcode
 
 Du brauchst Go 1.27+, Node 22 und ffmpeg.
+
+Docker-Image selbst bauen: `docker build -f deploy/Dockerfile -t flimmer .` bzw. `MEDIA_DIR=/pfad/zu/filmen docker compose -f deploy/compose.yml up -d --build`.
 
 ```sh
 (cd web && npm ci && npm run build)   # UI nach web/dist bauen, wird in die Binary eingebettet

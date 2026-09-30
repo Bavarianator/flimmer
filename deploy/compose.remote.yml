@@ -1,12 +1,9 @@
-# Flimmer mit Docker Compose direkt von GitHub (ohne Klonen), baut das Image aus dem Quellcode:
+# Flimmer mit Docker Compose direkt von GitHub (ohne Klonen), mit dem fertigen Image:
 #   curl -fsSL https://raw.githubusercontent.com/Bavarianator/flimmer/main/deploy/compose.remote.yml \
-#     | MEDIA_DIR=/pfad/zu/filmen docker compose -f - up -d --build
+#     | MEDIA_DIR=/pfad/zu/filmen docker compose -f - up -d --pull always
 services:
   flimmer:
-    build:
-      context: https://github.com/Bavarianator/flimmer.git#main
-      dockerfile: deploy/Dockerfile
-    image: flimmer:local
+    image: ghcr.io/bavarianator/flimmer:edge
     container_name: flimmer
     restart: unless-stopped
     ports:
