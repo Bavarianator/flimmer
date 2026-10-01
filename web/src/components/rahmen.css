@@ -63,6 +63,9 @@ html.tv .rahmen:not(.ohne) > .seite { margin-left: 112px; }
 .schiene-tv .nav-punkt.ist-fokus { background: var(--marke); color: var(--auf-marke); box-shadow: none; }
 .schiene-tv .marke-text, .schiene-tv .nav-kopf, .schiene-tv .nav-punkt .text { opacity: 0; -webkit-transition: opacity var(--dauer-schnell) linear; transition: opacity var(--dauer-schnell) linear; }
 .schiene-tv.offen .marke-text, .schiene-tv.offen .nav-kopf, .schiene-tv.offen .nav-punkt .text { opacity: 1; }
+/* Zeiger: Die Schiene bleibt nur offen, solange er darüber steht (der Fokus bleibt sonst dort hängen). */
+html.zeiger .schiene-tv.offen:not(:hover) { width: 112px; background: var(--saal); box-shadow: none; }
+html.zeiger .schiene-tv.offen:not(:hover) .marke-text, html.zeiger .schiene-tv.offen:not(:hover) .nav-kopf, html.zeiger .schiene-tv.offen:not(:hover) .nav-punkt .text { opacity: 0; }
 .tv-kopf { padding: 48px var(--rand) 0; }
 .tv-titel { margin: 0 0 16px; font-size: 44px; line-height: 52px; font-weight: 600; }
 html.tv .kopf-tabs { height: 64px; margin-bottom: 24px; }

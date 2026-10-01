@@ -11,6 +11,10 @@ html.hd .wortmarke { height: 22px; width: 110px; }
 .seite-schiene { position: relative; padding-bottom: var(--abstand-8); }
 html.tv .seite { height: 100vh; overflow: hidden; }
 html.tv .seite-schiene { padding-bottom: var(--tv-rand-oben); -webkit-transition: -webkit-transform var(--dauer-mittel) var(--kurve-standard); transition: transform var(--dauer-mittel) var(--kurve-standard); }
+/* Zeigermodus (Magic Remote, lib/focus.ts): natives Scrollen statt Schienen */
+html.tv.zeiger .seite { overflow-y: auto; }
+html.tv.zeiger .seite-schiene, html.tv.zeiger .fl-reihe .schiene { -webkit-transform: none !important; transform: none !important; }
+html.tv.zeiger .fl-reihe .spur { overflow-x: auto; }
 html.hd .seite-schiene { padding-bottom: 88px; } /* Platz für die Tab-Leiste */
 
 /* --- Hero (Start, Detail) --- */
@@ -125,3 +129,7 @@ html.tv .reihe-kopf { margin-bottom: 20px; }
 .reihe-link:hover .fl-icon { color: var(--text); }
 .reihe-blaettern button { width: 36px; height: 36px; margin-left: 8px; border-radius: var(--radius-s); box-shadow: inset 0 0 0 1px var(--linie-stark); text-align: center; }
 .reihe-blaettern .fl-icon { width: 20px; height: 20px; }
+html.tv .reihe-blaettern { display: none; }
+html.tv.zeiger .reihe-blaettern { display: inline; }
+html.tv .reihe-blaettern button { width: 64px; height: 64px; }
+html.tv .reihe-blaettern .fl-icon { width: 32px; height: 32px; }

@@ -31,6 +31,37 @@ export function starteFokus() {
     const t = e.target as HTMLElement
     if ((t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') && [13, 37, 39].indexOf(e.keyCode) >= 0) e.stopPropagation()
   })
+  if (geraet !== 'tv') return
+  // Magic Remote: Zeiger bewegt → Zeigermodus; Pfeiltaste → zurück zum D-Pad (vor norigin, daher capture).
+  let mx = -1
+  let my = -1
+  window.addEventListener('mousemove', (e) => {
+    // Chrome schickt nach Layout-Änderungen mousemove ohne Bewegung; das ist kein Zeiger.
+    if (e.screenX === mx && e.screenY === my) return
+    mx = e.screenX
+    my = e.screenY
+    setZeiger(true)
+  })
+  window.addEventListener('keydown', (e) => {
+    if (e.keyCode >= 37 && e.keyCode <= 40) setZeiger(false)
+  }, true)
+}
+
+// ---------- Zeigermodus (TV) ----------
+// Mit Zeiger scrollen Seite und Reihen nativ (Rad, Blätterknöpfe), und Hover verschiebt nichts – sonst rutscht die
+// Karte unter dem Zeiger weg und die nächste bekommt den Fokus. html.zeiger schaltet die Transforms in components.css ab.
+let zeiger = false
+
+function setZeiger(an: boolean) {
+  if (an === zeiger) return
+  zeiger = an
+  const h = document.documentElement
+  h.className = h.className.replace(/\bzeiger\b/g, '').trim() + (an ? ' zeiger' : '')
+  if (an) return
+  const n = document.querySelectorAll('.seite, .fl-reihe .spur')
+  for (let i = 0; i < n.length; i++) (n[i] as HTMLElement).scrollTop = (n[i] as HTMLElement).scrollLeft = 0
+  const f = document.querySelector('.ist-fokus') as HTMLElement | null
+  if (f) folge(f)
 }
 
 // ---------- Fokus-Gedächtnis pro Seite ----------
@@ -59,7 +90,7 @@ function oben(el: HTMLElement, bis: HTMLElement): number {
 }
 
 export function folge(node: HTMLElement) {
-  if (!istTV()) return
+  if (!istTV() || zeiger) return
   const schiene = node.closest('.schiene') as HTMLElement | null
   if (schiene && schiene.parentElement) {
     const max = Math.max(0, schiene.scrollWidth - schiene.parentElement.clientWidth)

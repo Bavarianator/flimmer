@@ -8,7 +8,7 @@ import { Icon } from './Icon'
 ergaenze({ 'reihe.zurueck': 'Zurück blättern', 'reihe.weiter': 'Weiter blättern' }, { 'reihe.zurueck': 'Scroll back', 'reihe.weiter': 'Scroll forward' })
 
 // Horizontale Reihe. TV: .schiene fährt per translateX (lib/focus.ts folge), .spur ohne Scrollbalken.
-// Desktop/Handy: .spur scrollt nativ (Wischen), am Desktop zusätzlich mit Blätterknöpfen.
+// Desktop/Handy: .spur scrollt nativ (Wischen), am Desktop zusätzlich mit Blätterknöpfen (TV: nur im Zeigermodus).
 // ziel: Überschrift als Link („Kürzlich hinzugefügt in Filme ›“).
 export function Reihe(p: { titel: string; fokusKey: string; zusatz?: string; ziel?: string; onZiel?: () => void; children: ComponentChildren }) {
   const spur = useRef<HTMLDivElement>(null)
@@ -30,7 +30,7 @@ export function Reihe(p: { titel: string; fokusKey: string; zusatz?: string; zie
           )}
           {p.zusatz && <small>{p.zusatz}</small>}
         </h2>
-        {geraet === 'dt' && (
+        {geraet !== 'hd' && (
           <span class="reihe-blaettern">
             <button type="button" tabIndex={-1} aria-label={t('reihe.zurueck')} onClick={() => blaettern(-1)}>
               <Icon name="zurueck" />
