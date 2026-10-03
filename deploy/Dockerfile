@@ -45,8 +45,10 @@ ENTRYPOINT ["/usr/local/bin/flimmer-relay", "-addr", ":8098", "-db", "/data/rela
 # Standard-Image (letzte Stufe = Default-Target)
 FROM debian:stable-slim
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
+ && apt-get install -y --no-install-recommends ffmpeg ca-certificates python3 \
  && rm -rf /var/lib/apt/lists/*
+# „Von Link laden“ (/hochladen): aktuelles yt-dlp statt Debians, das hinkt YouTube-Änderungen hinterher.
+ADD --chmod=755 https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp /usr/local/bin/yt-dlp
 COPY --from=server /flimmer /usr/local/bin/flimmer
 VOLUME ["/media", "/data"]
 EXPOSE 8096

@@ -30,6 +30,8 @@ work=$(mktemp -d)
 trap 'cd "$repo"; git worktree remove --force "$work/src" 2>/dev/null; rm -rf "$work"; git worktree prune' EXIT
 git -C "$repo" worktree add -q --detach "$work/src" "${REF:-HEAD}"
 version=$(git -C "$work/src" describe --tags --always)
+# PATCH=datei: eigene, noch nicht committete Änderungen obendrauf (git diff -- <eigene Dateien> > datei).
+[ -z "${PATCH:-}" ] || { git -C "$work/src" apply "$(realpath "$PATCH")"; version+=-patch; }
 cd "$work/src"
 # Vorhandene node_modules des Haupt-Repos nutzen (kein Netz nötig), sonst npm ci.
 if [ -d "$repo/web/node_modules" ]; then ln -s "$repo/web/node_modules" web/node_modules; else (cd web && npm ci --silent --no-audit --no-fund); fi

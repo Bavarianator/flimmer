@@ -254,6 +254,8 @@ html.tv .info-paar .fl-label { width: 200px; font-size: 18px; }
 /* Videos hochladen (Hochladen.tsx) */
 .hochladen { max-width: 760px; }
 .hochladen .fl-btn { margin-top: var(--abstand-4); }
+.hochladen-link { margin-top: var(--abstand-6); }
+.hochladen-link .fl-btn + .fl-btn { margin-left: var(--abstand-3); }
 .hochladen-datei { margin-top: var(--abstand-4); }
 .hochladen-datei .zeile { margin-bottom: var(--abstand-2); }
 .hochladen-datei .leise, .hochladen-datei .fehlertext { margin-left: var(--abstand-4); }

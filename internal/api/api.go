@@ -134,6 +134,8 @@ func (s *Server) Handler() http.Handler {
 		s.party.List(w, r)
 	})
 	mux.HandleFunc("POST /api/upload", s.upload)
+	mux.HandleFunc("POST /api/upload/link", s.linkStart)
+	mux.HandleFunc("GET /api/upload/link", s.linkListe)
 	mux.HandleFunc("GET /api/party/{id}", s.party.Get)
 	mux.HandleFunc("GET /api/party/{id}/events", s.party.Events)
 	mux.HandleFunc("POST /api/party/{id}/actions", s.party.Action)

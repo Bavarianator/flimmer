@@ -115,7 +115,7 @@ function App() {
     case 'setup':
       return <Setup />
     case 'hochladen':
-      return <Hochladen />
+      return <Hochladen key={r[1]} link={r[1]} name={r[2]} />
   }
   return <Start />
 }

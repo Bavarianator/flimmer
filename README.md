@@ -100,6 +100,18 @@ go test ./...          # Unit- und Tabellentests
 scripts/smoke.sh       # E2E: erzeugt Testclips, startet den Server, prüft Direct Play, HLS und Untertitel
 ```
 
+## Videos hochladen und per Link laden
+
+Unter **Videos hochladen** kommen eigene Dateien in den Upload-Ordner von Flimmer und nach dem Scan in die Bibliothek. Das Recht dazu vergibt der Admin unter Dashboard › Benutzer.
+
+Statt einer Datei geht auch ein **Link**. Flimmer lädt das Video dann mit [yt-dlp](https://github.com/yt-dlp/yt-dlp) selbst herunter: von YouTube, Vimeo, den Mediatheken, Teams/SharePoint und über 1700 weiteren Seiten oder von einem direkten Datei-Link. Bevorzugt wird H.264/AAC, damit das Video ohne Umwandeln auf jedem Gerät läuft.
+
+- **Lesezeichen „An Flimmer“:** Den Knopf auf der Seite in die Lesezeichenleiste des Browsers ziehen. Auf einer Video-Seite draufklicken, dann öffnet sich Flimmer mit dem Link.
+- **Teams-Aufnahmen:** Die Aufnahme im Browser öffnen („In Stream öffnen“) und das Lesezeichen klicken. Es übergibt einen Link, der den Zugang schon enthält. Eine Anmeldung in Flimmer ist nicht nötig.
+- **Andere Seiten mit Anmeldung:** Die Cookies der Seite als `cookies.txt` exportieren (z. B. mit der Erweiterung „Get cookies.txt LOCALLY“) und anhängen. Flimmer nutzt sie nur für diesen Download und löscht sie danach.
+
+Im Docker-Image ist yt-dlp enthalten. Ohne Docker muss `yt-dlp` installiert sein und im `PATH` liegen. Klappt eine Seite plötzlich nicht mehr, hilft meist ein neueres yt-dlp (`yt-dlp -U`).
+
 ## Dateinamen
 
 Flimmer erkennt Filme und Episoden am Dateinamen:
