@@ -145,3 +145,21 @@ html.tv .einst-wer small { font-size: 22px; line-height: 30px; }
 html.tv .einst-titel { font-size: 40px; line-height: 52px; }
 html.tv .einst-inhalt { max-width: none; }
 .admin-kopf + .fl-zeile, .admin-kopf + .admin-absatz + .fl-zeile, .admin-kopf + .admin-zeile-knopf { border-top: 0; }
+
+/* Statistik: Säulen (eine Farbe, 2 px Abstand), zwei Spalten ab Desktop */
+.admin-diagramm { margin: 4px 0 16px; }
+.admin-saeulen { display: -webkit-flex; display: flex; height: 120px; border-bottom: 1px solid var(--linie); }
+.admin-saeule { position: relative; -webkit-flex: 1; flex: 1; min-width: 1px; margin-right: 2px; }
+.admin-saeule:last-child { margin-right: 0; }
+.admin-saeule i { position: absolute; left: 0; right: 0; bottom: 0; background: var(--marke); border-radius: var(--radius-s) var(--radius-s) 0 0; }
+html.dt .admin-saeule:hover i { opacity: .7; }
+.admin-achse { -webkit-justify-content: space-between; justify-content: space-between; margin-top: 4px; font-size: 12px; line-height: 16px; color: var(--text-3); }
+html.tv .admin-saeulen { height: 200px; }
+html.tv .admin-achse { font-size: 20px; line-height: 28px; }
+.admin-zwei { display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; -webkit-align-items: flex-start; align-items: flex-start; }
+.admin-zwei > .fl-gruppe { width: 48%; margin-right: 4%; box-sizing: border-box; min-width: 0; }
+.admin-zwei > .fl-gruppe:nth-child(2n) { margin-right: 0; }
+html.hd .admin-zwei > .fl-gruppe { width: 100%; margin-right: 0; }
+.admin-stat-avatar { margin-right: 10px; }
+/* Kürzen per „…“ braucht ein Block-Element (Treffer der Mediathek, lange Titel) */
+.admin .fl-zeile .text .eine-zeile { display: block; }

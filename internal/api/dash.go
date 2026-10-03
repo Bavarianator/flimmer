@@ -174,11 +174,6 @@ func (s *Server) overview(w http.ResponseWriter, r *http.Request) {
 		Version string `json:"version"`
 		URL     string `json:"url"`
 	}
-	type disk struct {
-		Path  string `json:"path"`
-		Free  uint64 `json:"free"`
-		Total uint64 `json:"total"`
-	}
 	server := struct {
 		Name    string    `json:"name"`
 		Version string    `json:"version"`
@@ -221,13 +216,7 @@ func (s *Server) overview(w http.ResponseWriter, r *http.Request) {
 	if t := s.Lib.LastScan(); !t.IsZero() {
 		lib.LastScan = &t
 	}
-	disks := []disk{}
-	for _, p := range append(slices.Clone(set.Dirs), s.CacheDir) {
-		// ponytail: gleiche Größe und gleicher freier Platz = dasselbe Dateisystem; Fsid wäre genauer, ist aber nicht portabel
-		if free, total := diskSpace(p); total > 0 && !slices.ContainsFunc(disks, func(d disk) bool { return d.Free == free && d.Total == total }) {
-			disks = append(disks, disk{p, free, total})
-		}
-	}
+	disks := laufwerke(append(slices.Clone(set.Dirs), s.CacheDir))
 	writeJSON(w, map[string]any{"server": server, "library": lib, "disks": disks,
 		"sessions": s.streams.sessions(), "activity": s.activity.last(20)})
 }
@@ -394,6 +383,18 @@ func (s *Server) tasks() []task {
 			auto: tv.Updated,
 			next: func() time.Time {
 				if at, _ := tv.Updated(); !at.IsZero() {
+					return at.Add(6 * time.Hour)
+				}
+				return time.Time{}
+			}})
+	}
+	if m := s.Mediathek; m != nil {
+		list = append(list, task{id: "mediathek", name: "Mediathek-Abos prüfen", group: "Bibliothek",
+			desc: "Sucht neue Sendungen für die Mediathek-Abos und reiht sie zum Download ein; läuft sonst alle 6 Stunden.",
+			run:  func(ctx context.Context, _ func(float64)) error { return m.PruefeAbos(ctx) },
+			auto: m.Geprueft,
+			next: func() time.Time {
+				if at, _ := m.Geprueft(); !at.IsZero() {
 					return at.Add(6 * time.Hour)
 				}
 				return time.Time{}

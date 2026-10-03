@@ -32,6 +32,8 @@ ergaenze(
     'nav.abmelden': 'Abmelden',
     'nav.zurueck-flimmer': 'Zurück zu Flimmer',
     'nav.uebersicht': 'Übersicht',
+    'nav.statistik': 'Statistik',
+    'nav.mediathek': 'Mediathek',
     'nav.server': 'Server',
     'nav.allgemein': 'Allgemein & Branding',
     'nav.einladungen': 'Einladungen',
@@ -70,6 +72,8 @@ ergaenze(
     'nav.abmelden': 'Sign out',
     'nav.zurueck-flimmer': 'Back to Flimmer',
     'nav.uebersicht': 'Overview',
+    'nav.statistik': 'Statistics',
+    'nav.mediathek': 'Public broadcasters',
     'nav.server': 'Server',
     'nav.allgemein': 'General & branding',
     'nav.einladungen': 'Invites',
@@ -127,6 +131,7 @@ const HAUPT: Eintrag[] = [
 
 const DASHBOARD: Eintrag[] = [
   { id: 'dash', label: 'nav.uebersicht', pfad: '/dashboard', icon: 'dashboard' },
+  { id: 'dash-statistik', label: 'nav.statistik', pfad: '/dashboard/statistik', icon: 'statistik' },
   { kopf: 'nav.server' },
   { id: 'dash-allgemein', label: 'nav.allgemein', pfad: '/dashboard/allgemein', icon: 'einstellungen' },
   { id: 'dash-benutzer', label: 'nav.benutzer', pfad: '/dashboard/benutzer', icon: 'gemeinsam' },
@@ -134,6 +139,7 @@ const DASHBOARD: Eintrag[] = [
   { kopf: 'nav.bibliotheken' },
   { id: 'dash-bibliotheken', label: 'nav.bibliotheken', pfad: '/dashboard/bibliotheken', icon: 'bibliothek' },
   { id: 'dash-metadaten', label: 'nav.metadaten', pfad: '/dashboard/metadaten', icon: 'bearbeiten' },
+  { id: 'dash-mediathek', label: 'nav.mediathek', pfad: '/dashboard/mediathek', icon: 'hochladen' },
   { kopf: 'nav.wiedergabe' },
   { id: 'dash-umwandlung', label: 'nav.umwandlung', pfad: '/dashboard/umwandlung', icon: 'abspielen' },
   { kopf: 'nav.geraete' },

@@ -169,7 +169,9 @@ func (s *streams) start(key string, st stream) {
 }
 
 // beat nimmt einen progress-Herzschlag auf; ohne play vorher (z. B. nach einem Neustart) reicht st als Grundlage.
-func (s *streams) beat(key string, st stream, pos, dur float64, paused bool) {
+// sek ist die gesehene Zeit seit dem vorigen Herzschlag (Statistik): 0 beim ersten, nach einer Pause und nach Lücken
+// über 30 s. method ist leer, wenn play fehlte.
+func (s *streams) beat(key string, st stream, pos, dur float64, paused bool) (sek float64, method playback.Method) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	cur := s.m[key]
@@ -181,8 +183,13 @@ func (s *streams) beat(key string, st stream, pos, dur float64, paused bool) {
 		cur = &st
 		s.m[key] = cur
 	}
+	now := time.Now()
+	if d := now.Sub(cur.beat); !cur.beat.IsZero() && d < 30*time.Second && !paused && !cur.paused {
+		sek = d.Seconds()
+	}
 	cur.pos, cur.dur, cur.paused = pos, dur, paused
-	cur.beat, cur.LastSeen = time.Now(), time.Now()
+	cur.beat, cur.LastSeen = now, now
+	return sek, cur.Method
 }
 
 // sessions: Wiedergaben mit Herzschlag in den letzten 60 s, neueste zuerst.

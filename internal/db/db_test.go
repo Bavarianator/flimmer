@@ -210,3 +210,25 @@ func TestListsAndSessions(t *testing.T) {
 		t.Errorf("abmelden: %v", err)
 	}
 }
+
+func TestWatchStats(t *testing.T) {
+	d, _ := open(t)
+	if err := d.CreateUser(ctx, User{ID: "u1", Name: "Anna", Color: 2}); err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range []string{"direct", "transcode"} {
+		if err := d.AddWatch(ctx, "u1", "i1", 10, m, "Chrome"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w, err := d.WatchStats(ctx, time.Now().Add(-time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(w.Nutzer) != 1 || w.Nutzer[0].Sekunden != 20 || w.Nutzer[0].Name != "Anna" || len(w.Titel) != 1 || len(w.Stunden) != 1 {
+		t.Fatalf("%+v", w)
+	}
+	if len(w.Methoden) != 1 || w.Methoden[0].Name != "transcode" {
+		t.Fatalf("Methode: %+v", w.Methoden)
+	}
+}

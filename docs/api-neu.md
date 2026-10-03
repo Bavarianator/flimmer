@@ -244,6 +244,7 @@ POST /api/tasks/{id}/run → 202 (läuft im Hintergrund), 409 wenn sie schon lä
 | `backup` | Sicherung erstellen | Wartung | 3 Uhr |
 | `images` | Bild-Cache aufräumen | Wartung | – (nur von Hand) |
 | `livetv` | Live-TV-Programm laden | Live-TV | 6 h nach dem letzten Laden |
+| `mediathek` | Mediathek-Abos prüfen | Bibliothek | 6 h nach der letzten Prüfung |
 
 Der letzte Lauf je Aufgabe steht in der Datenbank. Läufe, die ohne die Aufgabe passierten (Scan-Schleife, Nacht-Backup,
 wöchentliche Prüfung, Live-TV alle 6 h), zählen auch. `lastError` nur bei `lastResult: "error"`, `progress` (0..1) nur,
@@ -270,3 +271,61 @@ GET /api/vpn  → vpn.Status (angemeldet, Gäste 403), siehe docs/livetv-vpn.md
 
 Pfade und JSON wie in `docs/livetv-vpn.md`. Gäste bekommen 403. Die abspielbare URL aus `play` trägt ein Medien-Token im
 Pfad (`/api/m/<token>/livetv/channels/<id>/index.m3u8`), der Player braucht also keinen Header.
+
+### Statistik: `GET /api/admin/stats?tage=7|30|90|365` (A)
+
+```json
+{"wiedergabe": {"sekunden": 5400, "proTag": [{"tag":"2026-10-03","sekunden":5400}], "proStunde": [0, …, 5400, …],
+                "nutzer": [{"name":"Anna","farbe":220,"sekunden":5400,"titel":2}],
+                "titel": [{"id":"75c3…","titel":"Heat","serie":"","sekunden":5400,"nutzer":1}],
+                "methoden": [{"name":"direct","sekunden":5000},{"name":"transcode","sekunden":400}],
+                "clients": [{"name":"Chrome","sekunden":5400}]},
+ "bibliothek": {"proMonat": [{"monat":"2026-10","anzahl":3,"bytes":4500000000}], "aufloesung": [{"name":"4K","anzahl":1,"bytes":…}, …],
+                "codecs": [{"name":"h264","anzahl":120}], "hdr": 4, "titel": 300, "gesehen": 80,
+                "groesste": [{"id":"…","titel":"…","serie":"","bytes":…}]},
+ "speicher":   {"laufwerke": [{"path":"/media","free":…,"total":…}], "zuwachsMonat": 25000000000, "monateBisVoll": 9.4},
+ "downloads":  {"quellen": [{"quelle":"mediathek","anzahl":3,"bytes":…,"fehler":0}], "letzte": [Download, …]}}
+```
+
+Die Sehzeit zählen die `progress`-Herzschläge: Gezählt wird die Zeit seit dem vorigen Herzschlag, nicht nach einer Pause
+und nicht nach Lücken über 30 s (Tabelle `watch`, pro Profil, Titel und Stunde). `proTag` hat genau `tage` Einträge, `proStunde`
+24, beides in Ortszeit des Servers. `methoden[].name` ist `direct|remux|transcode` oder leer, wenn `play` fehlte. `proMonat`
+umfasst 12 Monate nach Dateidatum. `zuwachsMonat` ist der Schnitt der letzten 90 Tage, `monateBisVoll` fehlt ohne Zuwachs.
+`aufloesung` zählt nach Breite: ab 3200 = 4K, ab 1800 = 1080p, ab 1200 = 720p, sonst SD.
+
+### Mediathek (A)
+
+```
+GET    /api/mediathek/suche?q=&sender=&min=&offset= → {"treffer": Treffer[], "gesamt": 1130}   (502, wenn MediathekViewWeb fehlt)
+POST   /api/mediathek/laden {"treffer": Treffer}    → Download   (409: schon geladen oder in der Warteschlange)
+GET    /api/mediathek/downloads                     → Download[] (Mediathek und Abos, neueste zuerst, höchstens 100)
+DELETE /api/mediathek/downloads/{id}                → 204 (wartet/laeuft → abgebrochen; sonst aus der Liste, die Datei bleibt)
+GET    /api/mediathek/abos                          → Abo[]
+POST   /api/mediathek/abos {"text","sender","minMinuten"} → Abo (prüft danach sofort)
+DELETE /api/mediathek/abos/{id}                     → 204 (geladene Sendungen bleiben)
+```
+
+```json
+Treffer  {"id":"4sXH…","sender":"WDR","thema":"Tatort","titel":"Cash (2024)","beschreibung":"…","zeit":1790972400,
+          "dauer":5338,"groesse":1188036608,"webseite":"https://www.ardmediathek.de/…","video":"https://…mp4"}
+Download {"id":1,"quelle":"mediathek|abo|link|upload","titel":"Tatort - Cash (2024)","sender":"WDR","datei":"Tatort - Cash (2024).mp4",
+          "bytes":1188036608,"status":"wartet|laeuft|fertig|fehler|abgebrochen","fehler":"…","erstellt":"…","ende":"…","anteil":0.42}
+Abo      {"id":1,"text":"tatort","sender":"ARD","minMinuten":80,"erstellt":"…"}
+```
+
+Die Quelle ist MediathekViewWeb. `zeit` ist in Unix-Sekunden angegeben, `dauer` in Sekunden, `sender` ist der Kanalname von MediathekViewWeb (`ARD`, `ZDF`, `ARTE.DE`, `3Sat` …).
+Die Suche filtert diese Treffer heraus:
+- Fassungen mit Audiodeskription, Gebärdensprache, klarer Sprache, OV/OmU oder Untertiteln
+- HLS-Streams (`.m3u8`, fast nur ORF und SRF)
+- arte in anderen Sprachen als Deutsch
+
+`gesamt` zählt vor dem Filter. Seiten haben 30 Treffer, „Mehr laden“ über `offset`.
+
+Der Server lädt immer nur einen Download zur Zeit nach `<uploads>/Mediathek/<titel>.mp4`, und auf dem Laufwerk bleiben 10 GB frei. `titel` ist schon der Dateiname, den
+der Scan einordnet:
+- Film: „Titel (Jahr)“
+- Reihe: „Thema - Titel (Jahr)“
+- Folge: „Thema S01E03 Titel“
+
+`anteil` gibt es nur beim laufenden Download. Abos laden Sendungen der letzten 7 Tage, jede nur einmal (ID) und jeden Titel nur
+einmal (gleicher Film auf zwei Sendern). Link- und Upload-Downloads erscheinen nur in der Statistik.

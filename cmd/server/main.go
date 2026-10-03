@@ -29,6 +29,7 @@ import (
 	"github.com/Bavarianator/flimmer/internal/hwaccel"
 	"github.com/Bavarianator/flimmer/internal/images"
 	"github.com/Bavarianator/flimmer/internal/livetv"
+	"github.com/Bavarianator/flimmer/internal/mediathek"
 	"github.com/Bavarianator/flimmer/internal/meta"
 	"github.com/Bavarianator/flimmer/internal/optimize"
 	"github.com/Bavarianator/flimmer/internal/playback"
@@ -152,6 +153,10 @@ func main() {
 	// Live-TV lädt Kanäle und Programm im Hintergrund; ohne eingetragene Quelle bleibt es leer.
 	srv.LiveTV, srv.Port = livetv.New(store.DB, filepath.Join(cacheDir, "livetv")), port
 	go srv.LiveTV.Run(ctx)
+	// Mediathek: Downloads aus ARD, ZDF, arte … nach <uploads>/Mediathek, Abos alle 6 Stunden.
+	srv.Mediathek = mediathek.New(store, filepath.Join(srv.UploadDir, "Mediathek"))
+	srv.Mediathek.Rescan = lib.Rescan
+	go srv.Mediathek.Run(ctx)
 	// HTTPS nur für den Fernzugriff: Passwörter gehen nie unverschlüsselt durchs Internet, HTTP bleibt im Heimnetz.
 	var tlsLn net.Listener
 	if *httpsPort > 0 {

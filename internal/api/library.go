@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -276,10 +275,7 @@ func (s *Server) play(w http.ResponseWriter, r *http.Request) {
 		resp.Subtitles = append(resp.Subtitles, subtitleOut{sub, base + "/subs/" + strconv.Itoa(sub.Index) + ext})
 	}
 	log.Printf("play %q für %s: %s (%v)", it.Title, u.Name, plan.Method, plan.Reasons)
-	title := it.Title
-	if it.Series != "" {
-		title = fmt.Sprintf("%s – S%02dE%02d %s", it.Series, it.Season, it.Episode, it.Title)
-	}
+	title := titelVon(it)
 	s.streams.start(u.ID+"|"+it.ID, stream{User: u.Name, Title: title, Device: p.Name, Method: plan.Method, Light: plan.Light, Reasons: plan.Reasons,
 		color: u.Color, itemID: it.ID, client: clientName(r.UserAgent())})
 	s.activity.add("play", u.Name, "Spielt „"+title+"“")
@@ -315,8 +311,18 @@ func (s *Server) progress(w http.ResponseWriter, r *http.Request) {
 	}
 	u := userFrom(r)
 	uid := u.ID
-	s.streams.beat(uid+"|"+it.ID, stream{User: u.Name, Title: it.Title, color: u.Color, itemID: it.ID, client: clientName(r.UserAgent())},
+	client := clientName(r.UserAgent())
+	sek, method := s.streams.beat(uid+"|"+it.ID, stream{User: u.Name, Title: it.Title, color: u.Color, itemID: it.ID, client: client},
 		max(req.Pos, 0), dur, req.Paused)
+	if sek > 0 {
+		m := ""
+		if method != "" {
+			m = string(playbackMethod(method))
+		}
+		if err := s.DB.AddWatch(r.Context(), uid, it.ID, sek, m, client); err != nil {
+			log.Printf("Sehzeit: %v", err)
+		}
+	}
 	out, err := s.DB.SetProgress(r.Context(), uid, it.ID, max(req.Pos, 0), dur)
 	if writeErr(w, err) {
 		return

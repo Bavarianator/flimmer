@@ -50,6 +50,7 @@ const pfade = {
   raster: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
   download: 'M12 4v11M7 10l5 5 5-5M5 20h14',
   hochladen: 'M12 15V4M7 9l5-5 5 5M5 20h14',
+  statistik: 'M4 20.5h16M6.5 17v-5M10.5 17V7M14.5 17v-7M18.5 17V4.5',
   link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
   loeschen: 'M4 7h16M9 7V4h6v3M6.5 7l1 13h9l1-13',
   bild: 'M4 5h16v14H4zM4 16l5-5 4 4 2.5-2.5L20 17M15.5 8.5h1v1h-1z',

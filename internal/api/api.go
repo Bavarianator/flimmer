@@ -21,6 +21,7 @@ import (
 	"github.com/Bavarianator/flimmer/internal/hwaccel"
 	"github.com/Bavarianator/flimmer/internal/images"
 	"github.com/Bavarianator/flimmer/internal/livetv"
+	"github.com/Bavarianator/flimmer/internal/mediathek"
 	"github.com/Bavarianator/flimmer/internal/meta"
 	"github.com/Bavarianator/flimmer/internal/optimize"
 	"github.com/Bavarianator/flimmer/internal/party"
@@ -58,6 +59,7 @@ type Server struct {
 	Share     *share.Share                       // Einladungen; nil = aus
 	BackupDir string                             // Ziel der Sicherungen (wie db.Nightly); leer = keine Aufgabe „Sicherung“
 	LiveTV    *livetv.TV                         // nil = kein Live-TV
+	Mediathek *mediathek.M                       // nil = keine Mediathek-Downloads
 	Port      int                                // HTTP-Port, für die VPN-Adressen unter /api/vpn
 	party     *party.Hub
 
@@ -158,6 +160,17 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/tasks", adminOnly(s.taskList))
 	mux.HandleFunc("POST /api/tasks/{id}/run", adminOnly(s.runTask))
 	mux.HandleFunc("GET /api/logs", adminOnly(s.logs))
+	mux.HandleFunc("GET /api/admin/stats", adminOnly(s.stats))
+	if m := s.Mediathek; m != nil {
+		m.Frei = func() uint64 { f, _ := diskSpace(m.Dir); return f }
+		mux.HandleFunc("GET /api/mediathek/suche", adminOnly(s.mediathekSuche))
+		mux.HandleFunc("POST /api/mediathek/laden", adminOnly(s.mediathekLaden))
+		mux.HandleFunc("GET /api/mediathek/downloads", adminOnly(s.mediathekDownloads))
+		mux.HandleFunc("DELETE /api/mediathek/downloads/{id}", adminOnly(s.mediathekAbbrechen))
+		mux.HandleFunc("GET /api/mediathek/abos", adminOnly(s.mediathekAbos))
+		mux.HandleFunc("POST /api/mediathek/abos", adminOnly(s.logged("task", "Mediathek-Abo angelegt", s.mediathekAboNeu)))
+		mux.HandleFunc("DELETE /api/mediathek/abos/{id}", adminOnly(s.mediathekAboWeg))
+	}
 	// Alle festen Nutzer (keine Gäste): die Android-App merkt sich die Adresse für unterwegs.
 	vpnH := vpn.Handler(s.Port)
 	mux.HandleFunc("GET /api/vpn", func(w http.ResponseWriter, r *http.Request) {

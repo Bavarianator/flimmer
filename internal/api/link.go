@@ -2,6 +2,7 @@ package api
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"io"
 	"log"
@@ -14,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/Bavarianator/flimmer/internal/db"
 )
 
 // Video per Link (/hochladen): yt-dlp lädt von YouTube, Vimeo, Mediatheken, Teams/SharePoint … oder einer direkten
@@ -163,12 +166,34 @@ func (s *Server) linkLaden(bin string, j *linkJob, name, cookies string) {
 			setze(func() { j.Name = datei })
 		}
 	}
+	// Statistik: nur Host und Pfad, die Query kann ein Zugangstoken sein
+	quelle := j.URL
+	if p, perr := url.Parse(j.URL); perr == nil {
+		quelle = p.Host + p.Path
+	}
 	if err != nil {
 		log.Printf("link %d: %v", j.ID, err)
 		setze(func() { j.Fehler = err.Error() })
+		s.notiereDownload("link", j.user, cmp(j.Name, quelle), quelle, 0, err)
 		return
 	}
 	log.Printf("link %d: %s fertig", j.ID, j.Name)
 	setze(func() { j.Anteil, j.Fertig = 1, true })
+	var n int64
+	if fi, err := os.Stat(filepath.Join(s.UploadDir, j.Name)); err == nil {
+		n = fi.Size()
+	}
+	s.notiereDownload("link", j.user, j.Name, quelle, n, nil)
 	s.Lib.Rescan()
+}
+
+// notiereDownload trägt einen fertigen oder gescheiterten Upload/Link-Download für die Statistik ein.
+func (s *Server) notiereDownload(quelle, user, titel, url string, bytes int64, fehler error) {
+	dl := db.Download{Quelle: quelle, User: user, Titel: titel, URL: url, Bytes: bytes, Status: "fertig"}
+	if fehler != nil {
+		dl.Status, dl.Fehler = "fehler", fehler.Error()
+	}
+	if _, err := s.DB.AddDownload(context.Background(), dl); err != nil {
+		log.Printf("Download notieren: %v", err)
+	}
 }

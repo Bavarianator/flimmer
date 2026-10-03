@@ -21,6 +21,8 @@ import { LiveTVAdmin } from './LiveTV'
 import { Netzwerk } from './Netzwerk'
 import { Aufgaben } from './Aufgaben'
 import { Sicherung } from './Sicherung'
+import { Statistik } from './Statistik'
+import { Mediathek } from './Mediathek'
 
 ergaenze(
   { 'dash.scannen': 'Bibliothek scannen', 'dash.scan.gestartet': 'Die Bibliothek wird neu eingelesen.' },
@@ -29,11 +31,13 @@ ergaenze(
 
 const BEREICHE: Record<string, [string, ComponentType]> = {
   '': ['nav.uebersicht', Uebersicht],
+  statistik: ['nav.statistik', Statistik],
   allgemein: ['nav.allgemein', Allgemein],
   benutzer: ['nav.benutzer', Benutzer],
   einladungen: ['nav.einladungen', Einladungen],
   bibliotheken: ['nav.bibliotheken', Bibliotheken],
   metadaten: ['nav.metadaten', Metadaten],
+  mediathek: ['nav.mediathek', Mediathek],
   umwandlung: ['nav.umwandlung', Umwandlung],
   geraete: ['nav.geraete-aktivitaeten', Geraete],
   livetv: ['nav.livetv-aufnahmen', LiveTVAdmin],

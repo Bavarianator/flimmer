@@ -37,7 +37,7 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 	if writeErr(w, err) {
 		return
 	}
-	_, err = io.Copy(f, http.MaxBytesReader(w, r.Body, maxUpload))
+	n, err := io.Copy(f, http.MaxBytesReader(w, r.Body, maxUpload))
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
@@ -56,6 +56,7 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("upload: %s von %s", filepath.Base(ziel), u.Name)
+	s.notiereDownload("upload", u.ID, filepath.Base(ziel), "", n, nil)
 	s.Lib.Rescan()
 	writeJSON(w, map[string]string{"name": filepath.Base(ziel)})
 }

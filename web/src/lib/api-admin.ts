@@ -292,3 +292,74 @@ export const unsicher = () => liste(api<Unsicher[] | null>('/api/settings/review
 export const kandidaten = (id: string, q: string) => liste(api<Kandidat[] | null>('/api/items/' + k(id) + '/search?q=' + k(q)))
 export const identifizieren = (id: string, tmdbId: number) => leer(api('/api/items/' + k(id) + '/identify', { tmdbId }))
 export const koppeln = (code: string) => api<{ device: string }>('/api/pair/' + k(code) + '/confirm', {})
+
+// ---------- Statistik und Mediathek (internal/api/stats.go, internal/api/mediathek.go) ----------
+export interface Download {
+  id: number
+  quelle: 'mediathek' | 'abo' | 'link' | 'upload'
+  titel: string
+  sender?: string
+  datei?: string
+  bytes: number
+  status: 'wartet' | 'laeuft' | 'fertig' | 'fehler' | 'abgebrochen'
+  fehler?: string
+  erstellt: string
+  ende?: string
+  anteil?: number
+}
+
+export interface Statistik {
+  wiedergabe: {
+    sekunden: number
+    proTag: { tag: string; sekunden: number }[]
+    proStunde: number[]
+    nutzer: { name: string; farbe: number; sekunden: number; titel: number }[]
+    titel: { id: string; titel: string; serie?: string; sekunden: number; nutzer: number }[]
+    methoden: { name: string; sekunden: number }[]
+    clients: { name: string; sekunden: number }[]
+  }
+  bibliothek: {
+    proMonat: { monat: string; anzahl: number; bytes: number }[]
+    aufloesung: { name: string; anzahl: number; bytes: number }[]
+    codecs: { name: string; anzahl: number }[]
+    hdr: number
+    titel: number
+    gesehen: number
+    groesste: { id: string; titel: string; serie?: string; bytes: number }[]
+  }
+  speicher: { laufwerke: { path: string; free: number; total: number }[]; zuwachsMonat: number; monateBisVoll?: number }
+  downloads: { quellen: { quelle: string; anzahl: number; bytes: number; fehler: number }[]; letzte: Download[] }
+}
+
+export interface Treffer {
+  id: string
+  sender: string
+  thema: string
+  titel: string
+  beschreibung?: string
+  zeit: number // Unix-Sekunden
+  dauer: number // Sekunden
+  groesse?: number
+  webseite?: string
+  video: string
+}
+
+export interface Abo {
+  id: number
+  text: string
+  sender?: string
+  minMinuten?: number
+  erstellt: string
+}
+
+export const statistik = (tage: number) => api<Statistik>('/api/admin/stats?tage=' + tage)
+export const mediathekSuche = (q: string, sender: string, min: number, offset = 0) =>
+  api<{ treffer: Treffer[] | null; gesamt: number }>('/api/mediathek/suche?q=' + k(q) + '&sender=' + k(sender) + '&min=' + min + '&offset=' + offset).then(
+    (r) => ({ treffer: r.treffer || [], gesamt: r.gesamt }),
+  )
+export const mediathekLaden = (treffer: Treffer) => api<Download>('/api/mediathek/laden', { treffer })
+export const mediathekDownloads = () => liste(api<Download[] | null>('/api/mediathek/downloads'))
+export const mediathekAbbrechen = (id: number) => leer(api('/api/mediathek/downloads/' + id, undefined, 'DELETE'))
+export const abos = () => liste(api<Abo[] | null>('/api/mediathek/abos'))
+export const aboNeu = (a: { text: string; sender: string; minMinuten: number }) => api<Abo>('/api/mediathek/abos', a)
+export const aboWeg = (id: number) => leer(api('/api/mediathek/abos/' + id, undefined, 'DELETE'))
