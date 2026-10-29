@@ -46,6 +46,7 @@ ENTRYPOINT ["/usr/local/bin/flimmer-relay", "-addr", ":8098", "-db", "/data/rela
 FROM debian:stable-slim
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ffmpeg ca-certificates python3 \
+    i965-va-driver intel-media-va-driver \
  && rm -rf /var/lib/apt/lists/*
 # „Von Link laden“ (/hochladen): aktuelles yt-dlp statt Debians, das hinkt YouTube-Änderungen hinterher.
 ADD --chmod=755 https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp /usr/local/bin/yt-dlp
