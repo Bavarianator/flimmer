@@ -113,6 +113,7 @@ export interface Details extends Item {
   subs: Spur[]
   chapters?: { start: number; name: string; image?: string /* Standbild-URL */ }[]
   locked?: string[]
+  queued?: boolean // zur Umwandlung vorgemerkt (nur Admins)
 }
 
 export interface SerienInfo {

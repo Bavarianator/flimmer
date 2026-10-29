@@ -381,6 +381,7 @@ func startOptimizer(ctx context.Context, srv *api.Server, store *db.DB, dir stri
 		Busy:    srv.Busy,
 		Window:  func() (int, int, bool) { return settings().Window() },
 		MinFree: uint64(settings().MinFreeGB) << 30,
+		Queued:  store.OptimizeVorgemerkt,
 	})
 	srv.Optimizer.Store(o)
 	go o.Run(ctx)

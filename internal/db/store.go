@@ -151,6 +151,39 @@ func (d *DB) ensureSecret(ctx context.Context) error {
 	return err
 }
 
+// --- Vorgemerkte Umwandlung (Titel im Menü „Umwandeln“ angemeldet) ---
+
+// OptimizeAnmelden setzt einen Titel auf die Warteschlange für die Hintergrund-Optimierung.
+func (d *DB) OptimizeAnmelden(ctx context.Context, id string) error {
+	_, err := d.ExecContext(ctx, "INSERT OR IGNORE INTO opt_queue(id, since) VALUES(?, ?)", id, time.Now().Unix())
+	return err
+}
+
+// OptimizeAbmelden nimmt einen Titel aus der Warteschlange.
+func (d *DB) OptimizeAbmelden(ctx context.Context, id string) error {
+	_, err := d.ExecContext(ctx, "DELETE FROM opt_queue WHERE id = ?", id)
+	return err
+}
+
+// OptimizeVorgemerkt listet die angemeldeten Titel-IDs, älteste zuerst.
+func (d *DB) OptimizeVorgemerkt(ctx context.Context) ([]string, error) {
+	rows, err := d.QueryContext(ctx, "SELECT id FROM opt_queue ORDER BY since, id")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return out, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+
 // --- Benutzer ---
 
 type User struct {

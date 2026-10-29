@@ -150,6 +150,9 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("POST /api/invites/redeem", s.logged("invite", "Einladung eingelöst", s.Share.RedeemHandler)) // ohne Anmeldung, eigenes Rate-Limit
 	}
 	mux.HandleFunc("GET /api/settings/optimize", adminOnly(s.optimizeStatus))
+	mux.HandleFunc("GET /api/settings/optimize/queue", adminOnly(s.optimizeWarteschlange))
+	mux.HandleFunc("POST /api/settings/optimize/queue", adminOnly(s.logged("task", "Titel zum Umwandeln vorgemerkt", s.optimizeWarteschlangeNeu)))
+	mux.HandleFunc("DELETE /api/settings/optimize/queue/{id}", adminOnly(s.logged("task", "Vormerkung entfernt", s.optimizeWarteschlangeWeg)))
 	mux.HandleFunc("GET /api/settings/backup", adminOnly(s.logged("backup", "Sicherung heruntergeladen", s.backupDownload)))
 	mux.HandleFunc("POST /api/settings/restore", adminOnly(s.logged("backup", "Sicherung eingespielt", s.restore)))
 

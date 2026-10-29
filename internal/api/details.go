@@ -68,6 +68,7 @@ type itemDetail struct {
 	Subs      []streamOut  `json:"subs"`
 	Chapters  []chapterOut `json:"chapters,omitempty"`
 	Locked    []string     `json:"locked,omitempty"`
+	Queued    bool         `json:"queued,omitempty"` // zur Umwandlung vorgemerkt (Menü „Umwandeln“), nur für Admins
 }
 
 // deviceProfileOf liest das gespeicherte Geräteprofil aus ?device= (für GET-Routen ohne Body); ohne gilt ein leeres.
@@ -110,6 +111,12 @@ func (s *Server) detail(r *http.Request, it *scan.Item) itemDetail {
 	}
 	if u := userFrom(r); u != nil && u.Admin {
 		d.Path = it.Path
+		for _, q := range s.queuedIds(r.Context()) {
+			if q == it.ID {
+				d.Queued = true
+				break
+			}
+		}
 	}
 	for _, st := range it.Media.Streams {
 		out := streamOut{Index: st.Index, Codec: st.Codec, Lang: st.Language, Title: st.Title, Channels: st.Channels, Default: st.Default, Forced: st.Forced}

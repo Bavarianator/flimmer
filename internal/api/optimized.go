@@ -118,6 +118,61 @@ func (s *Server) optimizeStatus(w http.ResponseWriter, r *http.Request) {
 	o.StatusHandler(w, r)
 }
 
+// queuedIds listet vorgemerkte Titel-IDs; Fehlern (z. B. ältere Datenbank ohne Tabelle) nur mit leerer Liste.
+func (s *Server) queuedIds(ctx context.Context) []string {
+	ids, err := s.DB.OptimizeVorgemerkt(ctx)
+	if err != nil {
+		return nil
+	}
+	return ids
+}
+
+// optimizeWarteschlange listet die vorgemerkten Titel samt Namen (oldest first, entfernt veschwundene nicht).
+func (s *Server) optimizeWarteschlange(w http.ResponseWriter, r *http.Request) {
+	ids, err := s.DB.OptimizeVorgemerkt(r.Context())
+	if writeErr(w, err) {
+		return
+	}
+	type zeile struct {
+		ID    string `json:"id"`
+		Title string `json:"title"`
+		Since string `json:"since"`
+	}
+	var out []zeile
+	for _, id := range ids {
+		z := zeile{ID: id, Title: id}
+		if it := s.Lib.Get(id); it != nil {
+			z.Title, z.Since = it.Title, it.Added.Format("2006-01-02 15:04")
+		}
+		out = append(out, z)
+	}
+	writeJSON(w, out)
+}
+
+// optimizeWarteschlangeNeu merkt einen Titel zum Umwandeln vor (Menü „Umwandeln“).
+func (s *Server) optimizeWarteschlangeNeu(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ID string `json:"id"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	req.ID = strings.TrimSpace(req.ID)
+	if req.ID == "" || (s.Lib.Get(req.ID) == nil) {
+		http.Error(w, "Titel ist nicht im Katalog", http.StatusBadRequest)
+		return
+	}
+	if !writeErr(w, s.DB.OptimizeAnmelden(r.Context(), req.ID)) {
+		writeJSON(w, map[string]any{"ok": true})
+	}
+}
+
+func (s *Server) optimizeWarteschlangeWeg(w http.ResponseWriter, r *http.Request) {
+	if !writeErr(w, s.DB.OptimizeAbmelden(r.Context(), r.PathValue("id"))) {
+		writeJSON(w, map[string]any{"ok": true})
+	}
+}
+
 // optimizeItems: Katalog für die Hintergrund-Optimierung, neueste zuerst.
 func (s *Server) OptimizeItems(ctx context.Context) ([]optimize.Item, error) {
 	var out []optimize.Item

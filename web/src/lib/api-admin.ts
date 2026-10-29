@@ -221,6 +221,7 @@ export interface Details extends Item {
   path?: string
   container?: string
   locked?: string[]
+  queued?: boolean // zur Umwandlung vorgemerkt (nur Admins)
 }
 
 export interface MetaAenderung {
@@ -288,6 +289,17 @@ export const fernzugriff = () => api<Remote>('/api/remote')
 export const fernzugriffPruefen = () => api<Remote>('/api/remote/check', {})
 export const appCode = () => api<{ code: string; expires: string }>('/api/remote/pair', {})
 export const optimieren = () => api<Optimize>('/api/settings/optimize')
+
+// Vorgemerkte Umwandlung (Menü „Umwandeln“ am Titel): Liste, An- und Abmelden.
+export interface OptWarteschlange {
+  id: string
+  title: string
+  since?: string
+}
+export const optimierenVorgemerkt = () => liste(api<OptWarteschlange[] | null>('/api/settings/optimize/queue'))
+export const optimierenMelden = (id: string) => leer(api('/api/settings/optimize/queue', { id }))
+export const optimierenWeg = (id: string) => leer(api('/api/settings/optimize/queue/' + k(id), undefined, 'DELETE'))
+
 export const diagnose = () => api<Diag>('/api/diagnostics')
 export const unsicher = () => liste(api<Unsicher[] | null>('/api/settings/review'))
 export const kandidaten = (id: string, q: string) => liste(api<Kandidat[] | null>('/api/items/' + k(id) + '/search?q=' + k(q)))

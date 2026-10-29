@@ -46,8 +46,14 @@ ENTRYPOINT ["/usr/local/bin/flimmer-relay", "-addr", ":8098", "-db", "/data/rela
 FROM debian:stable-slim
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ffmpeg ca-certificates python3 \
-    i965-va-driver intel-media-va-driver \
+    intel-media-va-driver \
  && rm -rf /var/lib/apt/lists/*
+# VAAPI für ältere Intel-iGPUs (Gen8/Gen9, z. B. Braswell): libva 2.23 + i965-Treiber-Shaders-Build aus Ubuntu; die Debs sind amd64, auf arm64 bleibt es bei den Debian-Treibern.
+COPY deploy/va-deb /tmp/va-deb
+RUN if [ "$(dpkg --print-architecture)" = amd64 ]; then \
+      apt-get remove -y --allow-remove-essential i965-va-driver >/dev/null 2>&1 || true; \
+      dpkg -i --force-all /tmp/va-deb/*.deb; \
+    fi; rm -rf /tmp/va-deb
 # „Von Link laden“ (/hochladen): aktuelles yt-dlp statt Debians, das hinkt YouTube-Änderungen hinterher.
 ADD --chmod=755 https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp /usr/local/bin/yt-dlp
 COPY --from=server /flimmer /usr/local/bin/flimmer

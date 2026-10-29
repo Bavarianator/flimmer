@@ -22,6 +22,31 @@ func open(t *testing.T) (*DB, string) {
 	return d, dir
 }
 
+func TestOptimizeWarteschlange(t *testing.T) {
+	d, _ := open(t)
+	leer, err := d.OptimizeVorgemerkt(ctx)
+	if err != nil || len(leer) != 0 {
+		t.Fatalf("anfangs leer: %v %v", leer, err)
+	}
+	if err := d.OptimizeAnmelden(ctx, "b.mp4"); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.OptimizeAnmelden(ctx, "a.mp4"); err != nil {
+		t.Fatal(err)
+	}
+	// Beide im selben Sekundenfenster: sortiert nach ID (a.mp4 < b.mp4)
+	ids, err := d.OptimizeVorgemerkt(ctx)
+	if err != nil || len(ids) != 2 || ids[0] != "a.mp4" || ids[1] != "b.mp4" {
+		t.Fatalf("vorgemerkt: %v %v", ids, err)
+	}
+	if err := d.OptimizeAbmelden(ctx, "b.mp4"); err != nil {
+		t.Fatal(err)
+	}
+	if ids, _ := d.OptimizeVorgemerkt(ctx); len(ids) != 1 || ids[0] != "a.mp4" {
+		t.Fatalf("nach Abmelden: %v", ids)
+	}
+}
+
 func TestMigrateAndSettings(t *testing.T) {
 	d, dir := open(t)
 	var v int

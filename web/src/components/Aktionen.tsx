@@ -13,6 +13,7 @@ import {
   sammlungenApi,
   serien,
   setFavorit,
+  setze,
   useGecacht,
   warteschlange,
   type Details,
@@ -22,6 +23,7 @@ import {
   type Wiedergabeliste,
 } from '../lib/api'
 import { geraet } from '../lib/device'
+import { optimierenMelden, optimierenWeg } from '../lib/api-admin'
 import { Gruppe, useFokus } from '../lib/focus'
 import { ergaenze, t } from '../lib/i18n'
 import { go, pfad } from '../lib/router'
@@ -43,6 +45,9 @@ ergaenze({
   'akt.meta': 'Metadaten bearbeiten',
   'akt.abbrechen': 'Abbrechen',
   'akt.hinzufuegen': 'Hinzufügen',
+  'akt.umwandeln': 'Umwandeln',
+  'akt.umwandeln.weg': 'Umwandeln abbestellen',
+  'akt.wartet.fertig': 'Der Titel wird abends umgewandelt.',
   'akt.neue.sammlung': 'Neue Sammlung …',
   'akt.neue.liste': 'Neue Wiedergabeliste …',
   'akt.name': 'Name',
@@ -142,6 +147,16 @@ export function AktionenMenue(p: { ziel: Ziel; anker: Anker; onZu: () => void; a
   const { it, serie } = p.ziel
   const key = serie && it.series ? 'serie:' + it.series : it.id
   const titel = serie && it.series ? it.series : (it.meta && it.meta.title) || it.title
+  // „Umwandeln“: steht der Titel schon auf der Vormerkliste (nur Admins, aus den cached Details)?
+  const drin = gecacht<Details>('detail:' + it.id)
+  const gemerkt = admin() && !serie && !!drin?.queued
+  const vormerken = (an: boolean) => {
+    ;(an ? optimierenMelden(it.id) : optimierenWeg(it.id)).then(
+      () => drin && setze('detail:' + it.id, { ...drin, queued: an }),
+      () => {},
+    )
+    gewaehlt.current = true
+  }
   const dialog = (a: Art) => () => {
     gewaehlt.current = true
     setArt(a)
@@ -172,6 +187,8 @@ export function AktionenMenue(p: { ziel: Ziel; anker: Anker; onZu: () => void; a
   if (p.aw) e.push({ label: t('akt.auswaehlen'), icon: 'haken', onPress: () => p.aw!.start(key) })
   if (admin() && samm !== null) e.push({ label: t('akt.zu.sammlung'), icon: 'sammlung', onPress: dialog('sammlung') })
   if (listen !== null) e.push({ label: t('akt.zu.liste'), icon: 'liste', onPress: dialog('liste') })
+  if (gemerkt) e.push({ label: t('akt.umwandeln.weg'), icon: 'schliessen', onPress: () => vormerken(false) })
+  else if (drin) e.push({ label: t('akt.umwandeln'), icon: 'film', onPress: () => vormerken(true) })
   if (!serie && geraet !== 'tv') e.push({ label: t('akt.download'), icon: 'download', onPress: () => herunterladen(it.id) })
   if (p.extra && p.extra.length) e.push({ trenner: true }, ...p.extra)
   if (!serie) {

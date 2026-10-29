@@ -2,7 +2,7 @@
 // Flimmer wählt Encoder und Qualität selbst; im Dashboard lassen sich Encoder und Tempo erzwingen.
 import { useEffect, useState } from 'preact/hooks'
 import { useDaten } from '../../lib/api'
-import { diagnose, einstellungen, einstellungenSetzen, optimieren, type Settings } from '../../lib/api-admin'
+import { diagnose, einstellungen, einstellungenSetzen, optimieren, optimierenVorgemerkt, optimierenWeg, type OptWarteschlange, type Settings } from '../../lib/api-admin'
 import { ergaenze, t } from '../../lib/i18n'
 import { Button } from '../../components/Button'
 import { Abschnitt, Feld, Geladen, Messwert, Wahl, Zeile, melde, meldeFehler } from './teile'
@@ -30,6 +30,10 @@ ergaenze(
     'umw.opt.stand': '{done} fertig · {pending} warten · Fenster {fenster}',
     'umw.opt.jetzt': 'Gerade: {titel} ({n} %)',
     'umw.opt.wartet': 'Startet, sobald der Server bereit ist.',
+    'umw.opt.art': 'Im Menü vorgemerkt',
+    'umw.opt.art.text': 'Titel, die du im Menü (…) am Film oder bei der Folge mit „Umwandeln“ vorgemerkt hast. Sie kommen zusätzlich immer dran, auch wenn kein Gerät Rot zeigt – ab {fenster}.',
+    'umw.opt.art.weg': 'Vormerkung entfernen',
+    'umw.opt.art.leer': 'Noch nichts vorgemerkt. Öffne das Menü (…) am Titel und wähle „Umwandeln“.',
   },
   {
     'umw.hw': 'Hardware acceleration',
@@ -53,6 +57,10 @@ ergaenze(
     'umw.opt.stand': '{done} done · {pending} waiting · window {fenster}',
     'umw.opt.jetzt': 'Currently: {titel} ({n} %)',
     'umw.opt.wartet': 'Starts as soon as the server is ready.',
+    'umw.opt.art': 'Queued in menus',
+    'umw.opt.art.text': 'Titles queued with “Convert” in the (…) menu of a film or episode. They always get converted too, even when no device shows red – starting at {fenster}.',
+    'umw.opt.art.weg': 'Remove from queue',
+    'umw.opt.art.leer': 'Nothing queued yet. Open the (…) menu of a title and choose “Convert”.',
   },
 )
 
@@ -78,6 +86,7 @@ export function Umwandlung() {
         <HwSetzen neu={() => d.neu()} />
       </Abschnitt>
       <Nachts />
+      <Vorgemerkt />
     </>
   )
 }
@@ -139,6 +148,47 @@ function HwSetzen({ neu }: { neu: () => void }) {
         )}
       </Geladen>
     </>
+  )
+}
+
+// Vorgemerkte Titel (Menü „Umwandeln“): die kommen unabhängig von der Gerätempel immer dran.
+function Vorgemerkt() {
+  const s = useDaten('admin.einstellungen', einstellungen)
+  const q = useDaten('admin.optimieren.warteschlange', optimierenVorgemerkt)
+  useEffect(() => {
+    const f = () => q.neu()
+    window.addEventListener('focus', f)
+    return () => window.removeEventListener('focus', f)
+  }, [])
+  const fenster = s.daten ? (s.daten.optimize.off ? '' : `${s.daten.optimize.from || 2}–${s.daten.optimize.to || 6} Uhr`) : ''
+  const weg = (e: OptWarteschlange) => optimierenWeg(e.id).then(() => q.neu(), meldeFehler)
+  return (
+    <Abschnitt titel={t('umw.opt.art')} text={fenster ? t('umw.opt.art.text', { fenster }) : ''}>
+      <Geladen z={q}>
+        {(liste) =>
+          liste.length ? (
+            <>
+              {liste.map((e, i) => (
+                <Zeile
+                  key={e.id}
+                  fk={'umw-q-' + i}
+                  icon="film"
+                  titel={e.title}
+                  unter={e.since}
+                  rechts={
+                    <Button fokusKey={'umw-q-weg-' + i} variante="geist" onPress={() => weg(e)}>
+                      {t('umw.opt.art.weg')}
+                    </Button>
+                  }
+                />
+              ))}
+            </>
+          ) : (
+            <p class="t-klein leise admin-absatz">{t('umw.opt.art.leer')}</p>
+          )
+        }
+      </Geladen>
+    </Abschnitt>
   )
 }
 

@@ -48,6 +48,7 @@ type Options struct {
 	Busy     func() bool                                  // läuft gerade eine Wiedergabe?
 	Window   func() (from, to int, on bool)               // volle Stunden, Standard 2–6 Uhr; on=false schaltet ab
 	MinFree  uint64                                       // so viel muss frei bleiben, Standard 20 GB
+	Queued   func(ctx context.Context) ([]string, error)  // vorgemerkte Titel-IDs (Menü „Umwandeln“)
 }
 
 // Status für die Einstellungsseite.
@@ -238,6 +239,16 @@ func (o *Optimizer) pending(ctx context.Context) ([]Item, error) {
 	}
 	profiles := o.opts.Profiles(ctx)
 	speed := o.opts.Speed()
+	// Vorgemerkte Titel (Menü „Umwandeln“) kommen auch dann ran, wenn kein Gerät Rot zeigt.
+	gemerkt := map[string]bool{}
+	if o.opts.Queued != nil {		ids, err := o.opts.Queued(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range ids {
+			gemerkt[id] = true
+		}
+	}
 	known := map[string]bool{}
 	var todo []Item
 	for _, it := range items {
@@ -245,7 +256,7 @@ func (o *Optimizer) pending(ctx context.Context) ([]Item, error) {
 		if it.Media == nil || o.Lookup(it.ID, it.Path) != "" || o.failedReason(it.ID) != "" {
 			continue
 		}
-		if !slices.ContainsFunc(profiles, func(p playback.Profile) bool { return playback.Decide(it.Media, p, speed).Light == playback.Red }) {
+		if !gemerkt[it.ID] && !slices.ContainsFunc(profiles, func(p playback.Profile) bool { return playback.Decide(it.Media, p, speed).Light == playback.Red }) {
 			continue
 		}
 		if v := it.Media.First("video"); v != nil && v.HDR == "dv" && v.DVCompat == 0 {
