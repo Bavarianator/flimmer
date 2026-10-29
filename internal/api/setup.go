@@ -13,6 +13,7 @@ import (
 
 	"github.com/Bavarianator/flimmer/internal/db"
 	"github.com/Bavarianator/flimmer/internal/ffmpeg"
+	"github.com/Bavarianator/flimmer/internal/hwaccel"
 	"github.com/Bavarianator/flimmer/internal/scan"
 	"github.com/Bavarianator/flimmer/internal/update"
 )
@@ -103,7 +104,9 @@ func (s *Server) settings(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, map[string]any{"serverName": set.ServerName, "language": cmp(set.Language, "de"), "dirs": nonNil(set.Dirs),
 		"tmdbKey": set.TMDBKey != "", "suggestions": suggestions(), "ffmpeg": s.ffmpegInfo(), "lanUrl": s.LANURL,
-		"updateCheck": !set.NoUpdates, "remote": set.Remote, "optimize": set.Optimize, "remoteAvailable": s.Remote != nil, "update": s.availableUpdate(), "version": update.Version})
+		"updateCheck": !set.NoUpdates, "remote": set.Remote, "optimize": set.Optimize, "remoteAvailable": s.Remote != nil,
+		"update": s.availableUpdate(), "version": update.Version,
+		"hw": map[string]any{"encoder": set.HwEncoder, "speed": set.HwSpeed}})
 }
 
 func (s *Server) availableUpdate() *update.Release {
@@ -122,6 +125,10 @@ func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {
 		Update     *bool        `json:"updateCheck"`
 		Remote     *bool        `json:"remote"`
 		Optimize   *db.Optimize `json:"optimize"`
+		Hw         *struct {
+			Encoder *string  `json:"encoder"`
+			Speed   *float64 `json:"speed"` // 0 = gemessenes Tempo
+		} `json:"hw"`
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -134,6 +141,18 @@ func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Fixe Tempo- und Encoder-Vorgaben prüfen, bevor gespeichert wird.
+	if hw := req.Hw; hw != nil {
+		if hw.Encoder != nil && !hwaccel.ValidEncoder(strings.TrimSpace(*hw.Encoder)) {
+			http.Error(w, "Unbekannter Encoder: "+(*hw.Encoder), http.StatusBadRequest)
+			return
+		}
+		if hw.Speed != nil && (*hw.Speed < 0 || *hw.Speed > 100) {
+			http.Error(w, "Tempo muss zwischen 0 und 100× liegen", http.StatusBadRequest)
+			return
+		}
+	}
+	var hwUmstellen bool
 	err := s.DB.UpdateSettings(r.Context(), func(set *db.Settings) {
 		if req.ServerName != nil {
 			set.ServerName = strings.TrimSpace(*req.ServerName)
@@ -157,6 +176,16 @@ func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {
 			o.From, o.To, o.MinFreeGB = min(max(o.From, 0), 23), min(max(o.To, 0), 23), max(o.MinFreeGB, 0)
 			set.Optimize = *o
 		}
+		if hw := req.Hw; hw != nil {
+			hwUmstellen = true
+			if hw.Encoder != nil {
+				// leer → „auto“; DetectForced behandelt beide als automatische Wahl.
+				set.HwEncoder = cmp(strings.TrimSpace(*hw.Encoder), "auto")
+			}
+			if hw.Speed != nil {
+				set.HwSpeed = min(*hw.Speed, 100)
+			}
+		}
 	})
 	if writeErr(w, err) {
 		return
@@ -166,6 +195,9 @@ func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Remote != nil && s.RemoteToggle != nil {
 		s.RemoteToggle(*req.Remote)
+	}
+	if hwUmstellen && s.HwRecheck != nil {
+		s.HwRecheck() // Encoder oder Tempo umgestellt: neu messen, ohne Neustart
 	}
 	s.settings(w, r)
 }

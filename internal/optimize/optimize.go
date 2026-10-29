@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Bavarianator/flimmer/internal/ffmpeg"
@@ -67,7 +68,9 @@ type Job struct {
 
 type Optimizer struct {
 	opts Options
-	now  func() time.Time
+	// accel ist austauschbar (Switch), während opts.Accel beim ersten Start hereinkommt.
+	accel atomic.Pointer[hwaccel.Accel]
+	now   func() time.Time
 
 	running sync.Mutex // ein Job zur Zeit: Nachtfenster oder „Jetzt ausführen“
 	mu      sync.Mutex
@@ -94,6 +97,18 @@ func New(opts Options) *Optimizer {
 	}
 	return &Optimizer{opts: opts, now: time.Now, failed: map[string]string{}, hdr: map[string]bool{}}
 }
+
+// Accel liefert den aktuellen Encoder.
+func (o *Optimizer) Accel() hwaccel.Accel {
+	if a := o.accel.Load(); a != nil {
+		return *a
+	}
+	return o.opts.Accel
+}
+
+// Switch nimmt einen neuen Encoder auf, nachdem die Messung neu lief (Dashboard-Änderung),
+// ohne den Optimierer selbst neu zu starten – ein laufender Job bleibt unberührt.
+func (o *Optimizer) Switch(a hwaccel.Accel) { o.accel.Store(&a) }
 
 // Lookup liefert die optimierte Version eines Titels oder "", wenn es keine (aktuelle) gibt.
 // Ist das Original neuer als die Version, gilt sie als veraltet.
@@ -190,10 +205,11 @@ func (o *Optimizer) RunNow(ctx context.Context, progress func(float64)) error {
 
 // job kodiert einen Titel bis deadline und hält Status und Fehlschläge fest.
 func (o *Optimizer) job(ctx context.Context, it Item, deadline time.Time) {
-	err := o.encode(ctx, it, deadline, o.opts.Accel)
-	if errors.Is(err, errFailed) && len(o.opts.Accel.Encode) > 0 {
+	accel := o.Accel()
+	err := o.encode(ctx, it, deadline, accel)
+	if errors.Is(err, errFailed) && len(accel.Encode) > 0 {
 		// Wie beim Streaming: Die GPU dekodiert nicht jeden Codec (z. B. HEVC 10 bit auf alter Hardware) → Software.
-		log.Printf("optimize: %s mit %s gescheitert, versuche Software: %v", it.Title, o.opts.Accel.Name, err)
+		log.Printf("optimize: %s mit %s gescheitert, versuche Software: %v", it.Title, accel.Name, err)
 		err = o.encode(ctx, it, deadline, hwaccel.Accel{})
 	}
 	var slow errTooSlow

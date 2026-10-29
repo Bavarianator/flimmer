@@ -52,6 +52,8 @@ type Server struct {
 	Remote    *remote.Remote  // nil = kein Fernzugriff möglich
 	// RemoteToggle startet bzw. stoppt die Portfreigabe, wenn der Admin den Fernzugriff umschaltet.
 	RemoteToggle func(on bool)
+	// HwRecheck miss die Hardware neu (Dashboard: Encoder erzwingen / festes Tempo), nil = nicht möglich.
+	HwRecheck func()
 	FFmpeg       atomic.Bool                   // ffmpeg/ffprobe gefunden
 	HW           atomic.Pointer[hwaccel.Accel] // gesetzt, sobald hwaccel.Detect fertig ist
 

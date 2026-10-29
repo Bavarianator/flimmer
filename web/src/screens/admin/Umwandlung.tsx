@@ -1,29 +1,60 @@
 // Dashboard › Umwandlung: erkannte Hardware-Beschleunigung und „Nachts vorbereiten“.
-// Flimmer wählt Encoder und Qualität selbst; die Stellschrauben aus dem Entwurf (Preset, CRF, Tone-Mapping) gibt es nicht.
+// Flimmer wählt Encoder und Qualität selbst; im Dashboard lassen sich Encoder und Tempo erzwingen.
 import { useEffect, useState } from 'preact/hooks'
 import { useDaten } from '../../lib/api'
 import { diagnose, einstellungen, einstellungenSetzen, optimieren, type Settings } from '../../lib/api-admin'
 import { ergaenze, t } from '../../lib/i18n'
 import { Button } from '../../components/Button'
-import { Abschnitt, Feld, Geladen, Messwert, Zeile, melde, meldeFehler } from './teile'
+import { Abschnitt, Feld, Geladen, Messwert, Wahl, Zeile, melde, meldeFehler } from './teile'
 
-ergaenze({
-  'umw.hw': 'Hardwarebeschleunigung',
-  'umw.hw.text': 'Flimmer testet beim Start, welche Beschleunigung der Server hat, und nimmt die schnellste.',
-  'umw.encoder': 'Encoder',
-  'umw.tempo': 'Tempo (1080p)',
-  'umw.kerne': 'Prozessorkerne',
-  'umw.ffmpeg.fehlt': 'ffmpeg fehlt – Umwandeln ist nicht möglich.',
-  'umw.opt': 'Nachts vorbereiten',
-  'umw.opt.titel': 'Titel nachts vorbereiten',
-  'umw.opt.text': 'Wandelt schwierige Titel vorab um, damit sie abends direkt laufen.',
-  'umw.opt.von': 'Von (Uhr)',
-  'umw.opt.bis': 'Bis (Uhr)',
-  'umw.opt.frei': 'Mindestens frei (GB)',
-  'umw.opt.stand': '{done} fertig · {pending} warten · Fenster {fenster}',
-  'umw.opt.jetzt': 'Gerade: {titel} ({n} %)',
-  'umw.opt.wartet': 'Startet, sobald der Server bereit ist.',
-})
+ergaenze(
+  {
+    'umw.hw': 'Hardwarebeschleunigung',
+    'umw.hw.text': 'Flimmer testet beim Start, welche Beschleunigung der Server hat, und nimmt die schnellste.',
+    'umw.encoder': 'Encoder',
+    'umw.tempo': 'Tempo (1080p)',
+    'umw.kerne': 'Prozessorkerne',
+    'umw.ffmpeg.fehlt': 'ffmpeg fehlt – Umwandeln ist nicht möglich.',
+    'umw.hw.erzwingen': 'Encoder erzwingen',
+    'umw.hw.auto': 'Auto',
+    'umw.hw.sw': 'CPU (libx264)',
+    'umw.hw.erzwingen.text': 'Automatisch lässt Flimmer messen und wählt selbst. Erzwungene Encoderverfahren: geht der Test daneben (Gerät fehlt, Codec fehlt), bleibt es bei der automatischen Wahl.',
+    'umw.hw.tempo': 'Festes Tempo (×)',
+    'umw.hw.tempo.text': 'Ampel und Nacht-Sampling rechnen mit diesem Wert, statt mit dem gemessenen. 0 = messen.',
+    'umw.opt': 'Nachts vorbereiten',
+    'umw.opt.titel': 'Titel nachts vorbereiten',
+    'umw.opt.text': 'Wandelt schwierige Titel vorab um, damit sie abends direkt laufen.',
+    'umw.opt.von': 'Von (Uhr)',
+    'umw.opt.bis': 'Bis (Uhr)',
+    'umw.opt.frei': 'Mindestens frei (GB)',
+    'umw.opt.stand': '{done} fertig · {pending} warten · Fenster {fenster}',
+    'umw.opt.jetzt': 'Gerade: {titel} ({n} %)',
+    'umw.opt.wartet': 'Startet, sobald der Server bereit ist.',
+  },
+  {
+    'umw.hw': 'Hardware acceleration',
+    'umw.hw.text': 'Flimmer tests the hardware of the server at startup and picks the fastest option.',
+    'umw.encoder': 'Encoder',
+    'umw.tempo': 'Speed (1080p)',
+    'umw.kerne': 'Processor cores',
+    'umw.ffmpeg.fehlt': 'ffmpeg is missing – converting is not possible.',
+    'umw.hw.erzwingen': 'Force encoder',
+    'umw.hw.auto': 'Auto',
+    'umw.hw.sw': 'CPU (libx264)',
+    'umw.hw.erzwingen.text': 'Automatic means Flimmer measures and chooses. Forced encoder: if the test fails (device or codec missing), the automatic choice keeps the server working.',
+    'umw.hw.tempo': 'Fixed speed (×)',
+    'umw.hw.tempo.text': 'The traffic light and night preparation assume this value instead of the measured one. 0 = measure.',
+    'umw.opt': 'Prepare overnight',
+    'umw.opt.titel': 'Prepare titles overnight',
+    'umw.opt.text': 'Converts difficult titles in advance so they play directly in the evening.',
+    'umw.opt.von': 'From (o’clock)',
+    'umw.opt.bis': 'To (o’clock)',
+    'umw.opt.frei': 'At least free (GB)',
+    'umw.opt.stand': '{done} done · {pending} waiting · window {fenster}',
+    'umw.opt.jetzt': 'Currently: {titel} ({n} %)',
+    'umw.opt.wartet': 'Starts as soon as the server is ready.',
+  },
+)
 
 export function Umwandlung() {
   const d = useDaten('admin.diagnose', diagnose)
@@ -44,8 +75,69 @@ export function Umwandlung() {
             )
           }
         </Geladen>
+        <HwSetzen neu={() => d.neu()} />
       </Abschnitt>
       <Nachts />
+    </>
+  )
+}
+
+// Erzwungenes Encoder-Verfahren und festes Tempo: in flimmer.db gespeichert, nach dem Speichern misst der
+// Server neu (HwRecheck), ohne Neustart. Die Messwerte oben zeigen danach die frische Wahl samt angewandtem Tempo.
+function HwSetzen({ neu }: { neu: () => void }) {
+  const s = useDaten('admin.einstellungen', einstellungen)
+  const [enc, setEnc] = useState('auto')
+  const [tempo, setTempo] = useState('')
+  useEffect(() => {
+    if (!s.daten) return
+    setEnc(s.daten.hw.encoder || 'auto')
+    setTempo(s.daten.hw.speed ? String(s.daten.hw.speed).replace('.', ',') : '')
+  }, [s.daten])
+  const sichern = () => {
+    const speed = Number(tempo.replace(',', '.'))
+    if (tempo && (!isFinite(speed) || speed < 0.5 || speed > 100)) {
+      meldeFehler(new Error(t('umw.hw.tempo.text')))
+      return
+    }
+    einstellungenSetzen({ hw: { encoder: enc, speed: speed || 0 } }).then(() => {
+      melde(t('einst.gespeichert'))
+      s.neu()
+      neu()
+    }, meldeFehler)
+  }
+  return (
+    <>
+      <p class="t-klein leise admin-absatz">{t('umw.hw.erzwingen')}</p>
+      <Geladen z={s}>
+        {() => (
+          <>
+            <p class="t-klein leise admin-absatz">{t('umw.hw.erzwingen.text')}</p>
+            <Wahl
+              fk="umw-hw"
+              werte={[
+                ['auto', t('umw.hw.auto')],
+                ['vaapi', 'VAAPI'],
+                ['qsv', 'QSV'],
+                ['nvenc', 'NVENC'],
+                ['videotoolbox', 'VideoToolbox'],
+                ['v4l2m2m', 'V4L2'],
+                ['software', t('umw.hw.sw')],
+              ]}
+              an={enc}
+              onWahl={(w) => setEnc(w)}
+            />
+            <div class="admin-formzeile">
+              <Feld fk="umw-hw-tempo" wert={tempo} setWert={setTempo} label={t('umw.hw.tempo')} typ="number" zeigeLabel />
+              <div>
+                <p class="nur-sr">{t('umw.hw.tempo.text')}</p>
+                <Button fokusKey="umw-hw-ok" onPress={sichern}>
+                  {t('einst.speichern')}
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
+      </Geladen>
     </>
   )
 }

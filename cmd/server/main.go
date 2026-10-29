@@ -216,34 +216,69 @@ func main() {
 
 	// Scan und Hardware-Erkennung brauchen ffmpeg – starten sofort oder nach dem Download aus der Einrichtung.
 	var startMedia sync.Once
+	// hwMeasure läuft die echte Messung (oder die in der Dashboard-Einstellung erzwungene Wahl)
+	// und hängt das Ergebnis an Ampel, Diagnose und Optimierer. Scenario:
+	//   waitScan=true  (Start) – erst nach dem ersten Scan messen, sonst verdrängen sich Messung und Scan gegenseitig
+	//   waitScan=false (Dashboard geändert) – sofort, laufende Messung wird abgebrochen
+	var hwMu sync.Mutex
+	var hwStop context.CancelFunc
+	hwMeasure := func(waitScan bool) {
+		if !srv.FFmpeg.Load() {
+			return
+		}
+		hwMu.Lock()
+		if hwStop != nil {
+			hwStop()
+		}
+		hctx, hcancel := context.WithCancel(ctx)
+		hwStop = hcancel
+		hwMu.Unlock()
+		go func() {
+			defer hcancel()
+			if waitScan {
+				select {
+				case <-lib.Scanned():
+				case <-hctx.Done():
+					return
+				}
+			}
+			for try := 0; try < 2; try++ {
+				encoder, tempo := "", 0.0
+				if s, err := store.Settings(hctx); err == nil {
+					encoder, tempo = s.HwEncoder, s.HwSpeed
+				}
+				a := hwaccel.DetectForced(hctx, encoder)
+				log.Printf("Transcoding: %s (%.1f× Echtzeit bei 1080p)", a.Name, a.Speed)
+				// Festes Tempo aus der Einstellung (z. B. 2,2×) gilt für Ampel und Optimierung;
+				// für den Wiederholungsversuch zählt das wirklich messbare Tempo.
+				gemessen := a.Speed
+				if tempo > 0 && tempo != gemessen {
+					log.Printf("Transcoding: festes Tempo %.1f× aus der Einstellung (gemessen: %.1f×)", tempo, gemessen)
+					a.Speed = tempo
+				}
+				srv.HW.Store(&a)
+				if o := srv.Optimizer.Load(); o != nil {
+					o.Switch(a)
+				}
+				if waitScan && try == 0 {
+					startOptimizer(ctx, srv, store, filepath.Join(cacheDir, "optimized"), a)
+				}
+				if gemessen >= 1.5 {
+					return
+				}
+				select { // langsam gemessen – vielleicht war die Maschine nur beschäftigt
+				case <-time.After(10 * time.Minute):
+				case <-hctx.Done():
+					return
+				}
+			}
+		}()
+	}
+	srv.HwRecheck = func() { hwMeasure(false) }
 	start := func() {
 		startMedia.Do(func() {
 			go lib.Run(ctx, *every)
-			// Erst nach dem ersten Scan messen: Parallel zum Scan misst ein 2-Kern-NAS 0,9× statt 5×,
-			// und Titel landen fälschlich auf Rot. Bis dahin gilt Speed 0 = unbekannt.
-			go func() {
-				select {
-				case <-lib.Scanned():
-				case <-ctx.Done():
-					return
-				}
-				for try := 0; try < 2; try++ {
-					a := hwaccel.Detect(ctx)
-					log.Printf("Transcoding: %s (%.1f× Echtzeit bei 1080p)", a.Name, a.Speed)
-					srv.HW.Store(&a)
-					if try == 0 {
-						startOptimizer(ctx, srv, store, filepath.Join(cacheDir, "optimized"), a)
-					}
-					if a.Speed >= 1.5 {
-						return
-					}
-					select { // langsam gemessen – vielleicht war die Maschine nur beschäftigt
-					case <-time.After(10 * time.Minute):
-					case <-ctx.Done():
-						return
-					}
-				}
-			}()
+			hwMeasure(true)
 		})
 	}
 	srv.FF = &ffmpeg.Installer{Dir: ffDir, OnDone: func() {

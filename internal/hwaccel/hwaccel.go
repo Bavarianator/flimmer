@@ -7,9 +7,11 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -64,28 +66,91 @@ func candidates() []candidate {
 	}
 }
 
+const clipSeconds = 3
+
 var software = Accel{Name: "software",
 	Encode: []string{"-c:v", "libx264", "-preset", "veryfast", "-profile:v", "high", "-pix_fmt", "yuv420p", "-crf", "23"}}
 
-const clipSeconds = 3
+// EncoderNamen: erlaubte Werte der Dashboard-Einstellung „Encoder erzwingen“ (leer = auto).
+var EncoderNamen = []string{"auto", "software", "nvenc", "qsv", "vaapi", "videotoolbox", "v4l2m2m"}
+
+// ValidEncoder meldet, ob das Dashboard diesen Encoder erzwingen darf.
+func ValidEncoder(name string) bool {
+	return slices.Contains(EncoderNamen, name)
+}
 
 // Detect testet die Kandidaten der Reihe nach und liefert den ersten, der funktioniert; sonst libx264.
 // Dauert je nach Hardware einige Sekunden, also einmal beim Start aufrufen.
 func Detect(ctx context.Context) Accel {
-	encoders, _ := run(ctx, "-hide_banner", "-encoders")
-	dir, err := os.MkdirTemp("", "flimmer-hwaccel")
-	if err != nil {
+	encoders, clip, cleanup := prepare(ctx)
+	if encoders == nil {
 		return software
 	}
-	defer os.RemoveAll(dir)
-	// Echter H.264-Clip statt lavfi-Quelle, damit auch der HW-Decoder mitgetestet wird – wie beim echten Transcoding.
-	clip := filepath.Join(dir, "clip.mp4")
+	defer cleanup()
+	if a, ok := detect(ctx, encoders, clip, func(candidate) bool { return true }); ok {
+		return a
+	}
+	sw := software
+	sw.Speed, _ = measure(ctx, sw, clip)
+	return sw
+}
+
+// DetectForced testet nur den Encoder prefer – die Dashboard-Einstellung „Encoder erzwingen“.
+// „auto“/„software“ zählen mit; passt ein erzwungener Encoder nicht (Gerät fehlt, Test bricht ab),
+// greift die automatische Wahl, damit der Server weiter funktioniert.
+func DetectForced(ctx context.Context, prefer string) Accel {
+	switch {
+	case prefer == "" || prefer == "auto":
+		return Detect(ctx)
+	case prefer == "software":
+		a := software
+		_, clip, cleanup := prepare(ctx)
+		if clip != "" {
+			defer cleanup()
+			a.Speed, _ = measure(ctx, a, clip)
+		}
+		return a
+	case !ValidEncoder(prefer):
+		log.Printf("Encoder %q ist unbekannt – automatische Wahl", prefer)
+		return Detect(ctx)
+	}
+	encoders, clip, cleanup := prepare(ctx)
+	if encoders == nil {
+		return software
+	}
+	defer cleanup()
+	if a, ok := detect(ctx, encoders, clip, func(c candidate) bool { return c.Name == prefer }); ok {
+		return a
+	}
+	log.Printf("Encoder %s erzwungen, funktioniert aber nicht – automatische Wahl", prefer)
+	return Detect(ctx)
+}
+
+// prepare erzeugt den Testclip (echter H.264-Clip statt lavfi-Quelle, damit auch der HW-Decoder
+// mitgetestet wird – wie beim echten Transcoding) und listet ffmpegs Encoder auf.
+// encoders == nil bedeutet: ffmpeg läuft nicht, keinerlei Beschleunigung möglich.
+func prepare(ctx context.Context) (encoders []byte, clip string, cleanup func()) {
+	encoders, _ = run(ctx, "-hide_banner", "-encoders")
+	dir, err := os.MkdirTemp("", "flimmer-hwaccel")
+	if err != nil {
+		return nil, "", func() {}
+	}
+	cleanup = func() { os.RemoveAll(dir) }
+	clip = filepath.Join(dir, "clip.mp4")
 	if _, err := run(ctx, "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi",
 		"-i", "testsrc2=size=1920x1080:rate=25:duration="+strconv.Itoa(clipSeconds),
 		"-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", clip); err != nil {
-		return software
+		return nil, "", cleanup
 	}
+	return encoders, clip, cleanup
+}
+
+// detect testet die Kandidaten, auf die want zutrifft, und liefert den ersten funktionierenden.
+func detect(ctx context.Context, encoders []byte, clip string, want func(candidate) bool) (Accel, bool) {
 	for _, c := range candidates() {
+		if !want(c) {
+			continue
+		}
 		if !bytes.Contains(encoders, []byte(" "+c.encoder+" ")) {
 			continue
 		}
@@ -96,12 +161,10 @@ func Detect(ctx context.Context) Accel {
 		}
 		if speed, ok := measure(ctx, c.Accel, clip); ok {
 			c.Speed = speed
-			return c.Accel
+			return c.Accel, true
 		}
 	}
-	sw := software
-	sw.Speed, _ = measure(ctx, sw, clip)
-	return sw
+	return Accel{}, false
 }
 
 // measure kodiert den Clip mit a und liefert den Echtzeit-Faktor.

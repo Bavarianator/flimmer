@@ -132,6 +132,7 @@ export interface Settings {
   remoteAvailable: boolean
   update: { version: string; url: string } | null
   version: string
+  hw: { encoder: string; speed: number } // Encoder erzwingen ('' / 'auto') und festes Tempo (0 = messen)
 }
 
 export interface Einladung {

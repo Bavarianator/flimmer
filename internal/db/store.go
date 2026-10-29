@@ -33,11 +33,13 @@ type Settings struct {
 	ServerName string
 	Language   string
 	Dirs       []string
-	TMDBKey    string // leer = eingebauter Projekt-Key
-	NoUpdates  bool   // Update-Hinweis abgeschaltet
-	Remote     bool   // Fernzugriff eingeschaltet (Portfreigabe im Router)
+	TMDBKey    string    // leer = eingebauter Projekt-Key
+	NoUpdates  bool      // Update-Hinweis abgeschaltet
+	Remote     bool      // Fernzugriff eingeschaltet (Portfreigabe im Router)
 	Optimize   Optimize
-	Secret     []byte // HMAC-Schlüssel für Medien-Tokens
+	HwEncoder  string  // „auto“/leer = beim Start gemessen; sonst erzwungener Encoder (hwaccel.EncoderNamen)
+	HwSpeed    float64 // festes Tempo für Ampel und Optimierung; 0 = gemessener Wert
+	Secret     []byte  // HMAC-Schlüssel für Medien-Tokens
 }
 
 func (d *DB) Settings(ctx context.Context) (Settings, error) {
@@ -81,6 +83,10 @@ func settings(ctx context.Context, q querier) (Settings, error) {
 			s.Optimize.To, _ = strconv.Atoi(v)
 		case "opt_min_free_gb":
 			s.Optimize.MinFreeGB, _ = strconv.Atoi(v)
+		case "hw_encoder":
+			s.HwEncoder = v
+		case "hw_speed":
+			s.HwSpeed, _ = strconv.ParseFloat(v, 64)
 		case "secret":
 			s.Secret, _ = hex.DecodeString(v)
 		}
@@ -120,7 +126,7 @@ func writeSettings(ctx context.Context, tx *sql.Tx, s Settings) error {
 	kv := map[string]string{"server_name": s.ServerName, "language": s.Language, "tmdb_key": s.TMDBKey,
 		"no_updates": fmt.Sprint(b2i(s.NoUpdates)), "remote": fmt.Sprint(b2i(s.Remote)), "secret": hex.EncodeToString(s.Secret),
 		"opt_off": fmt.Sprint(b2i(s.Optimize.Off)), "opt_from": fmt.Sprint(s.Optimize.From), "opt_to": fmt.Sprint(s.Optimize.To),
-		"opt_min_free_gb": fmt.Sprint(s.Optimize.MinFreeGB)}
+		"opt_min_free_gb": fmt.Sprint(s.Optimize.MinFreeGB), "hw_encoder": s.HwEncoder, "hw_speed": fmt.Sprint(s.HwSpeed)}
 	for k, v := range kv {
 		if _, err := tx.ExecContext(ctx, "INSERT INTO settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", k, v); err != nil {
 			return err
